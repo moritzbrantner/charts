@@ -26,6 +26,7 @@ import {
   ChartBackendStatus,
   ChartDomainMinimap,
   ChartHotBinRow,
+  ChartLabelOverlay,
   ChartMetricCard,
   ChartMetricStrip,
   ChartPanel,
@@ -579,6 +580,7 @@ type ChartVariantRow = {
   revenueK: number | null;
   target: number | null;
   volume: number | null;
+  x: number;
 };
 
 type ChartVariantSourceRow = {
@@ -614,6 +616,7 @@ function createVariantRows(rows: ChartVariantSourceRow[]): ChartVariantRow[] {
           : row.metrics.revenue / 1_000,
       target: average === null ? null : 126 + Math.sin(row.x / 42) * 10,
       volume: row.count,
+      x: row.x,
     };
   });
 }
@@ -689,6 +692,11 @@ function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRow[]) {
             strokeWidth={2.4}
             type="monotone"
           />
+          <ChartLabelOverlay
+            labels={createAnnotationLabels(rows)}
+            obstacles={createLineObstacles(rows, ["current", "previous", "target"])}
+            maxWidth={112}
+          />
         </LineChart>
       );
     case "revenue":
@@ -742,9 +750,88 @@ function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRow[]) {
             strokeWidth={1.75}
             type="monotone"
           />
+          <ChartLabelOverlay
+            labels={createAnnotationLabels(rows)}
+            obstacles={createLineObstacles(rows, ["current", "peak", "floor"])}
+            maxWidth={112}
+          />
         </LineChart>
       );
   }
+}
+
+function createAnnotationLabels(rows: ChartVariantRow[]) {
+  const annotations = [
+    {
+      id: "maintenance-dip",
+      priority: 80,
+      targetX: 12.75 * 24,
+      text: "Maintenance dip",
+    },
+    {
+      id: "release-lift",
+      priority: 100,
+      targetX: 18.5 * 24,
+      text: "Release lift",
+    },
+    {
+      id: "campaign-pulse",
+      priority: 120,
+      targetX: 23 * 24,
+      text: "Campaign pulse",
+    },
+  ];
+
+  return annotations
+    .map((annotation) => {
+      const row = getNearestChartRow(rows, annotation.targetX);
+
+      if (!row || row.current === null) {
+        return null;
+      }
+
+      return {
+        id: annotation.id,
+        placements: ["top-right", "top", "right", "bottom-right"] as const,
+        priority: annotation.priority,
+        text: annotation.text,
+        x: row.label,
+        y: row.current,
+      };
+    })
+    .filter((annotation) => annotation !== null);
+}
+
+function createLineObstacles(rows: ChartVariantRow[], keys: Array<keyof ChartVariantRow>) {
+  return rows.flatMap((row) =>
+    keys.flatMap((key) => {
+      const value = row[key];
+
+      if (typeof value !== "number") {
+        return [];
+      }
+
+      return [
+        {
+          id: `${row.label}-${String(key)}`,
+          kind: "mark" as const,
+          radius: 3,
+          x: row.label,
+          y: value,
+        },
+      ];
+    }),
+  );
+}
+
+function getNearestChartRow(rows: ChartVariantRow[], targetX: number) {
+  return rows.reduce<ChartVariantRow | null>((nearest, row) => {
+    if (!nearest) {
+      return row;
+    }
+
+    return Math.abs(row.x - targetX) < Math.abs(nearest.x - targetX) ? row : nearest;
+  }, null);
 }
 
 function SparklineExample({

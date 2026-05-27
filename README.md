@@ -31,6 +31,7 @@ This version intentionally cleans up the experimental public API:
 - `BinnedChart`, `ChartMetricCard`, `ChartMetricStrip`, `ChartRangeSelector`,
   `ChartValueModeSelector`
 - `ChartBackendStatus`, `ChartSampleSparkline`, `ChartHotBinRow`, `ChartValueModePreview`
+- `layoutChartLabels`, `doChartLabelRectsIntersect`, `ChartLabelOverlay`
 
 ## Composable binned chart
 
@@ -218,6 +219,52 @@ const definitions = getChartValueModeDefinitions(["average", "count", "max"]);
 const connected = createChartRenderData(series.samples, { gapBehavior: "connect" });
 console.log(connected.annotations);
 ```
+
+## Collision-safe labels
+
+Use `ChartLabelOverlay` inside Recharts charts when explicit annotations should stay readable
+without covering chart marks or other labels. The overlay converts data coordinates through the
+active Recharts axes, measures and wraps label text with `@chenglou/pretext`, then places labels
+around their anchors. Lower-priority labels are hidden when no clean placement is available.
+
+```tsx
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { ChartLabelOverlay } from "@moritzbrantner/charts";
+
+function AnnotatedTrend({ rows }) {
+  return (
+    <LineChart data={rows}>
+      <CartesianGrid vertical={false} />
+      <XAxis dataKey="label" />
+      <YAxis />
+      <Line dataKey="current" dot={false} stroke="var(--color-current)" />
+      <ChartLabelOverlay
+        labels={[
+          {
+            id: "launch",
+            priority: 100,
+            text: "Launch",
+            x: "D23 00:00",
+            y: 142,
+          },
+        ]}
+        obstacles={rows.map((row) => ({
+          id: row.label,
+          kind: "mark",
+          radius: 4,
+          x: row.label,
+          y: row.current,
+        }))}
+      />
+    </LineChart>
+  );
+}
+```
+
+For renderer-agnostic use, call `layoutChartLabels(labels, options)` with pixel coordinates and
+render the returned `ChartPlacedLabel` objects yourself. The `font` option should match the
+rendered SVG text. Prefer a named font such as `Inter`; `system-ui` can be inaccurate for Pretext
+measurement on some platforms.
 
 ## Progressive strategy
 

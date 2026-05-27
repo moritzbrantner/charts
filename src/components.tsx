@@ -11,7 +11,15 @@ import {
   type WheelEvent,
   type WheelEventHandler,
 } from "react";
-import { Bar, BarChart, Line, LineChart } from "recharts";
+import {
+  Bar,
+  BarChart,
+  Line,
+  LineChart,
+  usePlotArea,
+  useXAxisScale,
+  useYAxisScale,
+} from "recharts";
 
 import {
   CHART_VALUE_MODE_DEFINITIONS,
@@ -30,6 +38,13 @@ import {
   type ChartValueModeDefinition,
   type ProgressiveChartDensityIndex,
 } from "./density";
+import {
+  layoutChartLabels,
+  type ChartLabelAnnotation,
+  type ChartLabelLayoutOptions,
+  type ChartLabelObstacle,
+  type ChartPlacedLabel,
+} from "./labels";
 import {
   Badge,
   Button,
@@ -118,6 +133,38 @@ export type BinnedChartProps<TProperties = Record<string, unknown>> = {
   > & {
     disabled?: boolean;
   };
+};
+
+export type ChartDataLabelAnnotation<TPayload = unknown> = Omit<
+  ChartLabelAnnotation<TPayload>,
+  "anchor"
+> & {
+  x: number | string;
+  y: number | string;
+};
+
+export type ChartDataLabelObstacle = {
+  height?: number;
+  id?: string;
+  kind?: "mark" | "axis" | "custom";
+  priority?: number;
+  radius?: number;
+  width?: number;
+  x: number | string;
+  y: number | string;
+};
+
+export type ChartLabelOverlayProps<TPayload = unknown> = Omit<
+  ChartLabelLayoutOptions,
+  "boundary" | "obstacles"
+> & {
+  className?: string;
+  labels: readonly ChartDataLabelAnnotation<TPayload>[];
+  obstacles?: readonly ChartDataLabelObstacle[];
+  pixelObstacles?: readonly ChartLabelObstacle[];
+  renderLabel?: (label: ChartPlacedLabel<TPayload>) => ReactNode;
+  xAxisId?: string | number;
+  yAxisId?: string | number;
 };
 
 export type ChartRangeSelectorProps = {
@@ -405,6 +452,141 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
         />
       ) : null}
     </div>
+  );
+}
+
+export function ChartLabelOverlay<TPayload = unknown>({
+  boundaryPadding,
+  className,
+  collisionPadding,
+  font,
+  labels,
+  leaderLine,
+  lineHeight = 16,
+  maxWidth,
+  obstacles = [],
+  offset,
+  padding = 4,
+  pixelObstacles = [],
+  renderLabel,
+  xAxisId,
+  yAxisId,
+}: ChartLabelOverlayProps<TPayload>): JSX.Element | null {
+  const plotArea = usePlotArea();
+  const xScale = useXAxisScale(xAxisId);
+  const yScale = useYAxisScale(yAxisId);
+  const placedLabels = useMemo(() => {
+    if (!plotArea || !xScale || !yScale) {
+      return [];
+    }
+
+    const pixelLabels = labels
+      .map((label): ChartLabelAnnotation<TPayload> | null => {
+        const x = xScale(label.x, { position: "middle" });
+        const y = yScale(label.y);
+
+        if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
+          return null;
+        }
+
+        const { x: _x, y: _y, ...annotation } = label;
+
+        return {
+          ...annotation,
+          anchor: { x, y },
+        };
+      })
+      .filter((label): label is ChartLabelAnnotation<TPayload> => label !== null);
+    const dataObstacles = obstacles
+      .map((obstacle): ChartLabelObstacle | null => {
+        const x = xScale(obstacle.x, { position: "middle" });
+        const y = yScale(obstacle.y);
+
+        if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
+          return null;
+        }
+
+        const radius = obstacle.radius ?? 4;
+        const width = obstacle.width ?? radius * 2;
+        const height = obstacle.height ?? radius * 2;
+
+        return {
+          id: obstacle.id,
+          kind: obstacle.kind,
+          priority: obstacle.priority,
+          rect: {
+            height,
+            width,
+            x: x - width / 2,
+            y: y - height / 2,
+          },
+        };
+      })
+      .filter((obstacle): obstacle is ChartLabelObstacle => obstacle !== null);
+
+    return layoutChartLabels(pixelLabels, {
+      boundary: {
+        height: plotArea.height,
+        width: plotArea.width,
+        x: plotArea.x,
+        y: plotArea.y,
+      },
+      boundaryPadding,
+      collisionPadding,
+      font,
+      leaderLine,
+      lineHeight,
+      maxWidth,
+      obstacles: [...dataObstacles, ...pixelObstacles],
+      offset,
+      padding,
+    });
+  }, [
+    boundaryPadding,
+    collisionPadding,
+    font,
+    labels,
+    leaderLine,
+    lineHeight,
+    maxWidth,
+    obstacles,
+    offset,
+    padding,
+    pixelObstacles,
+    plotArea,
+    xScale,
+    yScale,
+  ]);
+
+  if (!plotArea || !xScale || !yScale) {
+    return null;
+  }
+
+  return (
+    <g className={className} pointerEvents="none">
+      {placedLabels.map((label) => {
+        if (label.hidden || !label.rect) {
+          return null;
+        }
+
+        return (
+          <g key={label.id} data-chart-label-id={label.id}>
+            {label.leaderLine ? (
+              <line
+                x1={label.leaderLine.x1}
+                x2={label.leaderLine.x2}
+                y1={label.leaderLine.y1}
+                y2={label.leaderLine.y2}
+                stroke="var(--muted-foreground)"
+                strokeOpacity="0.55"
+                strokeWidth="1"
+              />
+            ) : null}
+            {renderLabel ? renderLabel(label) : renderDefaultChartLabel(label, padding, lineHeight)}
+          </g>
+        );
+      })}
+    </g>
   );
 }
 
@@ -1396,8 +1578,55 @@ function formatUnknownError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+function renderDefaultChartLabel<TPayload>(
+  label: ChartPlacedLabel<TPayload>,
+  padding: number,
+  lineHeight: number,
+) {
+  if (!label.rect) {
+    return null;
+  }
+
+  return (
+    <>
+      <rect
+        x={label.rect.x}
+        y={label.rect.y}
+        width={label.rect.width}
+        height={label.rect.height}
+        rx="3"
+        fill="var(--background)"
+        fillOpacity="0.92"
+        stroke="var(--border)"
+        strokeOpacity="0.9"
+      />
+      <text
+        x={label.rect.x + padding}
+        y={label.rect.y + padding + lineHeight * 0.72}
+        fill="var(--foreground)"
+        fontFamily="Inter, sans-serif"
+        fontSize="12"
+      >
+        {label.lines.map((line, lineIndex) => (
+          <tspan
+            key={`${label.id}-${lineIndex}`}
+            x={label.rect ? label.rect.x + padding : 0}
+            dy={lineIndex === 0 ? 0 : lineHeight}
+          >
+            {line.text}
+          </tspan>
+        ))}
+      </text>
+    </>
+  );
+}
+
 function joinClassNames(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
 }
 
 function clamp(value: number, min: number, max: number) {
