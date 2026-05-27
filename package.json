@@ -1,0 +1,54 @@
+{
+  "name": "@moritzbrantner/charts",
+  "version": "0.1.1",
+  "private": false,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/moritzbrantner/charts.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@moritzbrantner/ui": "https://registry.npmjs.org/@moritzbrantner/ui/-/ui-0.8.0.tgz",
+    "@moritzbrantner/data-density": "^0.1.1"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "recharts": "^3.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "jsdom": "^26.1.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.8.1",
+    "tsup": "^8.5.0",
+    "typescript": "6.0.2",
+    "vitest": "^4.1.2"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "scripts": {
+    "bench:large-data": "node ./scripts/benchmark-large-data.mjs",
+    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
+    "check-types": "tsc --noEmit",
+    "prepack": "bun run build",
+    "test": "vitest run",
+    "verify:release": "bun run check-types && bun run test && bun run build && bun run bench:large-data"
+  }
+}
