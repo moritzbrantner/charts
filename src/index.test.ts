@@ -377,19 +377,23 @@ describe("@moritzbrantner/charts", () => {
       q3: 15,
       upperWhisker: 20,
     });
-    expect(createChartBoxPlotData([createChartDensitySample({
-      averageY: 1,
-      firstPoint: null,
-      index: 0,
-      lastPoint: null,
-      maxY: 1,
-      metrics: {},
-      minY: 1,
-      pointCount: 1,
-      sumY: 1,
-      x0: 0,
-      x1: 1,
-    })])[0]).toMatchObject({
+    expect(
+      createChartBoxPlotData([
+        createChartDensitySample({
+          averageY: 1,
+          firstPoint: null,
+          index: 0,
+          lastPoint: null,
+          maxY: 1,
+          metrics: {},
+          minY: 1,
+          pointCount: 1,
+          sumY: 1,
+          x0: 0,
+          x1: 1,
+        }),
+      ])[0],
+    ).toMatchObject({
       median: null,
       q1: null,
       q3: null,

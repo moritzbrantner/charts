@@ -7,6 +7,24 @@ renderer data, viewport summaries, and chart-specific React controls. It does
 not own a primary chart renderer; Recharts, SVG, canvas, WebGL, or server-side
 renderers can all consume the same sample contract.
 
+## Installation
+
+```sh
+bun add @moritzbrantner/charts react recharts
+```
+
+The package is published to GitHub Packages. Configure the `@moritzbrantner`
+scope in `.npmrc` before installing from a fresh project:
+
+```ini
+@moritzbrantner:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+```
+
+`@moritzbrantner/charts` expects React `^19.0.0` and Recharts `^3.0.0` as peer
+dependencies. React 18 is intentionally not advertised until it has dedicated
+peer and test coverage.
+
 ## Breaking migration
 
 This version intentionally cleans up the experimental public API:
@@ -326,9 +344,9 @@ By default, `createChartDensityIndex` renders immediately from `hybrid-js`, warm
 a `wasm-index` in an idle slot, then serves later queries from the WASM backend.
 Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force one backend.
 
-Open `examples/playground/charts.html` in the local playground for a combined
-example with responsive binning, value-mode previews, viewport totals, sample
-selection, gap-safe render data, and source-point lookup.
+Open the local examples app for a combined example with responsive binning,
+value-mode previews, viewport totals, sample selection, gap-safe render data,
+and source-point lookup.
 
 ## Local examples
 
@@ -355,5 +373,11 @@ generated site.
 ## Verification
 
 - `bun run test`
+- `bun run test:coverage`
 - `bun run docs:check`
+- `bun run lint`
+- `bun run format:check`
+- `bun run build:examples`
+- `bun run pack:check`
+- `bun run test:e2e`
 - `bun run build && bun run bench:large-data`

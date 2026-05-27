@@ -238,11 +238,17 @@ function chooseLabelCandidate({
       return;
     }
 
-    if (obstacles.some((obstacle) => doChartLabelRectsIntersect(rect, obstacle.rect, collisionPadding))) {
+    if (
+      obstacles.some((obstacle) =>
+        doChartLabelRectsIntersect(rect, obstacle.rect, collisionPadding),
+      )
+    ) {
       return;
     }
 
-    if (collisionItems.some((item) => doChartLabelRectsIntersect(rect, item.rect, collisionPadding))) {
+    if (
+      collisionItems.some((item) => doChartLabelRectsIntersect(rect, item.rect, collisionPadding))
+    ) {
       return;
     }
 
@@ -348,7 +354,11 @@ function canUsePretextMeasurement(): boolean {
   return typeof document !== "undefined";
 }
 
-function measureLabelWithFallback(text: string, maxWidth: number, lineHeight: number): MeasuredLabel {
+function measureLabelWithFallback(
+  text: string,
+  maxWidth: number,
+  lineHeight: number,
+): MeasuredLabel {
   const averageCharacterWidth = 7;
   const maxCharactersPerLine = Math.max(1, Math.floor(maxWidth / averageCharacterWidth));
   const words = text.trim().split(/\s+/).filter(Boolean);
@@ -577,10 +587,7 @@ function doesLineIntersectRect(
   return [top, right, bottom, left].some((edge) => doLineSegmentsIntersect(line, edge));
 }
 
-function doLineSegmentsIntersect(
-  left: ChartLabelLeaderLine,
-  right: ChartLabelLeaderLine,
-): boolean {
+function doLineSegmentsIntersect(left: ChartLabelLeaderLine, right: ChartLabelLeaderLine): boolean {
   const directionA = getOrientation(left.x1, left.y1, left.x2, left.y2, right.x1, right.y1);
   const directionB = getOrientation(left.x1, left.y1, left.x2, left.y2, right.x2, right.y2);
   const directionC = getOrientation(right.x1, right.y1, right.x2, right.y2, left.x1, left.y1);

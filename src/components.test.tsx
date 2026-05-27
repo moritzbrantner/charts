@@ -133,7 +133,7 @@ describe("@moritzbrantner/charts", () => {
   test("renders anomaly markers and selects an anomaly", () => {
     const onSelect = vi.fn();
     const index = createChartDensityIndex(
-      [...Array.from({ length: 20 }, (_, pointIndex) => 10), 1_000].map((y, pointIndex) => ({
+      [...Array.from({ length: 20 }, () => 10), 1_000].map((y, pointIndex) => ({
         id: `point-${pointIndex}`,
         x: pointIndex + 0.5,
         y,
@@ -505,7 +505,10 @@ describe("@moritzbrantner/charts", () => {
     const onDomainChange = vi.fn();
     const cancelAnimationFrameMock = vi.fn();
 
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
     vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrameMock);
 
     render(
@@ -536,7 +539,10 @@ describe("@moritzbrantner/charts", () => {
   test("flushes and clears pending minimap drag updates on pointer cancel", () => {
     const onDomainChange = vi.fn();
 
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
 
     render(

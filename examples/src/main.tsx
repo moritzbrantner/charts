@@ -1,4 +1,13 @@
-import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  Badge,
+  Button,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@moritzbrantner/ui";
+import { StrictMode, useCallback, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Area,
@@ -11,15 +20,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import {
-  Badge,
-  Button,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@moritzbrantner/ui";
+
 import {
   BinnedChart,
   CHART_VALUE_MODE_DEFINITIONS,
@@ -149,8 +150,8 @@ function App() {
                   @moritzbrantner/charts
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-muted-foreground">
-                  Density-aware chart helpers, render data, and React controls across common
-                  product analytics views.
+                  Density-aware chart helpers, render data, and React controls across common product
+                  analytics views.
                 </p>
               </div>
             </div>
@@ -240,15 +241,14 @@ function DenseTrendExample({
     setManualBinCount,
     targetBinCount,
     width,
-  } =
-    useChartBinCount({
-      defaultBinCount: 120,
-      maxBinCount: 240,
-      minBinCount: 36,
-      pixelsPerBin: 9,
-      step: 12,
-    });
-  const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+  } = useChartBinCount({
+    defaultBinCount: 120,
+    maxBinCount: 240,
+    minBinCount: 36,
+    pixelsPerBin: 9,
+    step: 12,
+  });
+  const { containerRef: wheelContainerRef } = useChartWheelDomain<HTMLDivElement>({
     domain: activeRange.domain,
     fullDomain,
     onDomainChange,
@@ -256,9 +256,9 @@ function DenseTrendExample({
   const chartContainerRef = useCallback(
     (node: HTMLDivElement | null) => {
       binCountContainerRef(node);
-      wheelDomain.containerRef(node);
+      wheelContainerRef(node);
     },
-    [binCountContainerRef, wheelDomain.containerRef],
+    [binCountContainerRef, wheelContainerRef],
   );
   const measured = useMemo(
     () =>
@@ -444,10 +444,13 @@ function AnalyticsExamples({
       }),
     [activeRange.domain, index],
   );
-  const previousDomain: [number, number] = [
-    Math.max(0, activeRange.domain[0] - 7 * 24),
-    Math.max(0, activeRange.domain[1] - 7 * 24),
-  ];
+  const previousDomain = useMemo(
+    (): [number, number] => [
+      Math.max(0, activeRange.domain[0] - 7 * 24),
+      Math.max(0, activeRange.domain[1] - 7 * 24),
+    ],
+    [activeRange.domain],
+  );
   const previousSeries = useMemo(
     () =>
       index.getChartSeries({
@@ -715,10 +718,7 @@ function ChartVariantExamples({
           />
         </ChartPanel>
 
-        <ChartPanel
-          title="Volume bars"
-          description="Source point counts per bin."
-        >
+        <ChartPanel title="Volume bars" description="Source point counts per bin.">
           <BinnedVariantChart
             activeRange={activeRange}
             chartClassName="h-64 w-full"
@@ -1147,8 +1147,14 @@ function DistributionExamples({
         </Badge>
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
-        <ChartPanel title="Histogram" description="Distribution of y values in the active viewport.">
-          <ChartContainer className="h-72 w-full" config={{ count: { color: "var(--chart-4)", label: "Count" } }}>
+        <ChartPanel
+          title="Histogram"
+          description="Distribution of y values in the active viewport."
+        >
+          <ChartContainer
+            className="h-72 w-full"
+            config={{ count: { color: "var(--chart-4)", label: "Count" } }}
+          >
             <BarChart data={histogramRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
@@ -1218,7 +1224,10 @@ function DistributionExamples({
       </div>
 
       <ChartPanel title="Box plot" description="P25, median, P75, min, and max per x bin.">
-        <ChartBoxPlotSvg data={boxData} formatValue={(value) => value === null ? "n/a" : formatCompact(value)} />
+        <ChartBoxPlotSvg
+          data={boxData}
+          formatValue={(value) => (value === null ? "n/a" : formatCompact(value))}
+        />
       </ChartPanel>
     </section>
   );
@@ -1254,7 +1263,8 @@ function SparklineExample({
     hotSample?.index ?? null,
   );
   const selectedSample = useMemo(
-    () => series.samples.find((sample) => sample.index === selectedSampleIndex) ?? hotSample ?? null,
+    () =>
+      series.samples.find((sample) => sample.index === selectedSampleIndex) ?? hotSample ?? null,
     [hotSample, selectedSampleIndex, series.samples],
   );
   const selectedPoint = selectedSample?.firstPoint
@@ -1277,15 +1287,15 @@ function SparklineExample({
         />
         {selectedSample ? <ChartHotBinRow sample={selectedSample} formatX={formatHour} /> : null}
         <div className="grid gap-3 md:grid-cols-3">
-          <ChartMetricStrip label="Selected x" value={selectedSample ? formatHour(selectedSample.x) : "n/a"} />
+          <ChartMetricStrip
+            label="Selected x"
+            value={selectedSample ? formatHour(selectedSample.x) : "n/a"}
+          />
           <ChartMetricStrip
             label="First point"
             value={selectedPoint?.properties.note ?? "No point"}
           />
-          <ChartMetricStrip
-            label="Plan"
-            value={selectedPoint?.properties.plan ?? "n/a"}
-          />
+          <ChartMetricStrip label="Plan" value={selectedPoint?.properties.plan ?? "n/a"} />
         </div>
       </div>
     </ChartPanel>
@@ -1311,7 +1321,10 @@ function BackendExample({ points }: { points: ChartSeriesPoint<TelemetryProperti
   const summary = createChartDensityViewportSummary(series);
 
   return (
-    <ChartPanel title="Progressive backend" description="Manual WASM warmup with JS fallback status.">
+    <ChartPanel
+      title="Progressive backend"
+      description="Manual WASM warmup with JS fallback status."
+    >
       <div className="grid gap-5">
         <ChartBackendStatus status={status} onWarmNow={warmWasmNow} />
         <ChartMetricCard
@@ -1358,7 +1371,10 @@ function GapBehaviorExample({ points }: { points: ChartSeriesPoint<TelemetryProp
               description={gapDescription(behavior)}
             >
               <ChartContainer className="h-52 w-full" config={chartConfig("Average")}>
-                <LineChart data={renderData.rows} margin={{ bottom: 8, left: 0, right: 10, top: 10 }}>
+                <LineChart
+                  data={renderData.rows}
+                  margin={{ bottom: 8, left: 0, right: 10, top: 10 }}
+                >
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
                   <YAxis tickLine={false} axisLine={false} width={42} />

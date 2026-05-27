@@ -277,9 +277,7 @@ describe("ChartLabelOverlay", () => {
     );
 
     expect(screen.getByText("Peak")).toBeTruthy();
-    expect(screen.getByText("Peak").closest("g")?.getAttribute("data-chart-label-id")).toBe(
-      "peak",
-    );
+    expect(screen.getByText("Peak").closest("g")?.getAttribute("data-chart-label-id")).toBe("peak");
   });
 
   test("does not render hidden labels", () => {

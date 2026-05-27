@@ -2,14 +2,8 @@ node_modules/
 dist/
 dist-examples/
 docs/
-.turbo/
-.env
-.env.*
-!.env.example
-*.log
-*.tsbuildinfo
 coverage/
 playwright-report/
 test-results/
-storybook-static/
+bun.lock
 *.tgz

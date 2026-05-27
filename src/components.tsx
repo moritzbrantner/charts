@@ -1,4 +1,22 @@
 import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  ChartContainer,
+  type ChartConfig,
+  Item,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+  Progress,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@moritzbrantner/ui";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -40,7 +58,6 @@ import {
   type ChartValueModeDefinition,
   type ProgressiveChartDensityIndex,
 } from "./density";
-import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "./analytics";
 import {
   layoutChartLabels,
   type ChartLabelAnnotation,
@@ -48,24 +65,8 @@ import {
   type ChartLabelObstacle,
   type ChartPlacedLabel,
 } from "./labels";
-import {
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  ChartContainer,
-  type ChartConfig,
-  Item,
-  ItemContent,
-  ItemDescription,
-  ItemTitle,
-  Progress,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@moritzbrantner/ui";
+
+import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "./analytics";
 
 export type ChartRange = {
   description?: string;
@@ -397,8 +398,7 @@ export function ChartDerivedMetricCard({
   previousValue = null,
   value,
 }: ChartDerivedMetricCardProps): JSX.Element {
-  const delta =
-    value === null || previousValue === null ? null : value - previousValue;
+  const delta = value === null || previousValue === null ? null : value - previousValue;
   const percentDelta =
     delta === null || previousValue === null || previousValue === 0
       ? null
@@ -460,7 +460,7 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   } = useChartBinCount<HTMLDivElement>(binCountOptions);
   const resolvedFullDomain = fullDomain ?? domain;
   const handleDomainChange = onDomainChange ?? noopDomainChange;
-  const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+  const { containerRef: wheelContainerRef, onWheel } = useChartWheelDomain<HTMLDivElement>({
     ...wheelOptions,
     disabled: !onDomainChange || !wheel || wheelOptions?.disabled,
     domain,
@@ -471,9 +471,9 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   const containerRef = useCallback(
     (node: HTMLDivElement | null) => {
       binCountContainerRef(node);
-      wheelDomain.containerRef(node);
+      wheelContainerRef(node);
     },
-    [binCountContainerRef, wheelDomain.containerRef],
+    [binCountContainerRef, wheelContainerRef],
   );
   const series = useMemo(
     () =>
@@ -515,11 +515,7 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   const showMinimap = minimap && Boolean(onDomainChange);
 
   return (
-    <div
-      ref={containerRef}
-      className={joinClassNames("grid gap-3", className)}
-      onWheel={wheelDomain.onWheel}
-    >
+    <div ref={containerRef} className={joinClassNames("grid gap-3", className)} onWheel={onWheel}>
       <ChartContainer className={chartClassName} config={config}>
         {children(context)}
       </ChartContainer>
@@ -968,10 +964,12 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
     [fullDomain, fullSpan, minY, spread, values],
   );
 
-  domainRef.current = domain;
-  fullDomainRef.current = fullDomain;
-  onDomainChangeRef.current = onDomainChange;
-  resolvedMinSpanRef.current = resolvedMinSpan;
+  useEffect(() => {
+    domainRef.current = domain;
+    fullDomainRef.current = fullDomain;
+    onDomainChangeRef.current = onDomainChange;
+    resolvedMinSpanRef.current = resolvedMinSpan;
+  }, [domain, fullDomain, onDomainChange, resolvedMinSpan]);
 
   const flushPendingDomain = useCallback(() => {
     if (frameIdRef.current !== null) {
@@ -1006,21 +1004,24 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
       }
     });
   }, []);
-  const stageDomainChange = useCallback((nextDomain: [number, number]) => {
-    const normalized = normalizeDomain(
-      nextDomain,
-      fullDomainRef.current,
-      resolvedMinSpanRef.current,
-    );
-    const currentDomain = pendingDomainRef.current ?? domainRef.current;
+  const stageDomainChange = useCallback(
+    (nextDomain: [number, number]) => {
+      const normalized = normalizeDomain(
+        nextDomain,
+        fullDomainRef.current,
+        resolvedMinSpanRef.current,
+      );
+      const currentDomain = pendingDomainRef.current ?? domainRef.current;
 
-    if (areDomainsEqual(normalized, currentDomain)) {
-      return;
-    }
+      if (areDomainsEqual(normalized, currentDomain)) {
+        return;
+      }
 
-    pendingDomainRef.current = normalized;
-    previewPendingDomain();
-  }, [previewPendingDomain]);
+      pendingDomainRef.current = normalized;
+      previewPendingDomain();
+    },
+    [previewPendingDomain],
+  );
   const stopDragging = useCallback(
     (event: PointerEvent<SVGSVGElement>) => {
       event.currentTarget.releasePointerCapture?.(event.pointerId);
@@ -1094,11 +1095,7 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
       return;
     }
 
-    const value = getDomainValueFromClientX(
-      event.clientX,
-      dragState.bounds,
-      fullDomainRef.current,
-    );
+    const value = getDomainValueFromClientX(event.clientX, dragState.bounds, fullDomainRef.current);
 
     event.preventDefault();
 
@@ -1468,7 +1465,8 @@ export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
           const q3Y = yForValue(datum.q3);
           const medianY = yForValue(datum.median);
           const boxTop = q3Y === null || q1Y === null ? null : Math.min(q3Y, q1Y);
-          const boxHeight = q3Y === null || q1Y === null ? null : Math.max(0.75, Math.abs(q1Y - q3Y));
+          const boxHeight =
+            q3Y === null || q1Y === null ? null : Math.max(0.75, Math.abs(q1Y - q3Y));
           const label = `${datum.label}: median ${formatValue(datum.median)}`;
 
           return (
@@ -1610,7 +1608,7 @@ export function useProgressiveChartDensity<TProperties = Record<string, unknown>
   status: ChartDensityProgressiveStatus;
   warmWasmNow: () => Promise<void>;
 } {
-  const [statusTick, setStatusTick] = useState(0);
+  const [_statusTick, setStatusTick] = useState(0);
   const index = useMemo(() => {
     const resolvedOptions = options ?? {};
     const progressiveOptions = resolvedOptions.progressive;
@@ -1630,7 +1628,7 @@ export function useProgressiveChartDensity<TProperties = Record<string, unknown>
       },
     });
   }, [options, points]);
-  const status = useMemo(() => index.getProgressiveStatus(), [index, statusTick]);
+  const status = index.getProgressiveStatus();
 
   useEffect(() => {
     if (status.wasmReady) {

@@ -13,6 +13,7 @@ import {
   type IndexedNumericSeriesPoint,
   type NumericSeriesPoint,
 } from "@moritzbrantner/data-density";
+
 import type { ChartDerivedPoint } from "./analytics";
 
 export type BinnedSeriesBackend = "hybrid-js" | "wasm-index";
@@ -25,13 +26,7 @@ export type ChartDensityBin<TProperties = Record<string, unknown>> = BinnedSerie
 
 export type ChartPercentileMode = "p10" | "p25" | "p50" | "p75" | "p90" | "p95" | "p99";
 
-export type ChartValueMode =
-  | "average"
-  | "count"
-  | "max"
-  | "min"
-  | "sum"
-  | ChartPercentileMode;
+export type ChartValueMode = "average" | "count" | "max" | "min" | "sum" | ChartPercentileMode;
 
 export type ChartValueModeRenderer = "line" | "bar";
 
@@ -604,7 +599,10 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties> & { backend?: BinnedSeriesBackend },
 ): ChartDensityIndex<TProperties> {
-  const binnedIndex = createBinnedSeriesIndex(points, options as BinnedSeriesIndexOptions<TProperties>);
+  const binnedIndex = createBinnedSeriesIndex(
+    points,
+    options as BinnedSeriesIndexOptions<TProperties>,
+  );
   const pointStore = createChartPointStore(points, options);
 
   return {
@@ -663,9 +661,10 @@ type ChartPointStore<TProperties = Record<string, unknown>> = {
   points: Array<IndexedChartSeriesPoint<TProperties>>;
 };
 
-type MutableChartDensityBin<TProperties = Record<string, unknown>> = ChartDensityBin<TProperties> & {
-  points: Array<IndexedChartSeriesPoint<TProperties>>;
-};
+type MutableChartDensityBin<TProperties = Record<string, unknown>> =
+  ChartDensityBin<TProperties> & {
+    points: Array<IndexedChartSeriesPoint<TProperties>>;
+  };
 
 const CHART_PERCENTILE_VALUES: Record<ChartPercentileMode, number> = {
   p10: 0.1,
@@ -682,14 +681,16 @@ function createChartPointStore<TProperties>(
   options: BinnedSeriesIndexOptions<TProperties>,
 ): ChartPointStore<TProperties> {
   const normalizedPoints = points
-    .map((point, index): IndexedChartSeriesPoint<TProperties> => ({
-      id: String(point.id ?? index),
-      label: point.label ?? "",
-      metrics: normalizeChartMetrics(point.metrics),
-      properties: point.properties ?? ({} as TProperties),
-      x: point.x,
-      y: point.y,
-    }))
+    .map(
+      (point, index): IndexedChartSeriesPoint<TProperties> => ({
+        id: String(point.id ?? index),
+        label: point.label ?? "",
+        metrics: normalizeChartMetrics(point.metrics),
+        properties: point.properties ?? ({} as TProperties),
+        x: point.x,
+        y: point.y,
+      }),
+    )
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
     .filter((point) => options.filterPoint?.(point) ?? true)
     .sort((left, right) => left.x - right.x);
@@ -749,7 +750,10 @@ function createPointStoreGroupedChartSeries<TProperties>(
   const includeOther = query.includeOther ?? true;
   const maxGroups = clampInteger(query.maxGroups ?? 8, 1, 100);
   const selectedPoints = getPointsInXDomain(store.points, xDomain);
-  const groups = new Map<string, { key: string; label: string; points: Array<IndexedChartSeriesPoint<TProperties>> }>();
+  const groups = new Map<
+    string,
+    { key: string; label: string; points: Array<IndexedChartSeriesPoint<TProperties>> }
+  >();
 
   for (const point of selectedPoints) {
     const groupValue = getPointGroupValue(point, query.groupBy);
@@ -814,7 +818,8 @@ function createPointStoreGroupedChartSeries<TProperties>(
   return {
     groups: chartGroups,
     summary: {
-      binCount: chartGroups[0]?.series.summary.binCount ?? clampInteger(query.targetBinCount, 1, 100_000),
+      binCount:
+        chartGroups[0]?.series.summary.binCount ?? clampInteger(query.targetBinCount, 1, 100_000),
       groupCount: chartGroups.length,
       metrics: sumDensityMetrics(
         chartGroups.map((group) => group.metrics),
@@ -840,8 +845,8 @@ function createPointStoreHistogram<TProperties>(
     .filter((item): item is { point: IndexedChartSeriesPoint<TProperties>; value: number } =>
       isFiniteNumber(item.value),
     );
-  const valueDomain =
-    query.valueDomain ?? getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
+  const valueDomain = query.valueDomain ??
+    getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
   const normalizedValueDomain = normalizeChartDomain(valueDomain);
   const buckets = createHistogramBuckets<TProperties>(
     bucketCount,
@@ -855,7 +860,7 @@ function createPointStoreHistogram<TProperties>(
     }
 
     updateHistogramBucket(
-      buckets[getBucketIndex(item.value, normalizedValueDomain, bucketCount)]!,
+      buckets[getBucketIndex(item.value, normalizedValueDomain, bucketCount)],
       item.point,
       item.value,
       store.metricKeys,
@@ -1312,9 +1317,7 @@ function normalizeChartMetrics(metrics: ChartMetricRecord | undefined): ChartMet
     return {};
   }
 
-  return Object.fromEntries(
-    Object.entries(metrics).filter((entry) => Number.isFinite(entry[1])),
-  );
+  return Object.fromEntries(Object.entries(metrics).filter((entry) => Number.isFinite(entry[1])));
 }
 
 function createZeroMetricRecord(metricKeys: string[]) {
@@ -1334,11 +1337,13 @@ function createNullPercentileRecord(): Record<ChartPercentileMode, number | null
 }
 
 function normalizeGroupKey(label: string) {
-  return label
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "") || "group";
+  return (
+    label
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "group"
+  );
 }
 
 export function createChartDensitySample<TProperties = Record<string, unknown>>(
@@ -1519,7 +1524,9 @@ export function createGroupedChartRenderData<TProperties>(
 
     for (const item of rawValues) {
       row[item.key] =
-        options.percent && total > 0 && item.value !== null ? (item.value / total) * 100 : item.value;
+        options.percent && total > 0 && item.value !== null
+          ? (item.value / total) * 100
+          : item.value;
     }
   }
 
