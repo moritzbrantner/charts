@@ -1,7 +1,9 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import { Line, LineChart } from "recharts";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
+  BinnedChart,
   ChartBackendStatus,
   ChartDomainMinimap,
   ChartRangeSelector,
@@ -155,6 +157,36 @@ describe("@moritzbrantner/charts", () => {
 
     expect(screen.getByText("fallback")).toBeTruthy();
     expect(screen.getByText("Fallback reason: load failed")).toBeTruthy();
+  });
+
+  test("composes binned chart rows with an optional minimap", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 10, y: 4 },
+    ]);
+
+    render(
+      <BinnedChart
+        chartClassName="h-40 w-full"
+        config={{ average: { color: "var(--chart-1)", label: "Average" } }}
+        domain={[0, 10]}
+        fullDomain={[0, 20]}
+        index={index}
+        onDomainChange={onDomainChange}
+        renderDataOptions={{ modes: ["average"] }}
+      >
+        {({ rows, targetBinCount }) => (
+          <LineChart data={rows}>
+            <Line dataKey="average" name={`Average ${targetBinCount}`} />
+          </LineChart>
+        )}
+      </BinnedChart>,
+    );
+
+    expect(screen.getByRole("img", { name: "Chart domain minimap" })).toBeTruthy();
+    expect(screen.getByText("0-10")).toBeTruthy();
   });
 
   test("renders sparkline samples and clamps SVG points", () => {

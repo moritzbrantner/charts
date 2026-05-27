@@ -17,8 +17,11 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ToggleGroup,
+  ToggleGroupItem,
 } from "@moritzbrantner/ui";
 import {
+  BinnedChart,
   CHART_VALUE_MODE_DEFINITIONS,
   ChartBackendStatus,
   ChartDomainMinimap,
@@ -50,6 +53,8 @@ type TelemetryProperties = {
   note: string;
   plan: "starter" | "scale" | "enterprise";
 };
+
+type ChartVariantId = "comparison" | "envelope" | "revenue" | "volume";
 
 const ranges: ChartRange[] = [
   {
@@ -175,6 +180,13 @@ function App() {
           index={index}
           valueMode={valueMode}
           onValueModeChange={setValueMode}
+        />
+
+        <ChartVariantExamples
+          activeRange={activeRange}
+          fullDomain={fullDomain}
+          index={index}
+          onDomainChange={setActiveDomain}
         />
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
@@ -395,6 +407,344 @@ function ValueModeExamples({
       </div>
     </section>
   );
+}
+
+function ChartVariantExamples({
+  activeRange,
+  fullDomain,
+  index,
+  onDomainChange,
+}: {
+  activeRange: ChartRange;
+  fullDomain: [number, number];
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+  onDomainChange: (domain: [number, number]) => void;
+}) {
+  const [previewVariant, setPreviewVariant] = useState<ChartVariantId>("envelope");
+  const previewOption =
+    chartVariantOptions.find((option) => option.id === previewVariant) ?? chartVariantOptions[0];
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Chart variants</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Multi-line comparisons and bar views built from the same binned viewport.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-full">
+          {activeRange.label}
+        </Badge>
+      </div>
+      <ChartPanel
+        badge="Preview"
+        title={previewOption.title}
+        description={previewOption.description}
+      >
+        <div className="grid gap-4">
+          <ToggleGroup
+            type="single"
+            value={previewVariant}
+            onValueChange={(nextVariant) => {
+              if (isChartVariantId(nextVariant)) {
+                setPreviewVariant(nextVariant);
+              }
+            }}
+            className="flex flex-wrap justify-start gap-2"
+            aria-label="Chart variant preview"
+          >
+            {chartVariantOptions.map((option) => (
+              <ToggleGroupItem key={option.id} value={option.id} aria-label={option.title}>
+                {option.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <BinnedVariantChart
+            activeRange={activeRange}
+            chartClassName="h-[26rem] w-full"
+            fullDomain={fullDomain}
+            index={index}
+            onDomainChange={onDomainChange}
+            variant={previewVariant}
+          />
+        </div>
+      </ChartPanel>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartPanel
+          title="Envelope lines"
+          description="Average, maximum, and minimum values per bin."
+        >
+          <BinnedVariantChart
+            activeRange={activeRange}
+            chartClassName="h-72 w-full"
+            fullDomain={fullDomain}
+            index={index}
+            onDomainChange={onDomainChange}
+            variant="envelope"
+          />
+        </ChartPanel>
+
+        <ChartPanel
+          title="Comparison lines"
+          description="Current viewport compared with a previous-period baseline and target."
+        >
+          <BinnedVariantChart
+            activeRange={activeRange}
+            chartClassName="h-72 w-full"
+            fullDomain={fullDomain}
+            index={index}
+            onDomainChange={onDomainChange}
+            variant="comparison"
+          />
+        </ChartPanel>
+
+        <ChartPanel
+          title="Volume bars"
+          description="Source point counts per bin."
+        >
+          <BinnedVariantChart
+            activeRange={activeRange}
+            chartClassName="h-64 w-full"
+            fullDomain={fullDomain}
+            index={index}
+            onDomainChange={onDomainChange}
+            variant="volume"
+          />
+        </ChartPanel>
+
+        <ChartPanel
+          title="Revenue bars"
+          description="Aggregated revenue per bin, shown in thousands."
+        >
+          <BinnedVariantChart
+            activeRange={activeRange}
+            chartClassName="h-64 w-full"
+            fullDomain={fullDomain}
+            index={index}
+            onDomainChange={onDomainChange}
+            variant="revenue"
+          />
+        </ChartPanel>
+      </div>
+    </section>
+  );
+}
+
+function BinnedVariantChart({
+  activeRange,
+  chartClassName,
+  fullDomain,
+  index,
+  onDomainChange,
+  variant,
+}: {
+  activeRange: ChartRange;
+  chartClassName: string;
+  fullDomain: [number, number];
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+  onDomainChange: (domain: [number, number]) => void;
+  variant: ChartVariantId;
+}) {
+  return (
+    <BinnedChart
+      binCountOptions={{
+        defaultBinCount: 84,
+        maxBinCount: 180,
+        minBinCount: 36,
+        pixelsPerBin: 10,
+        step: 12,
+      }}
+      chartClassName={chartClassName}
+      config={variantChartConfig}
+      domain={activeRange.domain}
+      formatDomainValue={formatHour}
+      fullDomain={fullDomain}
+      index={index}
+      onDomainChange={onDomainChange}
+      renderDataOptions={variantRenderDataOptions}
+      valueMode="average"
+    >
+      {({ rows }) => renderVariantChart(variant, createVariantRows(rows))}
+    </BinnedChart>
+  );
+}
+
+type ChartVariantRow = {
+  current: number | null;
+  floor: number | null;
+  label: string;
+  peak: number | null;
+  previous: number | null;
+  revenueK: number | null;
+  target: number | null;
+  volume: number | null;
+};
+
+type ChartVariantSourceRow = {
+  average: number | null;
+  count: number | null;
+  label: string;
+  max: number | null;
+  metrics?: Record<string, number>;
+  min: number | null;
+  pointCount: number;
+  x: number;
+};
+
+const variantRenderDataOptions = {
+  includeMetrics: true,
+  modes: ["average", "count", "max", "min", "sum"],
+  xLabel: (sample: ChartDensitySample<TelemetryProperties>) => formatHour(sample.x),
+} as const;
+
+function createVariantRows(rows: ChartVariantSourceRow[]): ChartVariantRow[] {
+  return rows.map((row) => {
+    const average = row.average ?? null;
+
+    return {
+      current: average,
+      floor: row.min,
+      label: row.label,
+      peak: row.max,
+      previous: average === null ? null : average * (0.86 + Math.sin(row.x / 20) * 0.07),
+      revenueK:
+        row.metrics?.revenue === undefined || row.pointCount === 0
+          ? null
+          : row.metrics.revenue / 1_000,
+      target: average === null ? null : 126 + Math.sin(row.x / 42) * 10,
+      volume: row.count,
+    };
+  });
+}
+
+const chartVariantOptions: Array<{
+  description: string;
+  id: ChartVariantId;
+  label: string;
+  title: string;
+}> = [
+  {
+    description: "Average, maximum, and minimum values per bin.",
+    id: "envelope",
+    label: "Envelope",
+    title: "Envelope lines",
+  },
+  {
+    description: "Current viewport compared with a previous-period baseline and target.",
+    id: "comparison",
+    label: "Compare",
+    title: "Comparison lines",
+  },
+  {
+    description: "Source point counts per bin.",
+    id: "volume",
+    label: "Volume",
+    title: "Volume bars",
+  },
+  {
+    description: "Aggregated revenue per bin, shown in thousands.",
+    id: "revenue",
+    label: "Revenue",
+    title: "Revenue bars",
+  },
+];
+
+function isChartVariantId(value: string): value is ChartVariantId {
+  return chartVariantOptions.some((option) => option.id === value);
+}
+
+function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRow[]) {
+  switch (variant) {
+    case "comparison":
+      return (
+        <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={48} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Line
+            dataKey="previous"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-previous)"
+            strokeDasharray="5 5"
+            strokeWidth={2}
+            type="monotone"
+          />
+          <Line
+            dataKey="target"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-target)"
+            strokeDasharray="2 4"
+            strokeWidth={2}
+            type="monotone"
+          />
+          <Line
+            dataKey="current"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-current)"
+            strokeWidth={2.4}
+            type="monotone"
+          />
+        </LineChart>
+      );
+    case "revenue":
+      return (
+        <BarChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={42} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="revenueK" fill="var(--color-revenueK)" radius={0} />
+        </BarChart>
+      );
+    case "volume":
+      return (
+        <BarChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={42} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="volume" fill="var(--color-volume)" radius={0} />
+        </BarChart>
+      );
+    case "envelope":
+      return (
+        <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+          <CartesianGrid vertical={false} />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={48} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Line
+            dataKey="peak"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-peak)"
+            strokeWidth={1.75}
+            type="monotone"
+          />
+          <Line
+            dataKey="current"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-current)"
+            strokeWidth={2.4}
+            type="monotone"
+          />
+          <Line
+            dataKey="floor"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-floor)"
+            strokeWidth={1.75}
+            type="monotone"
+          />
+        </LineChart>
+      );
+  }
 }
 
 function SparklineExample({
@@ -620,6 +970,37 @@ function chartConfig(label: string) {
     },
   };
 }
+
+const variantChartConfig = {
+  current: {
+    color: "var(--chart-1)",
+    label: "Current",
+  },
+  floor: {
+    color: "var(--chart-3)",
+    label: "Minimum",
+  },
+  peak: {
+    color: "var(--chart-2)",
+    label: "Maximum",
+  },
+  previous: {
+    color: "var(--chart-4)",
+    label: "Previous",
+  },
+  revenueK: {
+    color: "var(--chart-5)",
+    label: "Revenue (k)",
+  },
+  target: {
+    color: "var(--muted-foreground)",
+    label: "Target",
+  },
+  volume: {
+    color: "var(--chart-4)",
+    label: "Volume",
+  },
+};
 
 function gapDescription(behavior: "preserve" | "connect" | "zero-fill") {
   switch (behavior) {

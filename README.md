@@ -28,8 +28,40 @@ This version intentionally cleans up the experimental public API:
 - `CHART_VALUE_MODE_DEFINITIONS`, `getChartValueModeDefinition(mode)`,
   `getChartValueModeDefinitions(modes)`
 - `useProgressiveChartDensity(points, options)` / `useChartBinCount(options)`
-- `ChartMetricCard`, `ChartMetricStrip`, `ChartRangeSelector`, `ChartValueModeSelector`
+- `BinnedChart`, `ChartMetricCard`, `ChartMetricStrip`, `ChartRangeSelector`,
+  `ChartValueModeSelector`
 - `ChartBackendStatus`, `ChartSampleSparkline`, `ChartHotBinRow`, `ChartValueModePreview`
+
+## Composable binned chart
+
+Use `BinnedChart` when a chart should share the same composition model for
+styling, responsive binning, render rows, wheel-domain changes, and a minimap.
+
+```tsx
+import { Line, LineChart } from "recharts";
+import { BinnedChart } from "@moritzbrantner/charts";
+
+export function TrendWithMinimap({ activeDomain, fullDomain, index, setActiveDomain }) {
+  return (
+    <BinnedChart
+      chartClassName="h-72 w-full"
+      config={{ average: { label: "Average", color: "var(--chart-1)" } }}
+      domain={activeDomain}
+      fullDomain={fullDomain}
+      index={index}
+      onDomainChange={setActiveDomain}
+      renderDataOptions={{ modes: ["average"] }}
+      valueMode="average"
+    >
+      {({ rows }) => (
+        <LineChart data={rows}>
+          <Line dataKey="average" dot={false} stroke="var(--color-average)" />
+        </LineChart>
+      )}
+    </BinnedChart>
+  );
+}
+```
 
 ## Responsive Recharts chart
 

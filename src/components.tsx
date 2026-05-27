@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ComponentProps,
   type JSX,
   type PointerEvent,
   type ReactNode,
@@ -14,6 +15,7 @@ import { Bar, BarChart, Line, LineChart } from "recharts";
 
 import {
   CHART_VALUE_MODE_DEFINITIONS,
+  createChartRenderData,
   createProgressiveChartDensityIndex,
   type ChartDensityIndex,
   type ChartDensityIndexOptions,
@@ -22,6 +24,8 @@ import {
   type ChartDensitySample,
   type ChartDensitySeries,
   type ChartSeriesPoint,
+  type ChartRenderData,
+  type ChartRenderDataOptions,
   type ChartValueMode,
   type ChartValueModeDefinition,
   type ProgressiveChartDensityIndex,
@@ -35,6 +39,7 @@ import {
   CardHeader,
   CardTitle,
   ChartContainer,
+  type ChartConfig,
   Item,
   ItemContent,
   ItemDescription,
@@ -75,6 +80,44 @@ export type ChartPanelProps = {
   className?: string;
   description?: ReactNode;
   title: ReactNode;
+};
+
+export type BinnedChartRenderContext<TProperties = Record<string, unknown>> = {
+  isAutoBinCount: boolean;
+  renderData: ChartRenderData<TProperties>;
+  rows: ChartRenderData<TProperties>["rows"];
+  series: ChartDensitySeries<TProperties>;
+  targetBinCount: number;
+  width: number | null;
+};
+
+export type BinnedChartProps<TProperties = Record<string, unknown>> = {
+  binCountOptions?: UseChartBinCountOptions;
+  chartClassName?: string;
+  children: (
+    context: BinnedChartRenderContext<TProperties>,
+  ) => ComponentProps<typeof ChartContainer>["children"];
+  className?: string;
+  config: ChartConfig;
+  domain: [number, number];
+  formatDomainValue?: (value: number) => string;
+  fullDomain?: [number, number];
+  index: ChartDensityIndex<TProperties>;
+  minSpan?: number;
+  minimap?: boolean;
+  minimapClassName?: string;
+  minimapTargetBinCount?: number;
+  onDomainChange?: (domain: [number, number]) => void;
+  query?: Omit<ChartDensityQuery, "targetBinCount" | "valueMode" | "xDomain">;
+  renderDataOptions?: ChartRenderDataOptions<TProperties>;
+  valueMode?: ChartValueMode;
+  wheel?: boolean;
+  wheelOptions?: Omit<
+    UseChartWheelDomainOptions,
+    "disabled" | "domain" | "fullDomain" | "minSpan" | "onDomainChange"
+  > & {
+    disabled?: boolean;
+  };
 };
 
 export type ChartRangeSelectorProps = {
@@ -255,6 +298,113 @@ export function ChartMetricStrip({ className, label, value }: ChartMetricStripPr
         <ItemTitle className="mt-1 text-lg font-semibold">{value}</ItemTitle>
       </ItemContent>
     </Item>
+  );
+}
+
+export function BinnedChart<TProperties = Record<string, unknown>>({
+  binCountOptions,
+  chartClassName,
+  children,
+  className,
+  config,
+  domain,
+  formatDomainValue = formatCompactNumber,
+  fullDomain,
+  index,
+  minSpan,
+  minimap = true,
+  minimapClassName,
+  minimapTargetBinCount = 180,
+  onDomainChange,
+  query,
+  renderDataOptions,
+  valueMode = "average",
+  wheel = true,
+  wheelOptions,
+}: BinnedChartProps<TProperties>): JSX.Element {
+  const {
+    containerRef: binCountContainerRef,
+    isAuto,
+    targetBinCount,
+    width,
+  } = useChartBinCount<HTMLDivElement>(binCountOptions);
+  const resolvedFullDomain = fullDomain ?? domain;
+  const handleDomainChange = onDomainChange ?? noopDomainChange;
+  const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+    ...wheelOptions,
+    disabled: !onDomainChange || !wheel || wheelOptions?.disabled,
+    domain,
+    fullDomain: resolvedFullDomain,
+    minSpan,
+    onDomainChange: handleDomainChange,
+  });
+  const containerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      binCountContainerRef(node);
+      wheelDomain.containerRef(node);
+    },
+    [binCountContainerRef, wheelDomain.containerRef],
+  );
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        ...query,
+        targetBinCount,
+        valueMode,
+        xDomain: domain,
+      }),
+    [domain, index, query, targetBinCount, valueMode],
+  );
+  const renderData = useMemo(
+    () => createChartRenderData(series.samples, renderDataOptions),
+    [renderDataOptions, series.samples],
+  );
+  const minimapSeries = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        ...query,
+        targetBinCount: minimapTargetBinCount,
+        valueMode,
+        xDomain: resolvedFullDomain,
+      }),
+    [index, minimapTargetBinCount, query, resolvedFullDomain, valueMode],
+  );
+  const context = useMemo(
+    (): BinnedChartRenderContext<TProperties> => ({
+      isAutoBinCount: isAuto,
+      renderData,
+      rows: renderData.rows,
+      series,
+      targetBinCount,
+      width,
+    }),
+    [isAuto, renderData, series, targetBinCount, width],
+  );
+  const showMinimap = minimap && Boolean(onDomainChange);
+
+  return (
+    <div
+      ref={containerRef}
+      className={joinClassNames("grid gap-3", className)}
+      onWheel={wheelDomain.onWheel}
+    >
+      <ChartContainer className={chartClassName} config={config}>
+        {children(context)}
+      </ChartContainer>
+      {showMinimap ? (
+        <ChartDomainMinimap
+          className={minimapClassName}
+          domain={domain}
+          fullDomain={resolvedFullDomain}
+          samples={minimapSeries.samples}
+          formatDomainValue={formatDomainValue}
+          minSpan={minSpan}
+          onDomainChange={handleDomainChange}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -1387,6 +1537,10 @@ function cancelFrame(frameId: number) {
   }
 
   globalThis.clearTimeout(frameId);
+}
+
+function noopDomainChange() {
+  return undefined;
 }
 
 function now() {
