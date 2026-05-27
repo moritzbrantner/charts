@@ -25,8 +25,10 @@ import {
   CHART_VALUE_MODE_DEFINITIONS,
   ChartAnomalyMarkerList,
   ChartBackendStatus,
+  ChartBoxPlotSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartHeatmapGrid,
   ChartHotBinRow,
   ChartLabelOverlay,
   ChartMetricCard,
@@ -39,8 +41,11 @@ import {
   ChartValueModeSelector,
   createCumulativeChartSeries,
   createDeltaChartSeries,
+  createChartBandRenderData,
+  createChartBoxPlotData,
   createChartDensityIndex,
   createChartDensityViewportSummary,
+  createGroupedChartRenderData,
   createChartRenderData,
   createRollingChartSeries,
   getChartAnomalyAnnotations,
@@ -199,6 +204,8 @@ function App() {
           index={index}
           onDomainChange={setActiveDomain}
         />
+
+        <DistributionExamples activeRange={activeRange} index={index} />
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
@@ -1042,6 +1049,181 @@ function getNearestChartRow(rows: ChartVariantRow[], targetX: number) {
   }, null);
 }
 
+function DistributionExamples({
+  activeRange,
+  index,
+}: {
+  activeRange: ChartRange;
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+}) {
+  const histogram = useMemo(
+    () =>
+      index.getHistogram({
+        bucketCount: 24,
+        valueAccessor: "y",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const heatmap = useMemo(
+    () =>
+      index.getHeatmap({
+        xBinCount: 36,
+        xDomain: activeRange.domain,
+        yBinCount: 12,
+      }),
+    [activeRange.domain, index],
+  );
+  const grouped = useMemo(
+    () =>
+      index.getGroupedChartSeries({
+        groupBy: (point) => point.properties.plan,
+        includeEmptyBins: true,
+        targetBinCount: 72,
+        valueMode: "count",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const groupedRows = useMemo(
+    () =>
+      createGroupedChartRenderData(grouped, {
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [grouped],
+  );
+  const percentileSeries = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        percentiles: ["p25", "p50", "p75"],
+        targetBinCount: 96,
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const bandRows = useMemo(
+    () =>
+      createChartBandRenderData(percentileSeries.samples, {
+        center: "p50",
+        lower: "p25",
+        upper: "p75",
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [percentileSeries.samples],
+  );
+  const boxData = useMemo(
+    () =>
+      createChartBoxPlotData(percentileSeries.samples, {
+        xLabel: (sample) => formatHour(sample.x),
+      }),
+    [percentileSeries.samples],
+  );
+  const histogramRows = histogram.buckets.map((bucket) => ({
+    count: bucket.pointCount,
+    label: `${formatCompact(bucket.value0)}-${formatCompact(bucket.value1)}`,
+  }));
+  const groupedConfig = Object.fromEntries(
+    grouped.groups.map((group, index) => [
+      group.key,
+      {
+        color: `var(--chart-${(index % 5) + 1})`,
+        label: group.label,
+      },
+    ]),
+  );
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Distribution charts</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Histogram, heatmap, grouped stacks, percentile bands, and box plots from the same index.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-full">
+          {activeRange.label}
+        </Badge>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <ChartPanel title="Histogram" description="Distribution of y values in the active viewport.">
+          <ChartContainer className="h-72 w-full" config={{ count: { color: "var(--chart-4)", label: "Count" } }}>
+            <BarChart data={histogramRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+              <YAxis tickLine={false} axisLine={false} width={42} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Bar dataKey="count" fill="var(--color-count)" radius={0} />
+            </BarChart>
+          </ChartContainer>
+        </ChartPanel>
+
+        <ChartPanel title="Heatmap" description="X bins crossed with y-value buckets.">
+          <ChartHeatmapGrid
+            cells={heatmap.cells}
+            formatX={formatHour}
+            formatY={formatCompact}
+            formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
+          />
+        </ChartPanel>
+
+        <ChartPanel title="Stacked by plan" description="Point counts grouped by plan.">
+          <ChartContainer className="h-72 w-full" config={groupedConfig}>
+            <BarChart data={groupedRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+              <YAxis tickLine={false} axisLine={false} width={42} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              {grouped.groups.map((group, index) => (
+                <Bar
+                  key={group.key}
+                  dataKey={group.key}
+                  fill={`var(--chart-${(index % 5) + 1})`}
+                  radius={0}
+                  stackId="plan"
+                />
+              ))}
+            </BarChart>
+          </ChartContainer>
+        </ChartPanel>
+
+        <ChartPanel title="Percentile band" description="Interquartile range with median line.">
+          <ChartContainer className="h-72 w-full" config={bandChartConfig}>
+            <AreaChart data={bandRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+              <YAxis tickLine={false} axisLine={false} width={48} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Area
+                dataKey="range"
+                fill="var(--color-range)"
+                fillOpacity={0.18}
+                isAnimationActive={false}
+                stroke="var(--color-range)"
+                strokeWidth={1.2}
+                type="monotone"
+              />
+              <Line
+                dataKey="center"
+                dot={false}
+                isAnimationActive={false}
+                stroke="var(--color-center)"
+                strokeWidth={2}
+                type="monotone"
+              />
+            </AreaChart>
+          </ChartContainer>
+        </ChartPanel>
+      </div>
+
+      <ChartPanel title="Box plot" description="P25, median, P75, min, and max per x bin.">
+        <ChartBoxPlotSvg data={boxData} formatValue={(value) => value === null ? "n/a" : formatCompact(value)} />
+      </ChartPanel>
+    </section>
+  );
+}
+
 function SparklineExample({
   activeRange,
   index,
@@ -1323,6 +1505,17 @@ const analyticsChartConfig = {
   rollingAverage: {
     color: "var(--chart-2)",
     label: "Rolling average",
+  },
+};
+
+const bandChartConfig = {
+  center: {
+    color: "var(--chart-1)",
+    label: "Median",
+  },
+  range: {
+    color: "var(--chart-2)",
+    label: "P25-P75",
   },
 };
 

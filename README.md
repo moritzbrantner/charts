@@ -25,6 +25,10 @@ This version intentionally cleans up the experimental public API:
 - `index.getChartSeries(query)` / `index.getBinnedSeries(query)`
 - `createChartDensitySample(bin, valueMode)` / `createChartDensityViewportSummary(series)`
 - `createChartRenderData(samples, options)` / `getChartGapAnnotations(samples)`
+- `index.getHistogram(query)` / `index.getHeatmap(query)` /
+  `index.getGroupedChartSeries(query)`
+- `createGroupedChartRenderData(grouped, options)`
+- `createChartBandRenderData(samples, options)` / `createChartBoxPlotData(samples, options)`
 - `CHART_VALUE_MODE_DEFINITIONS`, `getChartValueModeDefinition(mode)`,
   `getChartValueModeDefinitions(modes)`
 - `useProgressiveChartDensity(points, options)` / `useChartBinCount(options)`
@@ -205,6 +209,56 @@ const definitions = getChartValueModeDefinitions(["average", "count", "max"]);
 - `max`: highest y in each bin, useful for peaks and thresholds.
 - `min`: lowest y in each bin, useful for floors and ranges.
 - `sum`: total y in each bin, useful for volume and totals.
+- `p50`, `p75`, `p90`, `p95`, `p99`: percentile values per bin, useful for
+  medians, percentile lines, and latency-style dashboards. `p10` and `p25` are
+  also available when explicitly requested for band and box-plot helpers.
+
+## Distribution and grouped charts
+
+Use the advanced index methods when a viewport needs distribution, heatmap, or
+grouped data derived from the indexed source points:
+
+```ts
+const histogram = index.getHistogram({
+  bucketCount: 24,
+  valueAccessor: "y",
+  xDomain: [360, 720],
+});
+
+const heatmap = index.getHeatmap({
+  xBinCount: 48,
+  xDomain: [360, 720],
+  yBinCount: 12,
+});
+
+const grouped = index.getGroupedChartSeries({
+  groupBy: { property: "plan" },
+  targetBinCount: 96,
+  valueMode: "count",
+  xDomain: [360, 720],
+});
+const stackedRows = createGroupedChartRenderData(grouped, {
+  xLabel: (sample) => `${Math.round(sample.x)}m`,
+}).rows;
+```
+
+Percentile-enriched series power median lines, interquartile bands, and box plots:
+
+```ts
+const percentileSeries = index.getChartSeries({
+  includeEmptyBins: true,
+  percentiles: ["p25", "p50", "p75"],
+  targetBinCount: 96,
+  xDomain: [360, 720],
+});
+
+const bandRows = createChartBandRenderData(percentileSeries.samples, {
+  lower: "p25",
+  center: "p50",
+  upper: "p75",
+}).rows;
+const boxPlotData = createChartBoxPlotData(percentileSeries.samples);
+```
 
 ## Gap behavior
 

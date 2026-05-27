@@ -31,6 +31,8 @@ import {
   type ChartDensityQuery,
   type ChartDensitySample,
   type ChartDensitySeries,
+  type ChartBoxPlotDatum,
+  type ChartHeatmapCell,
   type ChartSeriesPoint,
   type ChartRenderData,
   type ChartRenderDataOptions,
@@ -244,6 +246,24 @@ export type ChartAnomalyMarkerListProps<TProperties = Record<string, unknown>> =
   className?: string;
   formatValue?: (value: number) => ReactNode;
   onSelect?: (anomaly: ChartAnomalyAnnotation<TProperties>) => void;
+};
+
+export type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  cells: Array<ChartHeatmapCell<TProperties>>;
+  className?: string;
+  formatValue?: (cell: ChartHeatmapCell<TProperties>) => string;
+  formatX?: (value: number) => string;
+  formatY?: (value: number) => string;
+  onCellSelect?: (cell: ChartHeatmapCell<TProperties>) => void;
+};
+
+export type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartBoxPlotDatum<TProperties>>;
+  formatValue?: (value: number | null) => string;
+  onDatumSelect?: (datum: ChartBoxPlotDatum<TProperties>) => void;
 };
 
 export type ChartValueModePreviewProps<TProperties = Record<string, unknown>> = {
@@ -1327,6 +1347,194 @@ export function ChartAnomalyMarkerList<TProperties = Record<string, unknown>>({
           </Item>
         );
       })}
+    </div>
+  );
+}
+
+export function ChartHeatmapGrid<TProperties = Record<string, unknown>>({
+  ariaLabel = "Chart heatmap",
+  cells,
+  className,
+  formatValue = (cell) => `${formatCompactNumber(cell.pointCount)} points`,
+  formatX = formatCompactNumber,
+  formatY = formatCompactNumber,
+  onCellSelect,
+}: ChartHeatmapGridProps<TProperties>): JSX.Element {
+  if (cells.length === 0) {
+    return (
+      <div
+        className={joinClassNames(
+          "flex h-56 items-center justify-center border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        No heatmap cells in this viewport.
+      </div>
+    );
+  }
+
+  const xBinCount = Math.max(...cells.map((cell) => cell.xIndex)) + 1;
+  const yBinCount = Math.max(...cells.map((cell) => cell.yIndex)) + 1;
+  const cellWidth = 100 / xBinCount;
+  const cellHeight = 100 / yBinCount;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        {cells.map((cell) => {
+          const x = cell.xIndex * cellWidth;
+          const y = 100 - (cell.yIndex + 1) * cellHeight;
+          const label = `${formatX(cell.x0)}-${formatX(cell.x1)}, ${formatY(cell.y0)}-${formatY(
+            cell.y1,
+          )}: ${formatValue(cell)}`;
+
+          return (
+            <rect
+              key={cell.index}
+              data-chart-heatmap-cell={cell.index}
+              x={x}
+              y={y}
+              width={Math.max(0, cellWidth - 0.25)}
+              height={Math.max(0, cellHeight - 0.25)}
+              fill="var(--primary)"
+              fillOpacity={0.08 + cell.value * 0.82}
+              stroke="var(--background)"
+              strokeWidth="0.15"
+              aria-label={label}
+              onClick={() => onCellSelect?.(cell)}
+            >
+              <title>{label}</title>
+            </rect>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
+  ariaLabel = "Chart box plot",
+  className,
+  data,
+  formatValue = formatNullableNumber,
+  onDatumSelect,
+}: ChartBoxPlotSvgProps<TProperties>): JSX.Element {
+  const valuedData = data.filter((datum) =>
+    [datum.lowerWhisker, datum.upperWhisker, datum.q1, datum.q3, datum.median].some(
+      (value) => value !== null,
+    ),
+  );
+
+  if (valuedData.length === 0) {
+    return (
+      <div
+        className={joinClassNames(
+          "flex h-56 items-center justify-center border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        No box plot data in this viewport.
+      </div>
+    );
+  }
+
+  const allValues = valuedData.flatMap((datum) =>
+    [datum.lowerWhisker, datum.upperWhisker, datum.q1, datum.q3, datum.median].filter(
+      (value): value is number => value !== null,
+    ),
+  );
+  const minValue = Math.min(...allValues);
+  const maxValue = Math.max(...allValues);
+  const span = Math.max(1, maxValue - minValue);
+  const xStep = 100 / Math.max(1, valuedData.length);
+  const yForValue = (value: number | null) =>
+    value === null ? null : 92 - ((value - minValue) / span) * 84;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg viewBox="0 0 100 100" role="img" aria-label={ariaLabel} className="h-72 w-full">
+        {valuedData.map((datum, datumIndex) => {
+          const x = datumIndex * xStep + xStep / 2;
+          const boxWidth = Math.max(1.5, Math.min(8, xStep * 0.42));
+          const lowerWhiskerY = yForValue(datum.lowerWhisker);
+          const upperWhiskerY = yForValue(datum.upperWhisker);
+          const q1Y = yForValue(datum.q1);
+          const q3Y = yForValue(datum.q3);
+          const medianY = yForValue(datum.median);
+          const boxTop = q3Y === null || q1Y === null ? null : Math.min(q3Y, q1Y);
+          const boxHeight = q3Y === null || q1Y === null ? null : Math.max(0.75, Math.abs(q1Y - q3Y));
+          const label = `${datum.label}: median ${formatValue(datum.median)}`;
+
+          return (
+            <g
+              key={datum.index}
+              data-chart-box-index={datum.index}
+              aria-label={label}
+              onClick={() => onDatumSelect?.(datum)}
+            >
+              <title>{label}</title>
+              {lowerWhiskerY !== null && upperWhiskerY !== null ? (
+                <line
+                  x1={x}
+                  x2={x}
+                  y1={upperWhiskerY}
+                  y2={lowerWhiskerY}
+                  stroke="var(--muted-foreground)"
+                  strokeWidth="0.7"
+                />
+              ) : null}
+              {lowerWhiskerY !== null ? (
+                <line
+                  x1={x - boxWidth / 2}
+                  x2={x + boxWidth / 2}
+                  y1={lowerWhiskerY}
+                  y2={lowerWhiskerY}
+                  stroke="var(--muted-foreground)"
+                  strokeWidth="0.7"
+                />
+              ) : null}
+              {upperWhiskerY !== null ? (
+                <line
+                  x1={x - boxWidth / 2}
+                  x2={x + boxWidth / 2}
+                  y1={upperWhiskerY}
+                  y2={upperWhiskerY}
+                  stroke="var(--muted-foreground)"
+                  strokeWidth="0.7"
+                />
+              ) : null}
+              {boxTop !== null && boxHeight !== null ? (
+                <rect
+                  x={x - boxWidth / 2}
+                  y={boxTop}
+                  width={boxWidth}
+                  height={boxHeight}
+                  fill="var(--primary)"
+                  fillOpacity="0.16"
+                  stroke="var(--primary)"
+                  strokeWidth="0.8"
+                />
+              ) : null}
+              {medianY !== null ? (
+                <line
+                  x1={x - boxWidth / 2}
+                  x2={x + boxWidth / 2}
+                  y1={medianY}
+                  y2={medianY}
+                  stroke="var(--primary)"
+                  strokeWidth="1"
+                />
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }

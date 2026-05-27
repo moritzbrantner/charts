@@ -6,12 +6,15 @@ import {
   BinnedChart,
   ChartAnomalyMarkerList,
   ChartBackendStatus,
+  ChartBoxPlotSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartHeatmapGrid,
   ChartRangeSelector,
   ChartSampleSparkline,
   ChartThresholdMarker,
   ChartValueModeSelector,
+  createChartBoxPlotData,
   createChartDensityIndex,
   getChartAnomalyAnnotations,
   getChartThresholdAnnotations,
@@ -32,7 +35,7 @@ describe("@moritzbrantner/charts", () => {
 
     render(<ChartValueModeSelector value="average" onValueChange={onValueChange} />);
 
-    for (const mode of ["Average", "Count", "Maximum", "Minimum", "Sum"]) {
+    for (const mode of ["Average", "Count", "Maximum", "Minimum", "Sum", "Median", "P75"]) {
       expect(screen.getByRole("radio", { name: mode })).toBeTruthy();
     }
 
@@ -149,6 +152,50 @@ describe("@moritzbrantner/charts", () => {
 
     expect(screen.getByText(/score/)).toBeTruthy();
     expect(onSelect).toHaveBeenCalledWith(anomalies[0]);
+  });
+
+  test("renders heatmap cells and selects a cell", () => {
+    const onCellSelect = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0.5, y: 1 },
+      { id: "b", x: 1.5, y: 9 },
+    ]);
+    const heatmap = index.getHeatmap({
+      xBinCount: 2,
+      xDomain: [0, 2],
+      yBinCount: 2,
+      yDomain: [0, 10],
+    });
+
+    render(<ChartHeatmapGrid cells={heatmap.cells} onCellSelect={onCellSelect} />);
+
+    expect(screen.getByRole("img", { name: "Chart heatmap" })).toBeTruthy();
+    fireEvent.click(document.querySelector("[data-chart-heatmap-cell='0']")!);
+
+    expect(onCellSelect).toHaveBeenCalledWith(heatmap.cells[0]);
+  });
+
+  test("renders box plot marks and selects a datum", () => {
+    const onDatumSelect = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 0.2, y: 10 },
+      { id: "c", x: 0.4, y: 20 },
+    ]);
+    const series = index.getChartSeries({
+      includeEmptyBins: true,
+      percentiles: ["p25", "p50", "p75"],
+      targetBinCount: 1,
+      xDomain: [0, 1],
+    });
+    const data = createChartBoxPlotData(series.samples);
+
+    render(<ChartBoxPlotSvg data={data} onDatumSelect={onDatumSelect} />);
+
+    expect(screen.getByRole("img", { name: "Chart box plot" })).toBeTruthy();
+    fireEvent.click(document.querySelector("[data-chart-box-index='0']")!);
+
+    expect(onDatumSelect).toHaveBeenCalledWith(data[0]);
   });
 
   test("renders backend status states and handles warmup", () => {

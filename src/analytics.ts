@@ -83,6 +83,20 @@ export function getChartSampleValue<TProperties>(
       return sample.minY;
     case "sum":
       return sample.pointCount > 0 ? sample.sumY : null;
+    case "p10":
+      return sample.p10;
+    case "p25":
+      return sample.p25;
+    case "p50":
+      return sample.p50;
+    case "p75":
+      return sample.p75;
+    case "p90":
+      return sample.p90;
+    case "p95":
+      return sample.p95;
+    case "p99":
+      return sample.p99;
   }
 }
 

@@ -27,6 +27,23 @@ describe("chart analytics", () => {
     expect(getChartSampleValue(sample!, (nextSample) => (nextSample.y ?? 0) * 2)).toBe(4);
   });
 
+  test("reads percentile sample values", () => {
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 0.2, y: 10 },
+      { id: "c", x: 0.4, y: 20 },
+    ]);
+    const [sample] = index.getChartSeries({
+      percentiles: ["p25", "p50", "p75"],
+      targetBinCount: 1,
+      xDomain: [0, 1],
+    }).samples;
+
+    expect(getChartSampleValue(sample!, "p25")).toBe(5);
+    expect(getChartSampleValue(sample!, "p50")).toBe(10);
+    expect(getChartSampleValue(sample!, "p75")).toBe(15);
+  });
+
   test("creates centered rolling averages and respects minimum point counts", () => {
     const samples = createSamples([2, null, 6, 10, null]);
     const rolling = createRollingChartSeries(samples, {
