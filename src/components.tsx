@@ -24,6 +24,7 @@ import {
   useState,
   type ComponentProps,
   type JSX,
+  type MouseEvent,
   type PointerEvent,
   type ReactNode,
   type WheelEvent,
@@ -214,6 +215,29 @@ export type ChartSampleSparklineProps<TProperties = Record<string, unknown>> = {
   formatValue?: (value: number | null, sample: ChartDensitySample<TProperties>) => string;
   onSampleHover?: (sample: ChartDensitySample<TProperties> | null) => void;
   onSampleSelect?: (sample: ChartDensitySample<TProperties>) => void;
+  samples: Array<ChartDensitySample<TProperties>>;
+  selectedSampleIndex?: number | null;
+};
+
+export type ChartSampleInteraction<TProperties = Record<string, unknown>> = {
+  clientX: number;
+  clientY: number;
+  domainValue: number;
+  sample: ChartDensitySample<TProperties>;
+};
+
+export type ChartSampleInteractionOverlayProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  domain: [number, number];
+  formatSampleLabel?: (sample: ChartDensitySample<TProperties>) => string;
+  isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
+  onSampleContextMenu?: (
+    interaction: ChartSampleInteraction<TProperties>,
+    event: MouseEvent<SVGRectElement>,
+  ) => void;
+  onSampleHover?: (interaction: ChartSampleInteraction<TProperties> | null) => void;
+  onSampleSelect?: (interaction: ChartSampleInteraction<TProperties>) => void;
   samples: Array<ChartDensitySample<TProperties>>;
   selectedSampleIndex?: number | null;
 };
@@ -913,6 +937,151 @@ export function ChartSampleSparkline<TProperties = Record<string, unknown>>({
         {formatDomainValue(domain[1])}
       </div>
     </div>
+  );
+}
+
+export function ChartSampleInteractionOverlay<TProperties = Record<string, unknown>>({
+  ariaLabel = "Chart sample interaction layer",
+  className,
+  domain,
+  formatSampleLabel = formatDefaultSampleLabel,
+  isSampleSelectable = isNonEmptyChartSample,
+  onSampleContextMenu,
+  onSampleHover,
+  onSampleSelect,
+  samples,
+  selectedSampleIndex = null,
+}: ChartSampleInteractionOverlayProps<TProperties>): JSX.Element | null {
+  const plotArea = usePlotArea();
+
+  if (!plotArea) {
+    return null;
+  }
+
+  const domainSpan = Math.max(Number.EPSILON, domain[1] - domain[0]);
+  const selectedSample =
+    selectedSampleIndex === null
+      ? null
+      : (samples.find(
+          (sample) => sample.index === selectedSampleIndex && isSampleSelectable(sample),
+        ) ?? null);
+  const createInteraction = (
+    event: MouseEvent<SVGRectElement> | PointerEvent<SVGRectElement>,
+  ): ChartSampleInteraction<TProperties> | null => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const domainValue = getDomainValueFromClientX(event.clientX, bounds, domain);
+    const sample = getNearestChartSample(samples, domainValue, { isSampleSelectable });
+
+    if (!sample) {
+      return null;
+    }
+
+    return {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      domainValue,
+      sample,
+    };
+  };
+  const handleClick = (event: MouseEvent<SVGRectElement>) => {
+    if (!onSampleSelect) {
+      return;
+    }
+
+    const interaction = createInteraction(event);
+
+    if (interaction) {
+      onSampleSelect(interaction);
+    }
+  };
+  const handleContextMenu = (event: MouseEvent<SVGRectElement>) => {
+    if (!onSampleContextMenu) {
+      return;
+    }
+
+    const interaction = createInteraction(event);
+
+    if (interaction) {
+      onSampleContextMenu(interaction, event);
+    }
+  };
+  const handlePointerMove = (event: PointerEvent<SVGRectElement>) => {
+    if (!onSampleHover) {
+      return;
+    }
+
+    onSampleHover(createInteraction(event));
+  };
+  const selectedBand =
+    selectedSample && domain[1] > domain[0]
+      ? {
+          left:
+            plotArea.x +
+            clamp(
+              ((selectedSample.x0 - domain[0]) / domainSpan) * plotArea.width,
+              0,
+              plotArea.width,
+            ),
+          right:
+            plotArea.x +
+            clamp(
+              ((selectedSample.x1 - domain[0]) / domainSpan) * plotArea.width,
+              0,
+              plotArea.width,
+            ),
+          x:
+            plotArea.x +
+            clamp(
+              ((selectedSample.x - domain[0]) / domainSpan) * plotArea.width,
+              0,
+              plotArea.width,
+            ),
+        }
+      : null;
+
+  return (
+    <g className={className} data-chart-sample-interaction-layer="">
+      {selectedBand ? (
+        <>
+          <rect
+            data-chart-sample-selected-band={selectedSample?.index}
+            x={Math.min(selectedBand.left, selectedBand.right)}
+            y={plotArea.y}
+            width={Math.abs(selectedBand.right - selectedBand.left)}
+            height={plotArea.height}
+            fill="var(--primary)"
+            fillOpacity="0.1"
+            pointerEvents="none"
+          />
+          <line
+            data-chart-sample-selected-line={selectedSample?.index}
+            x1={selectedBand.x}
+            x2={selectedBand.x}
+            y1={plotArea.y}
+            y2={plotArea.y + plotArea.height}
+            stroke="var(--primary)"
+            strokeOpacity="0.8"
+            strokeWidth="1.2"
+            pointerEvents="none"
+          />
+        </>
+      ) : null}
+      <rect
+        data-chart-sample-interaction-overlay=""
+        x={plotArea.x}
+        y={plotArea.y}
+        width={plotArea.width}
+        height={plotArea.height}
+        fill="transparent"
+        aria-label={ariaLabel}
+        onClick={handleClick}
+        onContextMenu={handleContextMenu}
+        onPointerLeave={() => onSampleHover?.(null)}
+        onPointerMove={handlePointerMove}
+      >
+        {selectedSample ? <title>{formatSampleLabel(selectedSample)}</title> : null}
+      </rect>
+    </g>
   );
 }
 
@@ -1880,6 +2049,33 @@ export function getChartSampleYBounds<TProperties = Record<string, unknown>>(
   };
 }
 
+export function getNearestChartSample<TProperties>(
+  samples: readonly ChartDensitySample<TProperties>[],
+  x: number,
+  options: {
+    isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
+  } = {},
+): ChartDensitySample<TProperties> | null {
+  const isSampleSelectable = options.isSampleSelectable ?? isNonEmptyChartSample;
+  let nearest: ChartDensitySample<TProperties> | null = null;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const sample of samples) {
+    if (!isSampleSelectable(sample)) {
+      continue;
+    }
+
+    const distance = Math.abs(sample.x - x);
+
+    if (distance < nearestDistance) {
+      nearest = sample;
+      nearestDistance = distance;
+    }
+  }
+
+  return nearest;
+}
+
 function createPreviewData<TProperties>(samples: Array<ChartDensitySample<TProperties>>) {
   return samples.map((sample) => ({
     count: sample.pointCount,
@@ -1944,6 +2140,10 @@ function formatDefaultSampleValue<TProperties>(
   _sample: ChartDensitySample<TProperties>,
 ) {
   return formatNullableNumber(value);
+}
+
+function isNonEmptyChartSample<TProperties>(sample: ChartDensitySample<TProperties>) {
+  return sample.pointCount > 0;
 }
 
 function formatThresholdAnnotationLabel<TProperties>(

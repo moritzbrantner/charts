@@ -1,16 +1,20 @@
 import {
+  ActionMenu,
   Badge,
   Button,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  ContextActionMenu,
   Label,
+  type MenuActionItem,
   NativeSelect,
   NativeSelectOption,
   Slider,
   Switch,
   ToggleGroup,
   ToggleGroupItem,
+  copyText,
 } from "@moritzbrantner/ui";
 import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
@@ -42,6 +46,7 @@ import {
   ChartMetricStrip,
   ChartPanel,
   ChartRangeSelector,
+  ChartSampleInteractionOverlay,
   ChartSampleSparkline,
   ChartThresholdMarker,
   ChartValueModePreview,
@@ -62,9 +67,10 @@ import {
   useChartBinCount,
   useChartWheelDomain,
   useProgressiveChartDensity,
-  type ChartGapBehavior,
   type ChartDensitySample,
+  type ChartGapBehavior,
   type ChartRange,
+  type ChartSampleInteraction,
   type ChartSeriesPoint,
   type ChartValueMode,
 } from "@moritzbrantner/charts";
@@ -299,6 +305,7 @@ function ChartPlayground({
   const [showLabels, setShowLabels] = useState(true);
   const [showThreshold, setShowThreshold] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
   const definition = getChartValueModeDefinition(valueMode);
   const series = useMemo(
     () =>
@@ -441,11 +448,15 @@ function ChartPlayground({
                   barRadius,
                   chartType,
                   curve,
+                  domain: activeRange.domain,
                   fillOpacity,
                   gapBehavior,
                   histogramRows,
                   labels,
+                  onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
                   rows: renderRows,
+                  samples: series.samples,
+                  selectedSampleIndex,
                   showGrid,
                   showThreshold,
                   strokeWidth,
@@ -666,13 +677,17 @@ function renderPlaygroundChart({
   barRadius,
   chartType,
   curve,
+  domain,
   fillOpacity,
   gapBehavior,
   grouped,
   groupedRows,
   histogramRows,
   labels,
+  onSampleSelect,
   rows,
+  samples,
+  selectedSampleIndex,
   showGrid,
   showThreshold,
   strokeWidth,
@@ -682,6 +697,7 @@ function renderPlaygroundChart({
   barRadius: number;
   chartType: PlaygroundChartType;
   curve: PlaygroundCurve;
+  domain: [number, number];
   fillOpacity: number;
   gapBehavior: ChartGapBehavior;
   grouped: PlaygroundGroupedSeries;
@@ -695,7 +711,10 @@ function renderPlaygroundChart({
     x: string;
     y: number;
   }>;
+  onSampleSelect: (interaction: ChartSampleInteraction<TelemetryProperties>) => void;
   rows: PlaygroundRenderRow[];
+  samples: ChartDensitySample<TelemetryProperties>[];
+  selectedSampleIndex: number | null;
   showGrid: boolean;
   showThreshold: boolean;
   strokeWidth: number;
@@ -713,6 +732,14 @@ function renderPlaygroundChart({
     />
   ) : null;
   const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+  const sampleOverlay = (
+    <ChartSampleInteractionOverlay
+      domain={domain}
+      samples={samples}
+      selectedSampleIndex={selectedSampleIndex}
+      onSampleSelect={onSampleSelect}
+    />
+  );
 
   switch (chartType) {
     case "bar":
@@ -725,6 +752,7 @@ function renderPlaygroundChart({
           {thresholdLine}
           <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {sampleOverlay}
         </BarChart>
       );
     case "combo":
@@ -755,6 +783,7 @@ function renderPlaygroundChart({
             type={curve}
           />
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {sampleOverlay}
         </AreaChart>
       );
     case "histogram":
@@ -795,6 +824,7 @@ function renderPlaygroundChart({
             type={curve}
           />
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {sampleOverlay}
         </LineChart>
       );
     case "stacked":
@@ -813,6 +843,7 @@ function renderPlaygroundChart({
               stackId="playground"
             />
           ))}
+          {sampleOverlay}
         </BarChart>
       );
     case "heatmap":
@@ -835,6 +866,7 @@ function renderPlaygroundChart({
             type={curve}
           />
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {sampleOverlay}
         </AreaChart>
       );
   }
@@ -1109,6 +1141,79 @@ function DenseTrendExample({
     () => createChartDensityViewportSummary(measured.series),
     [measured.series],
   );
+  const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
+  const [contextInteraction, setContextInteraction] =
+    useState<ChartSampleInteraction<TelemetryProperties> | null>(null);
+  const selectedSample = useMemo(
+    () => measured.series.samples.find((sample) => sample.index === selectedSampleIndex) ?? null,
+    [measured.series.samples, selectedSampleIndex],
+  );
+  const selectedPoint = selectedSample?.firstPoint
+    ? index.getPointById(selectedSample.firstPoint.id)
+    : null;
+  const actionSample = contextInteraction?.sample ?? selectedSample;
+  const binActionItems = useMemo(() => createBinActionItems(Boolean(actionSample)), [actionSample]);
+  const handleSampleSelect = useCallback(
+    (interaction: ChartSampleInteraction<TelemetryProperties>) => {
+      setSelectedSampleIndex(interaction.sample.index);
+      setContextInteraction(interaction);
+    },
+    [],
+  );
+  const handleBinAction = useCallback(
+    (id: string) => {
+      if (id === "reset-domain") {
+        onDomainChange(fullDomain);
+        return;
+      }
+
+      const sample = contextInteraction?.sample ?? selectedSample;
+
+      if (!sample) {
+        return;
+      }
+
+      switch (id) {
+        case "select-bin":
+          setSelectedSampleIndex(sample.index);
+          break;
+        case "zoom-bin":
+          onDomainChange(createPaddedBinDomain(sample, fullDomain));
+          break;
+        case "copy-range":
+          void copyText(formatSampleRange(sample));
+          break;
+        case "copy-summary":
+          void copyText(formatSampleSummary(sample, valueMode, definition.axisLabel));
+          break;
+      }
+    },
+    [
+      contextInteraction,
+      definition.axisLabel,
+      fullDomain,
+      onDomainChange,
+      selectedSample,
+      valueMode,
+    ],
+  );
+  const actionMenuHeader = actionSample ? (
+    <div className="grid gap-1 px-2 py-1.5 text-sm">
+      <span className="font-medium">{formatSampleRange(actionSample)}</span>
+      <span className="text-xs text-muted-foreground">
+        {formatCompact(actionSample.pointCount)} points
+      </span>
+    </div>
+  ) : null;
+  const sampleOverlay = (
+    <ChartSampleInteractionOverlay
+      domain={activeRange.domain}
+      samples={measured.series.samples}
+      selectedSampleIndex={selectedSample?.index ?? null}
+      onSampleContextMenu={(interaction) => setContextInteraction(interaction)}
+      onSampleSelect={handleSampleSelect}
+    />
+  );
 
   return (
     <ChartPanel
@@ -1129,6 +1234,17 @@ function DenseTrendExample({
             <Button type="button" variant="ghost" disabled={isAuto} onClick={resetAuto}>
               Auto
             </Button>
+            <ActionMenu
+              label="Selected bin actions"
+              items={binActionItems}
+              header={actionMenuHeader}
+              onItemSelect={handleBinAction}
+              trigger={
+                <Button type="button" variant="outline" disabled={!selectedSample}>
+                  Actions
+                </Button>
+              }
+            />
           </div>
         </div>
         <div className="grid gap-3 md:grid-cols-3">
@@ -1148,35 +1264,65 @@ function DenseTrendExample({
             hint={isAuto ? "Bin count follows container width" : "Manual bin count is active"}
           />
         </div>
-        <div ref={chartContainerRef}>
-          <ChartContainer className="h-[24rem] w-full" config={chartConfig(definition.label)}>
-            {definition.renderer === "bar" ? (
-              <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                <YAxis tickLine={false} axisLine={false} width={56} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar dataKey="value" fill="var(--color-value)" radius={0} />
-              </BarChart>
-            ) : (
-              <AreaChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                <YAxis tickLine={false} axisLine={false} width={56} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Area
-                  dataKey="value"
-                  fill="var(--color-value)"
-                  fillOpacity={0.18}
-                  isAnimationActive={false}
-                  stroke="var(--color-value)"
-                  strokeWidth={2}
-                  type="monotone"
-                />
-              </AreaChart>
-            )}
-          </ChartContainer>
-        </div>
+        <ContextActionMenu
+          items={binActionItems}
+          header={actionMenuHeader}
+          onItemSelect={handleBinAction}
+          onOpenChange={(open) => {
+            if (!open) {
+              setContextInteraction(null);
+            }
+          }}
+        >
+          <div ref={chartContainerRef}>
+            <ChartContainer className="h-[24rem] w-full" config={chartConfig(definition.label)}>
+              {definition.renderer === "bar" ? (
+                <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+                  <YAxis tickLine={false} axisLine={false} width={56} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Bar dataKey="value" fill="var(--color-value)" radius={0} />
+                  {sampleOverlay}
+                </BarChart>
+              ) : (
+                <AreaChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+                  <YAxis tickLine={false} axisLine={false} width={56} />
+                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Area
+                    dataKey="value"
+                    fill="var(--color-value)"
+                    fillOpacity={0.18}
+                    isAnimationActive={false}
+                    stroke="var(--color-value)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                  {sampleOverlay}
+                </AreaChart>
+              )}
+            </ChartContainer>
+          </div>
+        </ContextActionMenu>
+        {selectedSample ? (
+          <div className="grid gap-3">
+            <ChartHotBinRow sample={selectedSample} formatX={formatHour} />
+            <div className="grid gap-3 md:grid-cols-4">
+              <ChartMetricStrip label="Selected x" value={formatHour(selectedSample.x)} />
+              <ChartMetricStrip label="Points" value={formatCompact(selectedSample.pointCount)} />
+              <ChartMetricStrip
+                label={definition.axisLabel}
+                value={formatSampleModeValue(selectedSample, valueMode)}
+              />
+              <ChartMetricStrip
+                label="First point"
+                value={selectedPoint?.properties.note ?? "No point"}
+              />
+            </div>
+          </div>
+        ) : null}
         <ChartDomainMinimap
           domain={activeRange.domain}
           fullDomain={fullDomain}
@@ -1187,6 +1333,132 @@ function DenseTrendExample({
       </div>
     </ChartPanel>
   );
+}
+
+function createBinActionItems(hasSample: boolean): MenuActionItem[] {
+  return [
+    {
+      disabled: !hasSample,
+      id: "select-bin",
+      label: "Select bin",
+    },
+    {
+      disabled: !hasSample,
+      id: "zoom-bin",
+      label: "Zoom to bin",
+    },
+    {
+      disabled: !hasSample,
+      id: "copy-range",
+      label: "Copy x range",
+    },
+    {
+      disabled: !hasSample,
+      id: "copy-summary",
+      label: "Copy bin summary",
+    },
+    {
+      id: "reset-domain",
+      label: "Reset viewport",
+    },
+  ];
+}
+
+function createPaddedBinDomain<TProperties>(
+  sample: ChartDensitySample<TProperties>,
+  fullDomain: [number, number],
+): [number, number] {
+  const fullSpan = fullDomain[1] - fullDomain[0];
+  const binSpan = Math.max(sample.x1 - sample.x0, fullSpan / 200, Number.EPSILON);
+  const padding = binSpan * 2;
+  const span = Math.min(fullSpan, binSpan + padding * 2);
+  const midpoint = (sample.x0 + sample.x1) / 2;
+  const left = midpoint - span / 2;
+  const right = midpoint + span / 2;
+
+  if (span >= fullSpan) {
+    return fullDomain;
+  }
+
+  if (left < fullDomain[0]) {
+    return [fullDomain[0], fullDomain[0] + span];
+  }
+
+  if (right > fullDomain[1]) {
+    return [fullDomain[1] - span, fullDomain[1]];
+  }
+
+  return [left, right];
+}
+
+function formatSampleRange<TProperties>(sample: ChartDensitySample<TProperties>) {
+  return `${formatHour(sample.x0)} to ${formatHour(sample.x1)}`;
+}
+
+function formatSampleSummary<TProperties>(
+  sample: ChartDensitySample<TProperties>,
+  valueMode: ChartValueMode,
+  valueLabel: string,
+) {
+  const primaryMetric = getPrimarySampleMetric(sample);
+  const lines = [
+    `Range: ${formatSampleRange(sample)}`,
+    `Points: ${formatCompact(sample.pointCount)}`,
+    `${valueLabel}: ${formatSampleModeValue(sample, valueMode)}`,
+  ];
+
+  if (primaryMetric) {
+    lines.push(`${primaryMetric[0]}: ${formatCompact(primaryMetric[1])}`);
+  }
+
+  return lines.join("\n");
+}
+
+function getPrimarySampleMetric<TProperties>(sample: ChartDensitySample<TProperties>) {
+  const entries = Object.entries(sample.metrics);
+
+  return entries.find(([metricKey]) => metricKey === "revenue") ?? entries[0] ?? null;
+}
+
+function formatSampleModeValue<TProperties>(
+  sample: ChartDensitySample<TProperties>,
+  valueMode: ChartValueMode,
+) {
+  const value = getSampleModeValue(sample, valueMode);
+
+  return value === null ? "n/a" : formatCompact(value);
+}
+
+function getSampleModeValue<TProperties>(
+  sample: ChartDensitySample<TProperties>,
+  valueMode: ChartValueMode,
+) {
+  switch (valueMode) {
+    case "average":
+      return sample.averageY;
+    case "count":
+      return sample.pointCount;
+    case "max":
+      return sample.maxY;
+    case "min":
+      return sample.minY;
+    case "p10":
+      return sample.p10;
+    case "p25":
+      return sample.p25;
+    case "p50":
+      return sample.p50;
+    case "p75":
+      return sample.p75;
+    case "p90":
+      return sample.p90;
+    case "p95":
+      return sample.p95;
+    case "p99":
+      return sample.p99;
+    case "sum":
+      return sample.sumY;
+  }
 }
 
 function ValueModeExamples({

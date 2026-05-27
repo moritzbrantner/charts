@@ -11,12 +11,14 @@ import {
   ChartDomainMinimap,
   ChartHeatmapGrid,
   ChartRangeSelector,
+  ChartSampleInteractionOverlay,
   ChartSampleSparkline,
   ChartThresholdMarker,
   ChartValueModeSelector,
   createChartBoxPlotData,
   createChartDensityIndex,
   getChartAnomalyAnnotations,
+  getNearestChartSample,
   getChartThresholdAnnotations,
   getChartValueModeDefinitions,
   getChartSampleYBounds,
@@ -382,6 +384,109 @@ describe("@moritzbrantner/charts", () => {
     render(<ChartSampleSparkline samples={[]} domain={[0, 1]} />);
 
     expect(screen.getByText("No chart samples in this viewport.")).toBeTruthy();
+  });
+
+  test("finds the nearest selectable chart sample", () => {
+    const samples = createChartDensityIndex([
+      { id: "a", x: 1, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 9, y: 4 },
+    ]).getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 5,
+      xDomain: [0, 10],
+    }).samples;
+
+    expect(getNearestChartSample(samples, 4.6)?.firstPoint?.id).toBe("b");
+    expect(getNearestChartSample([], 4.6)).toBeNull();
+    expect(
+      getNearestChartSample(samples, 6.6, {
+        isSampleSelectable: (sample) => sample.firstPoint?.id !== "b" && sample.pointCount > 0,
+      })?.firstPoint?.id,
+    ).toBe("c");
+  });
+
+  test("selects, hovers, and context-targets chart samples from a Recharts overlay", () => {
+    const onSampleContextMenu = vi.fn();
+    const onSampleHover = vi.fn();
+    const onSampleSelect = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 1, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 9, y: 4 },
+    ]);
+    const samples = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 5,
+      xDomain: [0, 10],
+    }).samples;
+    const selectedSample = samples.find((sample) => sample.firstPoint?.id === "b");
+    const { container } = render(
+      <LineChart
+        width={400}
+        height={260}
+        data={[
+          { label: "A", value: 20 },
+          { label: "B", value: 80 },
+          { label: "C", value: 40 },
+        ]}
+        margin={{ bottom: 20, left: 20, right: 20, top: 20 }}
+      >
+        <Line dataKey="value" dot={false} isAnimationActive={false} />
+        <ChartSampleInteractionOverlay
+          domain={[0, 10]}
+          samples={samples}
+          selectedSampleIndex={selectedSample?.index}
+          onSampleContextMenu={onSampleContextMenu}
+          onSampleHover={onSampleHover}
+          onSampleSelect={onSampleSelect}
+        />
+      </LineChart>,
+    );
+    const overlay = container.querySelector(
+      "[data-chart-sample-interaction-overlay]",
+    ) as SVGRectElement;
+
+    expect(overlay).toBeTruthy();
+    overlay.getBoundingClientRect = () =>
+      ({
+        bottom: 240,
+        height: 220,
+        left: 0,
+        right: 400,
+        top: 20,
+        width: 400,
+        x: 0,
+        y: 20,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireChartInteractionEvent(overlay, "pointermove", 200, 100);
+    fireChartInteractionEvent(overlay, "click", 200, 100);
+    fireChartInteractionEvent(overlay, "contextmenu", 200, 100);
+    fireEvent.pointerLeave(overlay);
+
+    expect(onSampleHover).toHaveBeenCalledWith(expect.objectContaining({ sample: selectedSample }));
+    expect(onSampleHover).toHaveBeenLastCalledWith(null);
+    expect(onSampleSelect).toHaveBeenCalledWith(
+      expect.objectContaining({ sample: selectedSample }),
+    );
+    expect(onSampleContextMenu).toHaveBeenCalledWith(
+      expect.objectContaining({ sample: selectedSample }),
+      expect.any(Object),
+    );
+    expect(container.querySelector("[data-chart-sample-selected-band]")).toBeTruthy();
+    expect(container.querySelector("[data-chart-sample-selected-line]")).toBeTruthy();
+  });
+
+  test("does not render the sample interaction overlay without a plot area", () => {
+    const { container } = render(
+      <svg>
+        <ChartSampleInteractionOverlay domain={[0, 10]} samples={[]} />
+      </svg>,
+    );
+
+    expect(container.querySelector("[data-chart-sample-interaction-overlay]")).toBeNull();
   });
 
   test("renders a minimap and selects a chart domain by dragging", () => {
@@ -829,6 +934,28 @@ function firePointerEvent(
     },
     pointerId: {
       value: pointerId,
+    },
+  });
+  fireEvent(element, event);
+}
+
+function fireChartInteractionEvent(
+  element: Element,
+  type: "click" | "contextmenu" | "pointermove",
+  clientX: number,
+  clientY: number,
+) {
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+  });
+
+  Object.defineProperties(event, {
+    clientX: {
+      value: clientX,
+    },
+    clientY: {
+      value: clientY,
     },
   });
   fireEvent(element, event);
