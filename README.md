@@ -10,7 +10,7 @@ renderers can all consume the same sample contract.
 ## Installation
 
 ```sh
-bun add @moritzbrantner/charts react recharts
+bun add @moritzbrantner/charts react react-dom recharts
 ```
 
 The package is published to GitHub Packages. Configure the `@moritzbrantner`
@@ -21,9 +21,9 @@ scope in `.npmrc` before installing from a fresh project:
 //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
 ```
 
-`@moritzbrantner/charts` expects React `^19.0.0` and Recharts `^3.0.0` as peer
-dependencies. React 18 is intentionally not advertised until it has dedicated
-peer and test coverage.
+`@moritzbrantner/charts` intentionally supports React `^19.0.0`, React DOM
+`^19.0.0`, and Recharts `^3.0.0` as peer dependencies. React DOM is required
+for the exported React controls and Recharts/UI-backed examples.
 
 ## Breaking migration
 

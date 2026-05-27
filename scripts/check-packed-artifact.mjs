@@ -48,6 +48,10 @@ try {
     throw new Error("Packed package root type export does not point at ./dist/index.d.ts.");
   }
 
+  assertPeerDependency(packageJson, "react", "^19.0.0");
+  assertPeerDependency(packageJson, "react-dom", "^19.0.0");
+  assertPeerDependency(packageJson, "recharts", "^3.0.0");
+
   const consumerDir = path.join(tempDir, "consumer");
   const consumerNodeModules = path.join(consumerDir, "node_modules");
 
@@ -129,6 +133,16 @@ try {
 function assertFile(filePath) {
   if (!existsSync(filePath)) {
     throw new Error(`Expected packed file to exist: ${path.relative(rootDir, filePath)}`);
+  }
+}
+
+function assertPeerDependency(packageJson, name, expectedRange) {
+  const actualRange = packageJson.peerDependencies?.[name];
+
+  if (actualRange !== expectedRange) {
+    throw new Error(
+      `Packed package peer dependency ${name} expected ${expectedRange}, received ${actualRange ?? "missing"}.`,
+    );
   }
 }
 
