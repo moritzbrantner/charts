@@ -197,6 +197,17 @@ Open `examples/playground/charts.html` in the local playground for a combined
 example with responsive binning, value-mode previews, viewport totals, sample
 selection, gap-safe render data, and source-point lookup.
 
+## Local examples
+
+Run the examples page with:
+
+```sh
+bun dev
+```
+
+Vite serves the React examples app from `examples/` and aliases
+`@moritzbrantner/charts` to the local `src/index.ts` entrypoint.
+
 ## Verification
 
 - `bun run test`

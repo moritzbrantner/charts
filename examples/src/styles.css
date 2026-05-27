@@ -1,0 +1,17 @@
+@import "@moritzbrantner/ui/atlas/styles.css";
+
+@source "../index.html";
+@source "./**/*.{ts,tsx}";
+@source "../../src/**/*.{ts,tsx}";
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+}
+
+#root {
+  min-height: 100vh;
+}

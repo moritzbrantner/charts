@@ -27,6 +27,7 @@
     "recharts": "^3.0.0"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
     "@testing-library/react": "^16.3.0",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.2",
@@ -35,8 +36,10 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^3.8.1",
+    "tailwindcss": "^4.3.0",
     "tsup": "^8.5.0",
     "typescript": "6.0.2",
+    "vite": "^8.0.14",
     "vitest": "^4.1.2"
   },
   "publishConfig": {
@@ -47,6 +50,7 @@
     "bench:large-data": "node ./scripts/benchmark-large-data.mjs",
     "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
     "check-types": "tsc --noEmit",
+    "dev": "vite",
     "prepack": "bun run build",
     "test": "vitest run",
     "verify:release": "bun run check-types && bun run test && bun run build && bun run bench:large-data"
