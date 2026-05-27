@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 
 import {
   ChartBackendStatus,
+  ChartDomainMinimap,
   ChartRangeSelector,
   ChartSampleSparkline,
   ChartValueModeSelector,
@@ -11,6 +12,7 @@ import {
   getChartSampleYBounds,
   measureChartSeries,
   useChartBinCount,
+  useChartWheelDomain,
 } from "@moritzbrantner/charts";
 
 describe("@moritzbrantner/charts", () => {
@@ -237,6 +239,66 @@ describe("@moritzbrantner/charts", () => {
     expect(screen.getByText("No chart samples in this viewport.")).toBeTruthy();
   });
 
+  test("renders a minimap and selects a chart domain by dragging", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 2 },
+      { id: "b", x: 25, y: 12 },
+      { id: "c", x: 50, y: 4 },
+      { id: "d", x: 75, y: 8 },
+      { id: "e", x: 100, y: 6 },
+    ]);
+    const series = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 5,
+      xDomain: [0, 100],
+    });
+    const { rerender } = render(
+      <ChartDomainMinimap
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        samples={series.samples}
+        onDomainChange={onDomainChange}
+      />,
+    );
+    const minimap = screen.getByRole("img", { name: "Chart domain minimap" });
+    minimap.getBoundingClientRect = () =>
+      ({
+        bottom: 36,
+        height: 36,
+        left: 0,
+        right: 1000,
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(screen.getByText("20-40")).toBeTruthy();
+
+    firePointerEvent(minimap, "pointerdown", 100, 1);
+    firePointerEvent(minimap, "pointermove", 600, 1);
+    firePointerEvent(minimap, "pointerup", 600, 1);
+
+    expect(onDomainChange).toHaveBeenLastCalledWith([10, 60]);
+
+    rerender(
+      <ChartDomainMinimap
+        domain={[10, 60]}
+        fullDomain={[0, 100]}
+        samples={series.samples}
+        onDomainChange={onDomainChange}
+      />,
+    );
+
+    firePointerEvent(minimap, "pointerdown", 300, 2);
+    firePointerEvent(minimap, "pointermove", 400, 2);
+    firePointerEvent(minimap, "pointerup", 400, 2);
+
+    expect(onDomainChange).toHaveBeenLastCalledWith([20, 70]);
+  });
+
   test("measures chart queries", () => {
     const index = createChartDensityIndex([
       { id: "a", x: 0, y: 2 },
@@ -321,4 +383,64 @@ describe("@moritzbrantner/charts", () => {
     expect(result.current.targetBinCount).toBe(120);
     expect(result.current.isAuto).toBe(true);
   });
+
+  test("scrolls chart domains with the mouse wheel", () => {
+    const onDomainChange = vi.fn();
+
+    function WheelChart({ domain }: { domain: [number, number] }) {
+      const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+        domain,
+        fullDomain: [0, 100],
+        onDomainChange,
+      });
+
+      return <div data-testid="wheel-chart" onWheel={wheelDomain.onWheel} />;
+    }
+
+    const { rerender } = render(<WheelChart domain={[20, 40]} />);
+    const target = screen.getByTestId("wheel-chart");
+    target.getBoundingClientRect = () =>
+      ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 1000,
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.wheel(target, { deltaY: 100 });
+
+    expect(onDomainChange).toHaveBeenCalledWith([22, 42]);
+
+    rerender(<WheelChart domain={[85, 95]} />);
+    fireEvent.wheel(target, { deltaY: 1000 });
+
+    expect(onDomainChange).toHaveBeenLastCalledWith([90, 100]);
+  });
 });
+
+function firePointerEvent(
+  element: Element,
+  type: "pointerdown" | "pointermove" | "pointerup",
+  clientX: number,
+  pointerId: number,
+) {
+  const event = new Event(type, {
+    bubbles: true,
+    cancelable: true,
+  });
+
+  Object.defineProperties(event, {
+    clientX: {
+      value: clientX,
+    },
+    pointerId: {
+      value: pointerId,
+    },
+  });
+  fireEvent(element, event);
+}

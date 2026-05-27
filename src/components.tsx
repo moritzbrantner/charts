@@ -6,6 +6,8 @@ import {
   type JSX,
   type PointerEvent,
   type ReactNode,
+  type WheelEvent,
+  type WheelEventHandler,
 } from "react";
 import { Bar, BarChart, Line, LineChart } from "recharts";
 
@@ -113,6 +115,17 @@ export type ChartSampleSparklineProps<TProperties = Record<string, unknown>> = {
   selectedSampleIndex?: number | null;
 };
 
+export type ChartDomainMinimapProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  domain: [number, number];
+  formatDomainValue?: (value: number) => string;
+  fullDomain: [number, number];
+  minSpan?: number;
+  onDomainChange: (domain: [number, number]) => void;
+  samples: Array<ChartDensitySample<TProperties>>;
+};
+
 export type ChartHotBinRowProps<TProperties = Record<string, unknown>> = {
   className?: string;
   formatMetric?: (metricKey: string, value: number) => ReactNode;
@@ -144,6 +157,32 @@ export type UseChartBinCountResult<TElement extends Element = HTMLDivElement> = 
   targetBinCount: number;
   width: number | null;
 };
+
+export type UseChartWheelDomainOptions = {
+  disabled?: boolean;
+  domain: [number, number];
+  fullDomain: [number, number];
+  onDomainChange: (domain: [number, number]) => void;
+  scrollScale?: number;
+};
+
+export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = {
+  onWheel: WheelEventHandler<TElement>;
+};
+
+type ChartDomainMinimapDragState =
+  | {
+      anchorValue: number;
+      mode: "select";
+    }
+  | {
+      mode: "pan";
+      startDomain: [number, number];
+      startValue: number;
+    }
+  | {
+      mode: "resize-left" | "resize-right";
+    };
 
 export function ChartPanel({
   badge,
@@ -448,6 +487,194 @@ export function ChartSampleSparkline<TProperties = Record<string, unknown>>({
   );
 }
 
+export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
+  ariaLabel = "Chart domain minimap",
+  className,
+  domain,
+  formatDomainValue = formatCompactNumber,
+  fullDomain,
+  minSpan,
+  onDomainChange,
+  samples,
+}: ChartDomainMinimapProps<TProperties>): JSX.Element {
+  const [dragState, setDragState] = useState<ChartDomainMinimapDragState | null>(null);
+  const values = samples.filter((sample) => sample.y !== null);
+  const fullSpan = Math.max(1, fullDomain[1] - fullDomain[0]);
+  const resolvedMinSpan = Math.max(minSpan ?? fullSpan / 100, fullSpan / 1000);
+  const selectedLeft = clamp(((domain[0] - fullDomain[0]) / fullSpan) * 100, 0, 100);
+  const selectedRight = clamp(((domain[1] - fullDomain[0]) / fullSpan) * 100, 0, 100);
+  const selectedWidth = Math.max(0, selectedRight - selectedLeft);
+  const minY = values.length > 0 ? Math.min(...values.map((sample) => sample.y ?? 0)) : 0;
+  const maxY = values.length > 0 ? Math.max(...values.map((sample) => sample.y ?? 0)) : 0;
+  const spread = Math.max(1, maxY - minY);
+  const points = values
+    .map((sample) => {
+      const x = ((sample.x - fullDomain[0]) / fullSpan) * 100;
+      const y = 31 - (((sample.y ?? minY) - minY) / spread) * 26;
+
+      return `${clamp(x, 0, 100)},${clamp(y, 5, 31)}`;
+    })
+    .join(" ");
+
+  const updateDomain = (nextDomain: [number, number]) => {
+    const normalized = normalizeDomain(nextDomain, fullDomain, resolvedMinSpan);
+
+    if (normalized[0] !== domain[0] || normalized[1] !== domain[1]) {
+      onDomainChange(normalized);
+    }
+  };
+  const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    const value = getDomainValueFromPointerEvent(event, fullDomain);
+    const threshold = getDomainHandleThreshold(event.currentTarget, fullDomain);
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    if (Math.abs(value - domain[0]) <= threshold) {
+      setDragState({ mode: "resize-left" });
+
+      return;
+    }
+
+    if (Math.abs(value - domain[1]) <= threshold) {
+      setDragState({ mode: "resize-right" });
+
+      return;
+    }
+
+    if (value >= domain[0] && value <= domain[1]) {
+      setDragState({
+        mode: "pan",
+        startDomain: domain,
+        startValue: value,
+      });
+
+      return;
+    }
+
+    setDragState({
+      anchorValue: value,
+      mode: "select",
+    });
+    updateDomain([value, value]);
+  };
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    if (!dragState) {
+      return;
+    }
+
+    const value = getDomainValueFromPointerEvent(event, fullDomain);
+
+    event.preventDefault();
+
+    if (dragState.mode === "select") {
+      updateDomain([dragState.anchorValue, value]);
+
+      return;
+    }
+
+    if (dragState.mode === "pan") {
+      const shift = value - dragState.startValue;
+
+      updateDomain([dragState.startDomain[0] + shift, dragState.startDomain[1] + shift]);
+
+      return;
+    }
+
+    if (dragState.mode === "resize-left") {
+      updateDomain([Math.min(value, domain[1] - resolvedMinSpan), domain[1]]);
+
+      return;
+    }
+
+    updateDomain([domain[0], Math.max(value, domain[0] + resolvedMinSpan)]);
+  };
+  const stopDragging = (event: PointerEvent<SVGSVGElement>) => {
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    setDragState(null);
+  };
+
+  return (
+    <div
+      className={joinClassNames(
+        "relative overflow-hidden border border-border/60 bg-muted/20 p-3",
+        className,
+      )}
+    >
+      <svg
+        viewBox="0 0 100 36"
+        role="img"
+        aria-label={ariaLabel}
+        className="h-20 w-full touch-none select-none"
+        onPointerCancel={stopDragging}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={stopDragging}
+      >
+        <rect x="0" y="0" width="100" height="36" fill="transparent" />
+        {points ? (
+          <polyline
+            points={points}
+            fill="none"
+            stroke="var(--muted-foreground)"
+            strokeOpacity="0.55"
+            strokeWidth="1"
+          />
+        ) : null}
+        <rect
+          x="0"
+          y="0"
+          width={selectedLeft}
+          height="36"
+          fill="var(--background)"
+          opacity="0.64"
+        />
+        <rect
+          x={selectedRight}
+          y="0"
+          width={100 - selectedRight}
+          height="36"
+          fill="var(--background)"
+          opacity="0.64"
+        />
+        <rect
+          x={selectedLeft}
+          y="2"
+          width={selectedWidth}
+          height="32"
+          fill="var(--primary)"
+          fillOpacity="0.14"
+          stroke="var(--primary)"
+          strokeWidth="0.8"
+        />
+        <line
+          x1={selectedLeft}
+          x2={selectedLeft}
+          y1="2"
+          y2="34"
+          stroke="var(--primary)"
+          strokeWidth="1.4"
+        />
+        <line
+          x1={selectedRight}
+          x2={selectedRight}
+          y1="2"
+          y2="34"
+          stroke="var(--primary)"
+          strokeWidth="1.4"
+        />
+      </svg>
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>{formatDomainValue(fullDomain[0])}</span>
+        <span className="font-medium text-foreground">
+          {formatDomainValue(domain[0])}-{formatDomainValue(domain[1])}
+        </span>
+        <span>{formatDomainValue(fullDomain[1])}</span>
+      </div>
+    </div>
+  );
+}
+
 export function ChartHotBinRow<TProperties = Record<string, unknown>>({
   className,
   formatMetric = formatMetricValue,
@@ -667,6 +894,59 @@ export function useChartBinCount<TElement extends Element = HTMLDivElement>(
   };
 }
 
+export function useChartWheelDomain<TElement extends Element = HTMLElement>({
+  disabled = false,
+  domain,
+  fullDomain,
+  onDomainChange,
+  scrollScale = 1,
+}: UseChartWheelDomainOptions): UseChartWheelDomainResult<TElement> {
+  const onWheel = useCallback(
+    (event: WheelEvent<TElement>) => {
+      if (disabled) {
+        return;
+      }
+
+      const span = domain[1] - domain[0];
+      const fullSpan = fullDomain[1] - fullDomain[0];
+
+      if (span <= 0 || fullSpan <= span) {
+        return;
+      }
+
+      const primaryDelta =
+        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+
+      if (primaryDelta === 0) {
+        return;
+      }
+
+      const bounds = event.currentTarget.getBoundingClientRect();
+      const width = Math.max(1, bounds.width);
+      const pixelDelta =
+        event.deltaMode === 1
+          ? primaryDelta * 16
+          : event.deltaMode === 2
+            ? primaryDelta * width
+            : primaryDelta;
+      const shift = (pixelDelta / width) * span * scrollScale;
+      const nextDomain = clampDomain([domain[0] + shift, domain[1] + shift], fullDomain);
+
+      if (nextDomain[0] === domain[0] && nextDomain[1] === domain[1]) {
+        return;
+      }
+
+      event.preventDefault();
+      onDomainChange(nextDomain);
+    },
+    [disabled, domain, fullDomain, onDomainChange, scrollScale],
+  );
+
+  return {
+    onWheel,
+  };
+}
+
 export function measureChartSeries<TProperties = Record<string, unknown>>(
   index: ChartDensityIndex<TProperties>,
   query: ChartDensityQuery,
@@ -797,6 +1077,65 @@ function roundToStep(value: number, step: number, min: number, max: number) {
   const stepped = Math.round(value / Math.max(1, step)) * Math.max(1, step);
 
   return clamp(stepped, min, max);
+}
+
+function clampDomain(domain: [number, number], fullDomain: [number, number]): [number, number] {
+  const span = domain[1] - domain[0];
+  const min = fullDomain[0];
+  const max = fullDomain[1];
+
+  if (span >= max - min) {
+    return [min, max];
+  }
+
+  if (domain[0] < min) {
+    return [min, min + span];
+  }
+
+  if (domain[1] > max) {
+    return [max - span, max];
+  }
+
+  return domain;
+}
+
+function normalizeDomain(
+  domain: [number, number],
+  fullDomain: [number, number],
+  minSpan: number,
+): [number, number] {
+  const sorted: [number, number] = domain[0] <= domain[1] ? domain : [domain[1], domain[0]];
+  const fullSpan = fullDomain[1] - fullDomain[0];
+
+  if (fullSpan <= 0) {
+    return fullDomain;
+  }
+
+  const targetSpan = Math.min(fullSpan, Math.max(sorted[1] - sorted[0], minSpan));
+
+  if (targetSpan >= fullSpan) {
+    return fullDomain;
+  }
+
+  const midpoint = (sorted[0] + sorted[1]) / 2;
+
+  return clampDomain([midpoint - targetSpan / 2, midpoint + targetSpan / 2], fullDomain);
+}
+
+function getDomainValueFromPointerEvent(
+  event: PointerEvent<SVGSVGElement>,
+  fullDomain: [number, number],
+) {
+  const bounds = event.currentTarget.getBoundingClientRect();
+  const ratio = clamp((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1);
+
+  return fullDomain[0] + ratio * (fullDomain[1] - fullDomain[0]);
+}
+
+function getDomainHandleThreshold(element: SVGSVGElement, fullDomain: [number, number]) {
+  const bounds = element.getBoundingClientRect();
+
+  return (10 / Math.max(1, bounds.width)) * (fullDomain[1] - fullDomain[0]);
 }
 
 function now() {

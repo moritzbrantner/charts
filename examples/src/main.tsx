@@ -21,6 +21,7 @@ import {
 import {
   CHART_VALUE_MODE_DEFINITIONS,
   ChartBackendStatus,
+  ChartDomainMinimap,
   ChartHotBinRow,
   ChartMetricCard,
   ChartMetricStrip,
@@ -35,6 +36,7 @@ import {
   getChartValueModeDefinition,
   measureChartSeries,
   useChartBinCount,
+  useChartWheelDomain,
   useProgressiveChartDensity,
   type ChartDensitySample,
   type ChartRange,
@@ -79,10 +81,16 @@ function App() {
   const points = useMemo(() => createTelemetryPoints(), []);
   const gapPoints = useMemo(() => createGapPoints(), []);
   const [rangeId, setRangeId] = useState("week");
+  const [activeDomain, setActiveDomain] = useState<[number, number]>(ranges[0].domain);
   const [valueMode, setValueMode] = useState<ChartValueMode>("average");
-  const activeRange = ranges.find((range) => range.id === rangeId) ?? ranges[0];
+  const selectedRange = ranges.find((range) => range.id === rangeId) ?? ranges[0];
+  const activeRange = {
+    ...selectedRange,
+    domain: activeDomain,
+  };
   const index = useMemo(() => createChartDensityIndex(points, { backend: "hybrid-js" }), [points]);
   const bounds = index.getSeriesBounds();
+  const fullDomain: [number, number] = bounds ? [bounds.minX, bounds.maxX] : activeDomain;
   const fullSeries = useMemo(
     () =>
       index.getChartSeries({
@@ -94,6 +102,16 @@ function App() {
     [index],
   );
   const fullSummary = createChartDensityViewportSummary(fullSeries);
+  const handleRangeChange = (nextRangeId: string) => {
+    const nextRange = ranges.find((range) => range.id === nextRangeId);
+
+    if (!nextRange) {
+      return;
+    }
+
+    setRangeId(nextRangeId);
+    setActiveDomain(nextRange.domain);
+  };
 
   return (
     <main className="min-h-screen bg-background text-foreground">
@@ -136,12 +154,14 @@ function App() {
               ranges={ranges}
               value={rangeId}
               formatDomain={(domain) => `${formatHour(domain[0])} to ${formatHour(domain[1])}`}
-              onValueChange={setRangeId}
+              onValueChange={handleRangeChange}
             />
           </ChartPanel>
           <DenseTrendExample
             activeRange={activeRange}
+            fullDomain={fullDomain}
             index={index}
+            onDomainChange={setActiveDomain}
             valueMode={valueMode}
             onValueModeChange={setValueMode}
           />
@@ -167,12 +187,16 @@ function App() {
 
 function DenseTrendExample({
   activeRange,
+  fullDomain,
   index,
+  onDomainChange,
   onValueModeChange,
   valueMode,
 }: {
   activeRange: ChartRange;
+  fullDomain: [number, number];
   index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+  onDomainChange: (domain: [number, number]) => void;
   onValueModeChange: (mode: ChartValueMode) => void;
   valueMode: ChartValueMode;
 }) {
@@ -184,11 +208,22 @@ function DenseTrendExample({
       pixelsPerBin: 9,
       step: 12,
     });
+  const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+    domain: activeRange.domain,
+    fullDomain,
+    onDomainChange,
+  });
   const measured = measureChartSeries(index, {
     includeEmptyBins: true,
     targetBinCount,
     valueMode,
     xDomain: activeRange.domain,
+  });
+  const minimapSeries = index.getChartSeries({
+    includeEmptyBins: true,
+    targetBinCount: 180,
+    valueMode,
+    xDomain: fullDomain,
   });
   const definition = getChartValueModeDefinition(valueMode);
   const renderData = createChartRenderData(measured.series.samples, {
@@ -236,7 +271,7 @@ function DenseTrendExample({
             hint={isAuto ? "Bin count follows container width" : "Manual bin count is active"}
           />
         </div>
-        <div ref={containerRef}>
+        <div ref={containerRef} onWheel={wheelDomain.onWheel}>
           <ChartContainer className="h-[24rem] w-full" config={chartConfig(definition.label)}>
             {definition.renderer === "bar" ? (
               <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
@@ -265,6 +300,13 @@ function DenseTrendExample({
             )}
           </ChartContainer>
         </div>
+        <ChartDomainMinimap
+          domain={activeRange.domain}
+          fullDomain={fullDomain}
+          samples={minimapSeries.samples}
+          formatDomainValue={formatHour}
+          onDomainChange={onDomainChange}
+        />
       </div>
     </ChartPanel>
   );
