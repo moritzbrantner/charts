@@ -11,6 +11,7 @@ import {
   type IndexedNumericSeriesPoint,
   type NumericSeriesPoint,
 } from "@moritzbrantner/data-density";
+import type { ChartDerivedPoint } from "./analytics";
 
 export type BinnedSeriesBackend = "hybrid-js" | "wasm-index";
 export type ChartMetricRecord = DataDensityMetricRecord;
@@ -45,6 +46,11 @@ export type ChartGapAnnotation = {
 };
 
 export type ChartRenderDataOptions<TProperties = Record<string, unknown>> = {
+  derived?: Record<
+    string,
+    | Array<ChartDerivedPoint<TProperties>>
+    | ((sample: ChartDensitySample<TProperties>) => number | null)
+  >;
   gapBehavior?: ChartGapBehavior;
   includeMetrics?: boolean;
   includeSample?: boolean;
@@ -67,6 +73,7 @@ export type ChartRenderDatum<TProperties = Record<string, unknown>> = {
   x: number;
   x0: number;
   x1: number;
+  [derivedKey: string]: unknown;
 };
 
 export type ChartRenderData<TProperties = Record<string, unknown>> = {
@@ -451,6 +458,7 @@ export function createChartRenderData<TProperties>(
   options: ChartRenderDataOptions<TProperties> = {},
 ): ChartRenderData<TProperties> {
   const {
+    derived,
     gapBehavior = "preserve",
     includeMetrics = false,
     includeSample = false,
@@ -493,6 +501,8 @@ export function createChartRenderData<TProperties>(
         row.sample = sample;
       }
 
+      applyDerivedRenderValues(row, sample, derived);
+
       return row;
     });
 
@@ -500,6 +510,31 @@ export function createChartRenderData<TProperties>(
     annotations,
     rows,
   };
+}
+
+function applyDerivedRenderValues<TProperties>(
+  row: ChartRenderDatum<TProperties>,
+  sample: ChartDensitySample<TProperties>,
+  derived:
+    | Record<
+        string,
+        | Array<ChartDerivedPoint<TProperties>>
+        | ((sample: ChartDensitySample<TProperties>) => number | null)
+      >
+    | undefined,
+) {
+  if (!derived) {
+    return;
+  }
+
+  for (const [key, source] of Object.entries(derived)) {
+    if (typeof source === "function") {
+      row[key] = normalizeRenderValue(source(sample), false);
+      continue;
+    }
+
+    row[key] = source.find((point) => point.index === sample.index)?.value ?? null;
+  }
 }
 
 function getChartDensityValue<TProperties>(

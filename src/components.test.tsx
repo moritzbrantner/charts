@@ -4,12 +4,17 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   BinnedChart,
+  ChartAnomalyMarkerList,
   ChartBackendStatus,
+  ChartDerivedMetricCard,
   ChartDomainMinimap,
   ChartRangeSelector,
   ChartSampleSparkline,
+  ChartThresholdMarker,
   ChartValueModeSelector,
   createChartDensityIndex,
+  getChartAnomalyAnnotations,
+  getChartThresholdAnnotations,
   getChartValueModeDefinitions,
   getChartSampleYBounds,
   measureChartSeries,
@@ -87,6 +92,63 @@ describe("@moritzbrantner/charts", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Focus/ }));
 
     expect(onValueChange).toHaveBeenCalledWith("focus");
+  });
+
+  test("renders derived metric deltas", () => {
+    render(<ChartDerivedMetricCard label="Revenue delta" value={120} previousValue={100} />);
+
+    expect(screen.getByText("Revenue delta")).toBeTruthy();
+    expect(screen.getByText("120")).toBeTruthy();
+    expect(screen.getByText(/\+20/)).toBeTruthy();
+    expect(screen.getByText(/\+20.0%/)).toBeTruthy();
+  });
+
+  test("renders threshold ranges", () => {
+    const index = createChartDensityIndex([
+      { id: "a", x: 0.5, y: 1 },
+      { id: "b", x: 1.5, y: 6 },
+      { id: "c", x: 2.5, y: 8 },
+    ]);
+    const samples = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 3,
+      xDomain: [0, 3],
+    }).samples;
+    const annotations = getChartThresholdAnnotations(samples, 5);
+
+    render(
+      <ChartThresholdMarker
+        annotations={annotations}
+        formatLabel={(annotation) => `${annotation.startIndex} to ${annotation.endIndex}`}
+      />,
+    );
+
+    expect(screen.getByText("1 to 2")).toBeTruthy();
+    expect(screen.getByText(/2 samples above 5/)).toBeTruthy();
+  });
+
+  test("renders anomaly markers and selects an anomaly", () => {
+    const onSelect = vi.fn();
+    const index = createChartDensityIndex(
+      [...Array.from({ length: 20 }, (_, pointIndex) => 10), 1_000].map((y, pointIndex) => ({
+        id: `point-${pointIndex}`,
+        x: pointIndex + 0.5,
+        y,
+      })),
+    );
+    const samples = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 21,
+      xDomain: [0, 21],
+    }).samples;
+    const anomalies = getChartAnomalyAnnotations(samples);
+
+    render(<ChartAnomalyMarkerList anomalies={anomalies} onSelect={onSelect} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Sample 20/ }));
+
+    expect(screen.getByText(/score/)).toBeTruthy();
+    expect(onSelect).toHaveBeenCalledWith(anomalies[0]);
   });
 
   test("renders backend status states and handles warmup", () => {

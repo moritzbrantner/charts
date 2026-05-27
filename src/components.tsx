@@ -38,6 +38,7 @@ import {
   type ChartValueModeDefinition,
   type ProgressiveChartDensityIndex,
 } from "./density";
+import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "./analytics";
 import {
   layoutChartLabels,
   type ChartLabelAnnotation,
@@ -87,6 +88,14 @@ export type ChartMetricStripProps = {
   className?: string;
   label: ReactNode;
   value: ReactNode;
+};
+
+export type ChartDerivedMetricCardProps = {
+  className?: string;
+  formatValue?: (value: number | null) => ReactNode;
+  label: ReactNode;
+  previousValue?: number | null;
+  value: number | null;
 };
 
 export type ChartPanelProps = {
@@ -224,6 +233,19 @@ export type ChartHotBinRowProps<TProperties = Record<string, unknown>> = {
   sample: ChartDensitySample<TProperties>;
 };
 
+export type ChartThresholdMarkerProps<TProperties = Record<string, unknown>> = {
+  annotations: Array<ChartThresholdAnnotation<TProperties>>;
+  className?: string;
+  formatLabel?: (annotation: ChartThresholdAnnotation<TProperties>) => string;
+};
+
+export type ChartAnomalyMarkerListProps<TProperties = Record<string, unknown>> = {
+  anomalies: Array<ChartAnomalyAnnotation<TProperties>>;
+  className?: string;
+  formatValue?: (value: number) => ReactNode;
+  onSelect?: (anomaly: ChartAnomalyAnnotation<TProperties>) => void;
+};
+
 export type ChartValueModePreviewProps<TProperties = Record<string, unknown>> = {
   active?: boolean;
   className?: string;
@@ -345,6 +367,47 @@ export function ChartMetricStrip({ className, label, value }: ChartMetricStripPr
         <ItemTitle className="mt-1 text-lg font-semibold">{value}</ItemTitle>
       </ItemContent>
     </Item>
+  );
+}
+
+export function ChartDerivedMetricCard({
+  className,
+  formatValue = formatNullableNumber,
+  label,
+  previousValue = null,
+  value,
+}: ChartDerivedMetricCardProps): JSX.Element {
+  const delta =
+    value === null || previousValue === null ? null : value - previousValue;
+  const percentDelta =
+    delta === null || previousValue === null || previousValue === 0
+      ? null
+      : (delta / Math.abs(previousValue)) * 100;
+  const deltaPrefix = delta !== null && delta > 0 ? "+" : "";
+  const percentPrefix = percentDelta !== null && percentDelta > 0 ? "+" : "";
+
+  return (
+    <ChartMetricCard
+      className={className}
+      label={label}
+      value={formatValue(value)}
+      hint={
+        delta === null ? (
+          "No comparison value"
+        ) : (
+          <>
+            {deltaPrefix}
+            {formatCompactNumber(delta)}{" "}
+            {percentDelta === null ? null : (
+              <>
+                ({percentPrefix}
+                {percentDelta.toFixed(1)}%)
+              </>
+            )}
+          </>
+        )
+      }
+    />
   );
 }
 
@@ -1165,6 +1228,109 @@ export function ChartHotBinRow<TProperties = Record<string, unknown>>({
   );
 }
 
+export function ChartThresholdMarker<TProperties = Record<string, unknown>>({
+  annotations,
+  className,
+  formatLabel = formatThresholdAnnotationLabel,
+}: ChartThresholdMarkerProps<TProperties>): JSX.Element {
+  if (annotations.length === 0) {
+    return (
+      <div
+        className={joinClassNames(
+          "border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        No threshold ranges.
+      </div>
+    );
+  }
+
+  return (
+    <div className={joinClassNames("grid gap-2", className)}>
+      {annotations.map((annotation) => (
+        <Item
+          key={`${annotation.direction}-${annotation.startIndex}-${annotation.endIndex}`}
+          variant="muted"
+          className="bg-muted/20 p-3"
+        >
+          <ItemContent>
+            <ItemTitle>{formatLabel(annotation)}</ItemTitle>
+            <ItemDescription>
+              {formatCompactNumber(annotation.sampleCount)} samples {annotation.direction}{" "}
+              {formatCompactNumber(annotation.threshold)}
+            </ItemDescription>
+          </ItemContent>
+        </Item>
+      ))}
+    </div>
+  );
+}
+
+export function ChartAnomalyMarkerList<TProperties = Record<string, unknown>>({
+  anomalies,
+  className,
+  formatValue = formatCompactNumber,
+  onSelect,
+}: ChartAnomalyMarkerListProps<TProperties>): JSX.Element {
+  if (anomalies.length === 0) {
+    return (
+      <div
+        className={joinClassNames(
+          "border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground",
+          className,
+        )}
+      >
+        No anomalies detected.
+      </div>
+    );
+  }
+
+  return (
+    <div className={joinClassNames("grid gap-2", className)}>
+      {anomalies.map((anomaly) => {
+        const content = (
+          <>
+            <ItemContent>
+              <ItemTitle>Sample {anomaly.index}</ItemTitle>
+              <ItemDescription>
+                {formatValue(anomaly.value)} at score {anomaly.score.toFixed(2)}
+              </ItemDescription>
+            </ItemContent>
+            <div className="text-right text-xs text-muted-foreground">
+              x {formatCompactNumber(anomaly.x)}
+            </div>
+          </>
+        );
+
+        if (onSelect) {
+          return (
+            <Button
+              key={anomaly.index}
+              type="button"
+              variant="outline"
+              className="h-auto w-full justify-between rounded-none border-border/60 bg-muted/20 p-3 text-left"
+              onClick={() => onSelect(anomaly)}
+            >
+              {content}
+            </Button>
+          );
+        }
+
+        return (
+          <Item
+            key={anomaly.index}
+            variant="muted"
+            className="grid grid-cols-[1fr_auto] gap-3 bg-muted/20 p-3"
+          >
+            {content}
+          </Item>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ChartValueModePreview<TProperties = Record<string, unknown>>({
   active = false,
   className,
@@ -1572,6 +1738,12 @@ function formatDefaultSampleValue<TProperties>(
   _sample: ChartDensitySample<TProperties>,
 ) {
   return formatNullableNumber(value);
+}
+
+function formatThresholdAnnotationLabel<TProperties>(
+  annotation: ChartThresholdAnnotation<TProperties>,
+) {
+  return `${formatCompactNumber(annotation.startX)}-${formatCompactNumber(annotation.endX)}`;
 }
 
 function formatUnknownError(error: unknown) {

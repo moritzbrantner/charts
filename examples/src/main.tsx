@@ -23,7 +23,9 @@ import {
 import {
   BinnedChart,
   CHART_VALUE_MODE_DEFINITIONS,
+  ChartAnomalyMarkerList,
   ChartBackendStatus,
+  ChartDerivedMetricCard,
   ChartDomainMinimap,
   ChartHotBinRow,
   ChartLabelOverlay,
@@ -32,11 +34,17 @@ import {
   ChartPanel,
   ChartRangeSelector,
   ChartSampleSparkline,
+  ChartThresholdMarker,
   ChartValueModePreview,
   ChartValueModeSelector,
+  createCumulativeChartSeries,
+  createDeltaChartSeries,
   createChartDensityIndex,
   createChartDensityViewportSummary,
   createChartRenderData,
+  createRollingChartSeries,
+  getChartAnomalyAnnotations,
+  getChartThresholdAnnotations,
   getChartValueModeDefinition,
   measureChartSeries,
   useChartBinCount,
@@ -182,6 +190,8 @@ function App() {
           valueMode={valueMode}
           onValueModeChange={setValueMode}
         />
+
+        <AnalyticsExamples activeRange={activeRange} index={index} />
 
         <ChartVariantExamples
           activeRange={activeRange}
@@ -406,6 +416,204 @@ function ValueModeExamples({
           />
         ))}
       </div>
+    </section>
+  );
+}
+
+function AnalyticsExamples({
+  activeRange,
+  index,
+}: {
+  activeRange: ChartRange;
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+}) {
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 96,
+        valueMode: "average",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const previousDomain: [number, number] = [
+    Math.max(0, activeRange.domain[0] - 7 * 24),
+    Math.max(0, activeRange.domain[1] - 7 * 24),
+  ];
+  const previousSeries = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 96,
+        valueMode: "average",
+        xDomain: previousDomain,
+      }),
+    [index, previousDomain],
+  );
+  const rollingAverage = useMemo(
+    () =>
+      createRollingChartSeries(series.samples, {
+        accessor: "average",
+        minPoints: 3,
+        windowSize: 9,
+      }),
+    [series.samples],
+  );
+  const cumulativeRevenue = useMemo(
+    () => createCumulativeChartSeries(series.samples, { metric: "revenue" }),
+    [series.samples],
+  );
+  const revenueDelta = useMemo(
+    () =>
+      createDeltaChartSeries(series.samples, {
+        accessor: { metric: "revenue" },
+        mode: "percent",
+        offset: 12,
+      }),
+    [series.samples],
+  );
+  const renderRows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        derived: {
+          rollingAverage,
+        },
+        modes: ["average"],
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [rollingAverage, series.samples],
+  );
+  const cumulativeRows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        derived: {
+          cumulativeRevenue,
+          revenueDelta,
+        },
+        modes: ["average"],
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [cumulativeRevenue, revenueDelta, series.samples],
+  );
+  const thresholdAnnotations = useMemo(
+    () =>
+      getChartThresholdAnnotations(series.samples, 185, {
+        accessor: "average",
+        direction: "above",
+      }),
+    [series.samples],
+  );
+  const anomalies = useMemo(
+    () =>
+      getChartAnomalyAnnotations(series.samples, {
+        accessor: "average",
+        sensitivity: 2.5,
+      }),
+    [series.samples],
+  );
+  const currentRevenue = createChartDensityViewportSummary(series).metrics.revenue ?? null;
+  const previousRevenue = createChartDensityViewportSummary(previousSeries).metrics.revenue ?? null;
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Analytics helpers</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Derived series, threshold ranges, and anomaly lists built from binned samples.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-full">
+          {activeRange.label}
+        </Badge>
+      </div>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <ChartPanel
+          title="Rolling average"
+          description="Average samples with a centered rolling baseline."
+        >
+          <ChartContainer className="h-80 w-full" config={analyticsChartConfig}>
+            <LineChart data={renderRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+              <YAxis tickLine={false} axisLine={false} width={48} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Line
+                dataKey="average"
+                dot={false}
+                isAnimationActive={false}
+                stroke="var(--color-average)"
+                strokeOpacity={0.45}
+                strokeWidth={1.8}
+                type="monotone"
+              />
+              <Line
+                dataKey="rollingAverage"
+                dot={false}
+                isAnimationActive={false}
+                stroke="var(--color-rollingAverage)"
+                strokeWidth={2.6}
+                type="monotone"
+              />
+            </LineChart>
+          </ChartContainer>
+        </ChartPanel>
+
+        <div className="grid gap-4">
+          <ChartDerivedMetricCard
+            label="Revenue delta"
+            value={currentRevenue}
+            previousValue={previousRevenue}
+            formatValue={(value) => (value === null ? "n/a" : formatCurrency(value))}
+          />
+          <ChartPanel title="Threshold ranges" description="Average value above 185.">
+            <ChartThresholdMarker
+              annotations={thresholdAnnotations}
+              formatLabel={(annotation) =>
+                `${formatHour(annotation.startX)} to ${formatHour(annotation.endX)}`
+              }
+            />
+          </ChartPanel>
+          <ChartPanel title="Anomaly markers" description="Spike detection from sample values.">
+            <ChartAnomalyMarkerList
+              anomalies={anomalies}
+              formatValue={(value) => formatCompact(value)}
+            />
+          </ChartPanel>
+        </div>
+      </div>
+      <ChartPanel
+        title="Cumulative revenue"
+        description="Metric-derived cumulative series with percent deltas available in each row."
+      >
+        <ChartContainer className="h-64 w-full" config={analyticsChartConfig}>
+          <AreaChart data={cumulativeRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+            <YAxis tickLine={false} axisLine={false} width={60} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+            <Area
+              dataKey="cumulativeRevenue"
+              fill="var(--color-cumulativeRevenue)"
+              fillOpacity={0.14}
+              isAnimationActive={false}
+              stroke="var(--color-cumulativeRevenue)"
+              strokeWidth={2}
+              type="monotone"
+            />
+            <Line
+              dataKey="revenueDelta"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-revenueDelta)"
+              strokeDasharray="4 4"
+              strokeWidth={1.8}
+              type="monotone"
+            />
+          </AreaChart>
+        </ChartContainer>
+      </ChartPanel>
     </section>
   );
 }
@@ -1002,11 +1210,21 @@ function createTelemetryPoints(): ChartSeriesPoint<TelemetryProperties>[] {
     const weekCycle = Math.sin((day / 7) * Math.PI * 2);
     const releaseLift = day > 18 ? 18 * Math.log1p(day - 18) : 0;
     const campaignPulse = Math.exp(-Math.pow(day - 23, 2) / 9) * 36;
+    const analyticsSpike = Math.exp(-Math.pow(day - 26, 2) / 0.03) * 150;
     const maintenanceDip = day > 12 && day < 13.5 ? -22 : 0;
+    const quietPeriod = day > 8 && day < 9.25 ? -38 : 0;
     const deterministicNoise = seededWave(hour * 9.731) * 9;
     const y = Math.max(
       4,
-      92 + dayCycle * 26 + weekCycle * 12 + releaseLift + campaignPulse + maintenanceDip + deterministicNoise,
+      92 +
+        dayCycle * 26 +
+        weekCycle * 12 +
+        releaseLift +
+        campaignPulse +
+        analyticsSpike +
+        maintenanceDip +
+        quietPeriod +
+        deterministicNoise,
     );
     const revenue = y * (18 + seededWave(hour * 0.73) * 4);
 
@@ -1086,6 +1304,25 @@ const variantChartConfig = {
   volume: {
     color: "var(--chart-4)",
     label: "Volume",
+  },
+};
+
+const analyticsChartConfig = {
+  average: {
+    color: "var(--chart-1)",
+    label: "Average",
+  },
+  cumulativeRevenue: {
+    color: "var(--chart-5)",
+    label: "Cumulative revenue",
+  },
+  revenueDelta: {
+    color: "var(--chart-4)",
+    label: "Revenue delta %",
+  },
+  rollingAverage: {
+    color: "var(--chart-2)",
+    label: "Rolling average",
   },
 };
 
