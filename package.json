@@ -7,6 +7,7 @@
     "type": "git",
     "url": "git+https://github.com/moritzbrantner/charts.git"
   },
+  "license": "MIT",
   "files": [
     "dist"
   ],
@@ -40,6 +41,7 @@
     "recharts": "^3.8.1",
     "tailwindcss": "^4.3.0",
     "tsup": "^8.5.0",
+    "typedoc": "^0.28.19",
     "typescript": "6.0.2",
     "vite": "^8.0.14",
     "vitest": "^4.1.2"
@@ -53,8 +55,10 @@
     "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist",
     "check-types": "tsc --noEmit",
     "dev": "vite",
+    "docs": "typedoc",
+    "docs:check": "typedoc --emit none",
     "prepack": "bun run build",
     "test": "vitest run",
-    "verify:release": "bun run check-types && bun run test && bun run build && bun run bench:large-data"
+    "verify:release": "bun run check-types && bun run docs:check && bun run test && bun run build && bun run bench:large-data"
   }
 }

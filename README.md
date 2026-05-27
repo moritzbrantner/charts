@@ -287,7 +287,19 @@ bun dev
 Vite serves the React examples app from `examples/` and aliases
 `@moritzbrantner/charts` to the local `src/index.ts` entrypoint.
 
+## API documentation
+
+Generate the TypeDoc API reference with:
+
+```sh
+bun run docs
+```
+
+`bun run docs:check` validates the TypeDoc configuration without writing the
+generated site.
+
 ## Verification
 
 - `bun run test`
+- `bun run docs:check`
 - `bun run build && bun run bench:large-data`
