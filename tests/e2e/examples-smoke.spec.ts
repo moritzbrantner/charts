@@ -33,6 +33,15 @@ test("examples app renders and supports core chart interactions", async ({ page 
   await page.locator(".recharts-wrapper").first().hover();
   await page.mouse.wheel(160, 0);
 
+  const playground = page
+    .locator("section")
+    .filter({ has: page.getByRole("heading", { name: "Chart playground" }) });
+  await playground.scrollIntoViewIfNeeded();
+  const playgroundScrollY = await page.evaluate(() => window.scrollY);
+  await playground.locator(".recharts-wrapper").first().hover();
+  await page.mouse.wheel(0, 260);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(playgroundScrollY);
+
   const minimap = page.getByRole("img", { name: "Chart domain minimap" }).first();
   await expect(minimap).toBeVisible();
   const box = await minimap.boundingBox();

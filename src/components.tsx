@@ -333,7 +333,14 @@ export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = 
 
 type ChartWheelEvent = Pick<
   globalThis.WheelEvent,
-  "clientX" | "ctrlKey" | "deltaMode" | "deltaX" | "deltaY" | "metaKey" | "preventDefault"
+  | "clientX"
+  | "ctrlKey"
+  | "deltaMode"
+  | "deltaX"
+  | "deltaY"
+  | "metaKey"
+  | "preventDefault"
+  | "shiftKey"
 >;
 
 type ChartDomainMinimapDragState =
@@ -1914,8 +1921,20 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
         return;
       }
 
-      const primaryDelta =
-        Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+      const isZoomGesture = event.ctrlKey || event.metaKey;
+      const hasHorizontalIntent = Math.abs(event.deltaX) > Math.abs(event.deltaY) || event.shiftKey;
+
+      if (!isZoomGesture && !hasHorizontalIntent) {
+        return;
+      }
+
+      const primaryDelta = isZoomGesture
+        ? Math.abs(event.deltaX) > Math.abs(event.deltaY)
+          ? event.deltaX
+          : event.deltaY
+        : event.shiftKey && event.deltaX === 0
+          ? event.deltaY
+          : event.deltaX;
 
       if (primaryDelta === 0) {
         return;
@@ -1932,7 +1951,7 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
             ? primaryDelta * width
             : primaryDelta;
 
-      if (event.ctrlKey || event.metaKey) {
+      if (isZoomGesture) {
         const resolvedMinSpan = Math.min(
           fullSpan,
           Math.max(minSpan ?? fullSpan / 1000, Number.EPSILON),

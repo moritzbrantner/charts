@@ -756,7 +756,7 @@ describe("@moritzbrantner/charts", () => {
     expect(result.current.isAuto).toBe(true);
   });
 
-  test("scrolls chart domains with the mouse wheel", () => {
+  test("scrolls chart domains with horizontal mouse wheel gestures", () => {
     const onDomainChange = vi.fn();
     let wheelDefaultPrevented = false;
 
@@ -793,26 +793,69 @@ describe("@moritzbrantner/charts", () => {
         toJSON: () => ({}),
       }) as DOMRect;
 
-    fireEvent.wheel(target, { deltaY: 100 });
+    fireEvent.wheel(target, { deltaX: 100 });
 
     expect(onDomainChange).toHaveBeenCalledWith([22, 42]);
     expect(wheelDefaultPrevented).toBe(true);
 
     rerender(<WheelChart domain={[85, 95]} />);
-    fireEvent.wheel(target, { deltaY: 1000 });
+    fireEvent.wheel(target, { deltaX: 1000 });
 
     expect(onDomainChange).toHaveBeenLastCalledWith([90, 100]);
 
     onDomainChange.mockClear();
     wheelDefaultPrevented = false;
     rerender(<WheelChart domain={[0, 100]} />);
-    fireEvent.wheel(target, { deltaY: 100 });
+    fireEvent.wheel(target, { deltaX: 100 });
 
     expect(onDomainChange).not.toHaveBeenCalled();
     expect(wheelDefaultPrevented).toBe(true);
   });
 
-  test("prevents document scrolling from the native chart wheel listener", () => {
+  test("lets vertical mouse wheel gestures scroll the document", () => {
+    const onDomainChange = vi.fn();
+    let wheelDefaultPrevented = false;
+
+    function WheelChart({ domain }: { domain: [number, number] }) {
+      const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+        domain,
+        fullDomain: [0, 100],
+        onDomainChange,
+      });
+
+      return (
+        <div
+          data-testid="wheel-chart"
+          onWheel={(event) => {
+            wheelDomain.onWheel(event);
+            wheelDefaultPrevented = event.isDefaultPrevented();
+          }}
+        />
+      );
+    }
+
+    render(<WheelChart domain={[20, 40]} />);
+    const target = screen.getByTestId("wheel-chart");
+    target.getBoundingClientRect = () =>
+      ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 1000,
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.wheel(target, { deltaY: 100 });
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+    expect(wheelDefaultPrevented).toBe(false);
+  });
+
+  test("prevents document scrolling from horizontal native chart wheel gestures", () => {
     const onDomainChange = vi.fn();
 
     function WheelChart({ domain }: { domain: [number, number] }) {
@@ -845,9 +888,10 @@ describe("@moritzbrantner/charts", () => {
       clientX: { value: 0 },
       ctrlKey: { value: false },
       deltaMode: { value: 0 },
-      deltaX: { value: 0 },
-      deltaY: { value: 100 },
+      deltaX: { value: 100 },
+      deltaY: { value: 0 },
       metaKey: { value: false },
+      shiftKey: { value: false },
     });
 
     target.dispatchEvent(wheelEvent);
