@@ -276,6 +276,13 @@ describe("@moritzbrantner/charts", () => {
       }) as DOMRect;
 
     expect(screen.getByText("20-40")).toBeTruthy();
+    const minimapPoints = minimap.querySelector("polyline")?.getAttribute("points") ?? "";
+    const [firstMinimapPoint] = minimapPoints.split(" ");
+    const lastMinimapPoint = minimapPoints.split(" ").at(-1);
+
+    expect(minimap.getAttribute("preserveAspectRatio")).toBe("none");
+    expect(firstMinimapPoint?.startsWith("0,")).toBe(true);
+    expect(lastMinimapPoint?.startsWith("100,")).toBe(true);
 
     firePointerEvent(minimap, "pointerdown", 100, 1);
     firePointerEvent(minimap, "pointermove", 600, 1);

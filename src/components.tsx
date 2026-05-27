@@ -510,11 +510,19 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
   const maxY = values.length > 0 ? Math.max(...values.map((sample) => sample.y ?? 0)) : 0;
   const spread = Math.max(1, maxY - minY);
   const points = values
-    .map((sample) => {
-      const x = ((sample.x - fullDomain[0]) / fullSpan) * 100;
+    .flatMap((sample, index) => {
       const y = 47 - (((sample.y ?? minY) - minY) / spread) * 40;
+      const xValues = [
+        ...(index === 0 ? [sample.x0] : []),
+        sample.x,
+        ...(index === values.length - 1 ? [sample.x1] : []),
+      ];
 
-      return `${clamp(x, 0, 100)},${clamp(y, 6, 47)}`;
+      return xValues.map((xValue) => {
+        const x = ((xValue - fullDomain[0]) / fullSpan) * 100;
+
+        return `${clamp(x, 0, 100)},${clamp(y, 6, 47)}`;
+      });
     })
     .join(" ");
 
@@ -605,6 +613,7 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
     >
       <svg
         viewBox="0 0 100 52"
+        preserveAspectRatio="none"
         role="img"
         aria-label={ariaLabel}
         className="h-32 w-full touch-none select-none"
