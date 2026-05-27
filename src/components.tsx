@@ -801,7 +801,7 @@ export function ChartBackendStatus({
           <span className="font-medium">{status.activeBackend}</span>
           <span className="text-muted-foreground">{stateLabel}</span>
         </div>
-        <Progress value={progressValue} />
+        <Progress aria-label="WASM backend warmup progress" value={progressValue} />
       </div>
       {status.wasmError ? (
         <p className="text-sm leading-6 text-muted-foreground">{formatError(status.wasmError)}</p>
@@ -1080,13 +1080,12 @@ export function ChartSampleInteractionOverlay<TProperties = Record<string, unkno
         width={plotArea.width}
         height={plotArea.height}
         fill="transparent"
-        aria-label={ariaLabel}
         onClick={handleClick}
         onContextMenu={handleContextMenu}
         onPointerLeave={() => onSampleHover?.(null)}
         onPointerMove={handlePointerMove}
       >
-        {selectedSample ? <title>{formatSampleLabel(selectedSample)}</title> : null}
+        <title>{selectedSample ? formatSampleLabel(selectedSample) : ariaLabel}</title>
       </rect>
     </g>
   );

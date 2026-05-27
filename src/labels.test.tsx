@@ -48,6 +48,26 @@ describe("chart label layout", () => {
     expect(label?.lines.length).toBeGreaterThan(1);
   });
 
+  test("breaks a single long token when fallback measurement cannot fit it", () => {
+    const [label] = layoutChartLabels(
+      [
+        {
+          anchor: { x: 140, y: 140 },
+          id: "token",
+          text: "Supercalifragilistic",
+        },
+      ],
+      {
+        boundary: { height: 280, width: 280, x: 0, y: 0 },
+        maxWidth: 42,
+      },
+    );
+
+    expect(label?.hidden).toBe(false);
+    expect(label?.lines.length).toBeGreaterThan(1);
+    expect(label?.lines.every((line) => line.width <= 42)).toBe(true);
+  });
+
   test("rejects candidates that overlap obstacles", () => {
     const [label] = layoutChartLabels(
       [
@@ -148,6 +168,26 @@ describe("chart label layout", () => {
     expect(label?.rect).toBeNull();
   });
 
+  test("hides labels that cannot fit inside the padded boundary", () => {
+    const [label] = layoutChartLabels(
+      [
+        {
+          anchor: { x: 8, y: 8 },
+          id: "edge",
+          placements: ["top-left", "left", "top"],
+          text: "Edge",
+        },
+      ],
+      {
+        boundary: { height: 80, width: 80, x: 0, y: 0 },
+        boundaryPadding: 12,
+      },
+    );
+
+    expect(label?.hidden).toBe(true);
+    expect(label?.placement).toBeNull();
+  });
+
   test("rejects leader lines that cross obstacles", () => {
     const [label] = layoutChartLabels(
       [
@@ -170,6 +210,59 @@ describe("chart label layout", () => {
     );
 
     expect(label?.hidden).toBe(true);
+  });
+
+  test("allows leader lines that begin inside their source obstacle", () => {
+    const [label] = layoutChartLabels(
+      [
+        {
+          anchor: { x: 100, y: 100 },
+          id: "source-mark",
+          placements: ["top-right"],
+          text: "Source",
+        },
+      ],
+      {
+        boundary: { height: 220, width: 220, x: 0, y: 0 },
+        leaderLine: "always",
+        obstacles: [
+          {
+            rect: { height: 12, width: 12, x: 94, y: 94 },
+          },
+        ],
+      },
+    );
+
+    expect(label?.hidden).toBe(false);
+    expect(label?.leaderLine).not.toBeNull();
+  });
+
+  test("rejects leader lines that cross previously placed leader lines", () => {
+    const labels = layoutChartLabels(
+      [
+        {
+          anchor: { x: 60, y: 60 },
+          id: "first",
+          placements: ["bottom-right"],
+          priority: 10,
+          text: "First",
+        },
+        {
+          anchor: { x: 120, y: 60 },
+          id: "second",
+          placements: ["bottom-left"],
+          priority: 1,
+          text: "Second",
+        },
+      ],
+      {
+        boundary: { height: 220, width: 220, x: 0, y: 0 },
+        leaderLine: "always",
+      },
+    );
+
+    expect(labels[0]?.hidden).toBe(false);
+    expect(labels[1]?.hidden).toBe(true);
   });
 
   test("respects custom placement order", () => {

@@ -3,6 +3,7 @@ dist/
 dist-examples/
 docs/
 .turbo/
+temp/
 .env
 .env.*
 !.env.example

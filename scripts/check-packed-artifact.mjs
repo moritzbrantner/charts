@@ -63,7 +63,21 @@ try {
 
   writeFileSync(
     path.join(consumerDir, "package.json"),
-    JSON.stringify({ private: true, type: "module" }, null, 2),
+    JSON.stringify(
+      {
+        private: true,
+        type: "module",
+        dependencies: {
+          "@moritzbrantner/charts": "file:../extract/package",
+          react: packageJson.peerDependencies.react,
+          "react-dom":
+            packageJson.peerDependencies.reactDom ?? packageJson.peerDependencies["react-dom"],
+          recharts: packageJson.peerDependencies.recharts,
+        },
+      },
+      null,
+      2,
+    ),
   );
   writeFileSync(
     path.join(consumerDir, "import-check.mjs"),
@@ -125,7 +139,111 @@ try {
     },
   );
 
-  console.log("@moritzbrantner/charts packed artifact import and type checks passed.");
+  const browserConsumerDir = path.join(tempDir, "browser-consumer");
+  const browserConsumerNodeModules = path.join(browserConsumerDir, "node_modules");
+
+  mkdirSync(path.join(browserConsumerDir, "src"), { recursive: true });
+  linkInstalledModules(path.join(rootDir, "node_modules"), browserConsumerNodeModules);
+  mkdirSync(path.join(browserConsumerNodeModules, "@moritzbrantner"), { recursive: true });
+  symlinkSync(
+    packageDir,
+    path.join(browserConsumerNodeModules, "@moritzbrantner", "charts"),
+    "dir",
+  );
+  writeFileSync(
+    path.join(browserConsumerDir, "package.json"),
+    JSON.stringify(
+      {
+        private: true,
+        type: "module",
+        dependencies: {
+          "@moritzbrantner/charts": "file:../extract/package",
+          react: packageJson.peerDependencies.react,
+          "react-dom": packageJson.peerDependencies["react-dom"],
+          recharts: packageJson.peerDependencies.recharts,
+        },
+        devDependencies: {
+          "@vitejs/plugin-react": "latest",
+          typescript: "latest",
+          vite: "latest",
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    path.join(browserConsumerDir, "index.html"),
+    [
+      "<!doctype html>",
+      '<html lang="en">',
+      '  <head><meta charset="UTF-8" /><title>charts consumer</title></head>',
+      '  <body><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>',
+      "</html>",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    path.join(browserConsumerDir, "src", "main.tsx"),
+    [
+      'import { StrictMode } from "react";',
+      'import { createRoot } from "react-dom/client";',
+      'import { Area, AreaChart } from "recharts";',
+      'import { createChartDensityIndex, createChartRenderData } from "@moritzbrantner/charts";',
+      "",
+      "const index = createChartDensityIndex([{ id: 'a', x: 0, y: 2 }], { backend: 'hybrid-js' });",
+      "const series = index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
+      "const rows = createChartRenderData(series.samples).rows;",
+      "",
+      "createRoot(document.getElementById('root')!).render(",
+      "  <StrictMode>",
+      "    <AreaChart width={320} height={200} data={rows}>",
+      '      <Area dataKey="value" isAnimationActive={false} />',
+      "    </AreaChart>",
+      "  </StrictMode>,",
+      ");",
+      "",
+    ].join("\n"),
+  );
+  writeFileSync(
+    path.join(browserConsumerDir, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          jsx: "react-jsx",
+          module: "ESNext",
+          moduleResolution: "Bundler",
+          skipLibCheck: true,
+          strict: true,
+          target: "ES2022",
+        },
+        include: ["src"],
+      },
+      null,
+      2,
+    ),
+  );
+  writeFileSync(
+    path.join(browserConsumerDir, "vite.config.ts"),
+    [
+      'import { defineConfig } from "vite";',
+      "",
+      "export default defineConfig({",
+      "  build: {",
+      "    outDir: 'dist',",
+      "  },",
+      "});",
+      "",
+    ].join("\n"),
+  );
+  execFileSync(path.join(rootDir, "node_modules", ".bin", "vite"), ["build"], {
+    cwd: browserConsumerDir,
+    stdio: "inherit",
+  });
+
+  console.log(
+    "@moritzbrantner/charts packed artifact import, type, and browser consumer checks passed.",
+  );
 } finally {
   rmSync(tempDir, { force: true, recursive: true });
 }

@@ -1,5 +1,10 @@
 # @moritzbrantner/charts
 
+[![CI](https://github.com/moritzbrantner/charts/actions/workflows/ci.yml/badge.svg)](https://github.com/moritzbrantner/charts/actions/workflows/ci.yml)
+[![Docs](https://github.com/moritzbrantner/charts/actions/workflows/docs.yml/badge.svg)](https://github.com/moritzbrantner/charts/actions/workflows/docs.yml)
+[![npm version](https://img.shields.io/npm/v/@moritzbrantner/charts.svg)](https://www.npmjs.com/package/@moritzbrantner/charts)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Density-aware chart indexing helpers for large numeric series.
 
 The package adapts `@moritzbrantner/data-density` bins into chart-shaped samples,
@@ -7,23 +12,35 @@ renderer data, viewport summaries, and chart-specific React controls. It does
 not own a primary chart renderer; Recharts, SVG, canvas, WebGL, or server-side
 renderers can all consume the same sample contract.
 
+## What this solves
+
+Dense charts need more than point slicing. `@moritzbrantner/charts` builds a
+queryable density index and returns chart-ready samples for the current viewport,
+including summaries, percentiles, gap annotations, grouped series, distribution
+views, and React controls for Recharts-backed interfaces.
+
 ## Installation
 
 ```sh
 bun add @moritzbrantner/charts react react-dom recharts
 ```
 
-The package is published to GitHub Packages. Configure the `@moritzbrantner`
-scope in `.npmrc` before installing from a fresh project:
+The package is published to public npm.
 
-```ini
-@moritzbrantner:registry=https://npm.pkg.github.com
-//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
-```
+## Support matrix
 
-`@moritzbrantner/charts` intentionally supports React `^19.0.0`, React DOM
-`^19.0.0`, and Recharts `^3.0.0` as peer dependencies. React DOM is required
-for the exported React controls and Recharts/UI-backed examples.
+| Dependency | Supported range             | Notes                                                         |
+| ---------- | --------------------------- | ------------------------------------------------------------- |
+| React      | `^19.0.0`                   | Required for exported React controls.                         |
+| React DOM  | `^19.0.0`                   | Required for examples and React control rendering.            |
+| Recharts   | `^3.0.0`                    | Used by the bundled chart components and examples.            |
+| TypeScript | Repository compiler version | Public types are checked from the generated package artifact. |
+
+## API stability
+
+The package is pre-`1.0`. Public APIs may change, but intentional changes are
+tracked through Changesets, changelog entries, and the committed API report.
+Breaking changes should include migration notes.
 
 ## Breaking migration
 
@@ -36,7 +53,41 @@ This version intentionally cleans up the experimental public API:
   instead of `valueMode`, `onValueModeChange`, and `modes`.
 - `ChartValueModePreview` receives a `definition` instead of a raw `mode`.
 
-## Main APIs
+## Quick start
+
+```ts
+import { createChartDensityIndex, createChartRenderData } from "@moritzbrantner/charts";
+
+const index = createChartDensityIndex(points, { backend: "hybrid-js" });
+const series = index.getChartSeries({
+  includeEmptyBins: true,
+  targetBinCount: 120,
+  valueMode: "average",
+  xDomain: [0, 1_440],
+});
+const rows = createChartRenderData(series.samples, {
+  modes: ["average", "count"],
+  xLabel: (sample) => `${Math.round(sample.x)}m`,
+}).rows;
+```
+
+## Core concepts
+
+- Density index: `createChartDensityIndex` adapts numeric points into a reusable
+  viewport-queryable index.
+- Samples: `index.getChartSeries(query)` returns one `ChartDensitySample` per
+  visible bin with counts, y aggregates, percentiles, and first/last source
+  points.
+- Render data: `createChartRenderData` converts samples into renderer-friendly
+  rows for Recharts, SVG, canvas, WebGL, or server-side payloads.
+- Gap behavior: empty bins can be preserved, connected with annotations,
+  dropped, or zero-filled.
+- Progressive backend: `createProgressiveChartDensityIndex` renders immediately
+  through the hybrid JS backend and can warm the WASM index for later queries.
+- Labels: `layoutChartLabels` and `ChartLabelOverlay` place annotations while
+  avoiding collisions with chart marks and other labels.
+
+## API overview
 
 - `createChartDensityIndex(points, options)` / `createChartSeriesIndex(points, options)`
 - `createProgressiveChartDensityIndex(points, options)`
@@ -348,6 +399,18 @@ Open the local examples app for a combined example with responsive binning,
 value-mode previews, viewport totals, sample selection, gap-safe render data,
 and source-point lookup.
 
+## Examples app
+
+The local examples app covers:
+
+- responsive dense line/area charts
+- grouped and stacked charts
+- histogram and heatmap views
+- percentile bands and box plots
+- collision-safe label overlays
+- progressive backend status
+- gap behavior and source-point lookup
+
 ## Local examples
 
 Run the examples page with:
@@ -361,6 +424,9 @@ Vite serves the React examples app from `examples/` and aliases
 
 ## API documentation
 
+Published API documentation is available at
+<https://moritzbrantner.github.io/charts/>.
+
 Generate the TypeDoc API reference with:
 
 ```sh
@@ -372,8 +438,10 @@ generated site.
 
 ## Verification
 
+- `bun run verify`
 - `bun run test`
 - `bun run test:coverage`
+- `bun run api:check`
 - `bun run docs:check`
 - `bun run lint`
 - `bun run format:check`
@@ -381,3 +449,17 @@ generated site.
 - `bun run pack:check`
 - `bun run test:e2e`
 - `bun run build && bun run bench:large-data`
+
+## Releases
+
+Releases are managed with Changesets and published to public npm with provenance
+from GitHub Actions. Add a release note with:
+
+```sh
+bun run changeset
+```
+
+Versioning and changelog updates are generated by the release workflow.
+
+See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md) for release gates, benchmark
+budgets, and `1.0` readiness criteria.

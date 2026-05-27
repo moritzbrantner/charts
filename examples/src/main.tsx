@@ -169,7 +169,7 @@ function App() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <section className="border-b border-border/70 bg-card/50">
+      <section className="border-b border-border/70 bg-card/50" data-testid="examples-hero">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-5 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl space-y-3">
@@ -203,7 +203,10 @@ function App() {
       </section>
 
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-6 lg:px-8">
-        <section className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <section
+          className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]"
+          data-testid="dense-trend-example"
+        >
           <ChartPanel title="Viewport" description="Switch the domain used by each chart query.">
             <ChartRangeSelector
               ranges={ranges}
@@ -254,7 +257,10 @@ function App() {
 
         <DistributionExamples activeRange={activeRange} index={index} />
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <section
+          className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+          data-testid="linked-and-progressive-examples"
+        >
           <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
           <BackendExample points={points} />
         </section>
@@ -412,7 +418,7 @@ function ChartPlayground({
   );
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="chart-playground-example">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Chart playground</h2>
@@ -1487,7 +1493,7 @@ function ValueModeExamples({
   );
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="value-mode-examples">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Value mode previews</h2>
@@ -1613,7 +1619,7 @@ function AnalyticsExamples({
   const previousRevenue = createChartDensityViewportSummary(previousSeries).metrics.revenue ?? null;
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="analytics-examples">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Analytics helpers</h2>
@@ -1731,7 +1737,7 @@ function ChartVariantExamples({
     chartVariantOptions.find((option) => option.id === previewVariant) ?? chartVariantOptions[0];
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="chart-variant-examples">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Chart variants</h2>
@@ -2221,7 +2227,7 @@ function DistributionExamples({
   );
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="distribution-examples">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Distribution charts</h2>
@@ -2435,7 +2441,7 @@ function GapBehaviorExample({ points }: { points: ChartSeriesPoint<TelemetryProp
   const behaviors = ["preserve", "connect", "zero-fill"] as const;
 
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-4" data-testid="gap-behavior-example">
       <div>
         <h2 className="text-xl font-semibold tracking-tight">Gap behavior</h2>
         <p className="text-sm leading-6 text-muted-foreground">

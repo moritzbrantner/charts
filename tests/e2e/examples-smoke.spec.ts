@@ -1,6 +1,9 @@
-import { expect, test } from "@playwright/test";
+import { AxeBuilder } from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
 
-test("examples app renders and supports core chart interactions", async ({ page }) => {
+test("examples app renders and supports core chart interactions", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop interaction coverage");
+
   const consoleErrors: string[] = [];
   const pageErrors: string[] = [];
 
@@ -15,8 +18,12 @@ test("examples app renders and supports core chart interactions", async ({ page 
 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "@moritzbrantner/charts" })).toBeVisible();
-  await expect(page.getByText("Responsive dense trend")).toBeVisible();
+  await expect(page.getByTestId("dense-trend-example")).toContainText("Responsive dense trend");
+  await expect(page.getByTestId("chart-playground-example")).toContainText("Chart playground");
+  await expect(page.getByTestId("distribution-examples")).toContainText("Distribution charts");
   await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
+
+  await expectA11yClean(page);
 
   await page.getByRole("radio", { name: /^14 days/ }).click();
   await expect(page.getByRole("radio", { name: /^14 days/ })).toHaveAttribute(
@@ -62,3 +69,38 @@ test("examples app renders and supports core chart interactions", async ({ page 
 
   expect([...pageErrors, ...consoleErrors]).toEqual([]);
 });
+
+test("examples app renders core sections on mobile", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile-chromium", "mobile viewport coverage");
+
+  const consoleErrors: string[] = [];
+  const pageErrors: string[] = [];
+
+  page.on("console", (message) => {
+    if (message.type() === "error") {
+      consoleErrors.push(message.text());
+    }
+  });
+  page.on("pageerror", (error) => {
+    pageErrors.push(error.message);
+  });
+
+  await page.goto("/");
+  await expect(page.getByTestId("examples-hero")).toContainText("@moritzbrantner/charts");
+  await expect(page.getByTestId("dense-trend-example")).toContainText("Responsive dense trend");
+  await expect(page.getByTestId("chart-playground-example")).toContainText("Chart playground");
+
+  await page.getByTestId("distribution-examples").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("distribution-examples")).toContainText("Distribution charts");
+  await expect(page.getByTestId("gap-behavior-example")).toContainText("Gap behavior");
+
+  await expectA11yClean(page);
+
+  expect([...pageErrors, ...consoleErrors]).toEqual([]);
+});
+
+async function expectA11yClean(page: Page) {
+  const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
+
+  expect(results.violations).toEqual([]);
+}

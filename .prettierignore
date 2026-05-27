@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-examples/
 docs/
+etc/*.api.md
 coverage/
 playwright-report/
 test-results/
