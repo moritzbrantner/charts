@@ -1,4 +1,4 @@
-import { StrictMode, useMemo, useState, type ReactNode } from "react";
+import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Area,
@@ -84,10 +84,13 @@ function App() {
   const [activeDomain, setActiveDomain] = useState<[number, number]>(ranges[0].domain);
   const [valueMode, setValueMode] = useState<ChartValueMode>("average");
   const selectedRange = ranges.find((range) => range.id === rangeId) ?? ranges[0];
-  const activeRange = {
-    ...selectedRange,
-    domain: activeDomain,
-  };
+  const activeRange = useMemo(
+    () => ({
+      ...selectedRange,
+      domain: activeDomain,
+    }),
+    [activeDomain, selectedRange],
+  );
   const index = useMemo(() => createChartDensityIndex(points, { backend: "hybrid-js" }), [points]);
   const bounds = index.getSeriesBounds();
   const fullDomain: [number, number] = bounds ? [bounds.minX, bounds.maxX] : activeDomain;
@@ -200,7 +203,14 @@ function DenseTrendExample({
   onValueModeChange: (mode: ChartValueMode) => void;
   valueMode: ChartValueMode;
 }) {
-  const { containerRef, isAuto, resetAuto, setManualBinCount, targetBinCount, width } =
+  const {
+    containerRef: binCountContainerRef,
+    isAuto,
+    resetAuto,
+    setManualBinCount,
+    targetBinCount,
+    width,
+  } =
     useChartBinCount({
       defaultBinCount: 120,
       maxBinCount: 240,
@@ -213,25 +223,47 @@ function DenseTrendExample({
     fullDomain,
     onDomainChange,
   });
-  const measured = measureChartSeries(index, {
-    includeEmptyBins: true,
-    targetBinCount,
-    valueMode,
-    xDomain: activeRange.domain,
-  });
-  const minimapSeries = index.getChartSeries({
-    includeEmptyBins: true,
-    targetBinCount: 180,
-    valueMode,
-    xDomain: fullDomain,
-  });
+  const chartContainerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      binCountContainerRef(node);
+      wheelDomain.containerRef(node);
+    },
+    [binCountContainerRef, wheelDomain.containerRef],
+  );
+  const measured = useMemo(
+    () =>
+      measureChartSeries(index, {
+        includeEmptyBins: true,
+        targetBinCount,
+        valueMode,
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index, targetBinCount, valueMode],
+  );
+  const minimapSeries = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 180,
+        valueMode,
+        xDomain: fullDomain,
+      }),
+    [fullDomain, index, valueMode],
+  );
   const definition = getChartValueModeDefinition(valueMode);
-  const renderData = createChartRenderData(measured.series.samples, {
-    includeSample: true,
-    modes: [valueMode],
-    xLabel: (sample) => formatHour(sample.x),
-  }).rows;
-  const summary = createChartDensityViewportSummary(measured.series);
+  const renderData = useMemo(
+    () =>
+      createChartRenderData(measured.series.samples, {
+        includeSample: true,
+        modes: [valueMode],
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [measured.series.samples, valueMode],
+  );
+  const summary = useMemo(
+    () => createChartDensityViewportSummary(measured.series),
+    [measured.series],
+  );
 
   return (
     <ChartPanel
@@ -271,7 +303,7 @@ function DenseTrendExample({
             hint={isAuto ? "Bin count follows container width" : "Manual bin count is active"}
           />
         </div>
-        <div ref={containerRef} onWheel={wheelDomain.onWheel}>
+        <div ref={chartContainerRef}>
           <ChartContainer className="h-[24rem] w-full" config={chartConfig(definition.label)}>
             {definition.renderer === "bar" ? (
               <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
@@ -323,15 +355,19 @@ function ValueModeExamples({
   onValueModeChange: (mode: ChartValueMode) => void;
   valueMode: ChartValueMode;
 }) {
-  const measuredByMode = CHART_VALUE_MODE_DEFINITIONS.map((definition) => ({
-    definition,
-    measured: measureChartSeries(index, {
-      includeEmptyBins: true,
-      targetBinCount: 72,
-      valueMode: definition.id,
-      xDomain: activeRange.domain,
-    }),
-  }));
+  const measuredByMode = useMemo(
+    () =>
+      CHART_VALUE_MODE_DEFINITIONS.map((definition) => ({
+        definition,
+        measured: measureChartSeries(index, {
+          includeEmptyBins: true,
+          targetBinCount: 72,
+          valueMode: definition.id,
+          xDomain: activeRange.domain,
+        }),
+      })),
+    [activeRange.domain, index],
+  );
 
   return (
     <section className="grid gap-4">
@@ -370,20 +406,30 @@ function SparklineExample({
   index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
   valueMode: ChartValueMode;
 }) {
-  const series = index.getChartSeries({
-    includeEmptyBins: true,
-    targetBinCount: 96,
-    valueMode,
-    xDomain: activeRange.domain,
-  });
-  const hotSample = [...series.samples]
-    .filter((sample) => sample.pointCount > 0)
-    .sort((left, right) => (right.metrics.revenue ?? 0) - (left.metrics.revenue ?? 0))[0];
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 96,
+        valueMode,
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index, valueMode],
+  );
+  const hotSample = useMemo(
+    () =>
+      [...series.samples]
+        .filter((sample) => sample.pointCount > 0)
+        .sort((left, right) => (right.metrics.revenue ?? 0) - (left.metrics.revenue ?? 0))[0],
+    [series.samples],
+  );
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(
     hotSample?.index ?? null,
   );
-  const selectedSample =
-    series.samples.find((sample) => sample.index === selectedSampleIndex) ?? hotSample ?? null;
+  const selectedSample = useMemo(
+    () => series.samples.find((sample) => sample.index === selectedSampleIndex) ?? hotSample ?? null,
+    [hotSample, selectedSampleIndex, series.samples],
+  );
   const selectedPoint = selectedSample?.firstPoint
     ? index.getPointById(selectedSample.firstPoint.id)
     : null;

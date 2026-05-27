@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type JSX,
   type PointerEvent,
@@ -169,22 +170,37 @@ export type UseChartWheelDomainOptions = {
 };
 
 export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = {
+  containerRef: (node: TElement | null) => void;
   onWheel: WheelEventHandler<TElement>;
 };
+
+type ChartWheelEvent = Pick<
+  globalThis.WheelEvent,
+  "clientX" | "ctrlKey" | "deltaMode" | "deltaX" | "deltaY" | "metaKey" | "preventDefault"
+>;
 
 type ChartDomainMinimapDragState =
   | {
       anchorValue: number;
+      bounds: ChartDomainPointerBounds;
       mode: "select";
     }
   | {
+      bounds: ChartDomainPointerBounds;
       mode: "pan";
       startDomain: [number, number];
       startValue: number;
     }
   | {
+      bounds: ChartDomainPointerBounds;
       mode: "resize-left" | "resize-right";
+      startDomain: [number, number];
     };
+
+type ChartDomainPointerBounds = {
+  left: number;
+  width: number;
+};
 
 export function ChartPanel({
   badge,
@@ -499,86 +515,180 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
   onDomainChange,
   samples,
 }: ChartDomainMinimapProps<TProperties>): JSX.Element {
-  const [dragState, setDragState] = useState<ChartDomainMinimapDragState | null>(null);
-  const values = samples.filter((sample) => sample.y !== null);
+  const dragStateRef = useRef<ChartDomainMinimapDragState | null>(null);
+  const domainRef = useRef(domain);
+  const fullDomainRef = useRef(fullDomain);
+  const onDomainChangeRef = useRef(onDomainChange);
+  const pendingDomainRef = useRef<[number, number] | null>(null);
+  const frameIdRef = useRef<number | null>(null);
+  const [previewDomain, setPreviewDomain] = useState<[number, number] | null>(null);
+  const values = useMemo(() => samples.filter((sample) => sample.y !== null), [samples]);
   const fullSpan = Math.max(1, fullDomain[1] - fullDomain[0]);
   const resolvedMinSpan = Math.max(minSpan ?? fullSpan / 100, fullSpan / 1000);
-  const selectedLeft = clamp(((domain[0] - fullDomain[0]) / fullSpan) * 100, 0, 100);
-  const selectedRight = clamp(((domain[1] - fullDomain[0]) / fullSpan) * 100, 0, 100);
+  const resolvedMinSpanRef = useRef(resolvedMinSpan);
+  const visibleDomain = previewDomain ?? domain;
+  const selectedLeft = clamp(((visibleDomain[0] - fullDomain[0]) / fullSpan) * 100, 0, 100);
+  const selectedRight = clamp(((visibleDomain[1] - fullDomain[0]) / fullSpan) * 100, 0, 100);
   const selectedWidth = Math.max(0, selectedRight - selectedLeft);
-  const minY = values.length > 0 ? Math.min(...values.map((sample) => sample.y ?? 0)) : 0;
-  const maxY = values.length > 0 ? Math.max(...values.map((sample) => sample.y ?? 0)) : 0;
-  const spread = Math.max(1, maxY - minY);
-  const points = values
-    .flatMap((sample, index) => {
-      const y = 47 - (((sample.y ?? minY) - minY) / spread) * 40;
-      const xValues = [
-        ...(index === 0 ? [sample.x0] : []),
-        sample.x,
-        ...(index === values.length - 1 ? [sample.x1] : []),
-      ];
+  const { maxY, minY } = useMemo(() => getMinimapYBounds(values), [values]);
+  const spread = useMemo(() => Math.max(1, maxY - minY), [maxY, minY]);
+  const points = useMemo(
+    () =>
+      values
+        .flatMap((sample, index) => {
+          const y = 47 - (((sample.y ?? minY) - minY) / spread) * 40;
+          const xValues = [
+            ...(index === 0 ? [sample.x0] : []),
+            sample.x,
+            ...(index === values.length - 1 ? [sample.x1] : []),
+          ];
 
-      return xValues.map((xValue) => {
-        const x = ((xValue - fullDomain[0]) / fullSpan) * 100;
+          return xValues.map((xValue) => {
+            const x = ((xValue - fullDomain[0]) / fullSpan) * 100;
 
-        return `${clamp(x, 0, 100)},${clamp(y, 6, 47)}`;
-      });
-    })
-    .join(" ");
+            return `${clamp(x, 0, 100)},${clamp(y, 6, 47)}`;
+          });
+        })
+        .join(" "),
+    [fullDomain, fullSpan, minY, spread, values],
+  );
 
-  const updateDomain = (nextDomain: [number, number]) => {
-    const normalized = normalizeDomain(nextDomain, fullDomain, resolvedMinSpan);
+  domainRef.current = domain;
+  fullDomainRef.current = fullDomain;
+  onDomainChangeRef.current = onDomainChange;
+  resolvedMinSpanRef.current = resolvedMinSpan;
 
-    if (normalized[0] !== domain[0] || normalized[1] !== domain[1]) {
-      onDomainChange(normalized);
+  const flushPendingDomain = useCallback(() => {
+    if (frameIdRef.current !== null) {
+      cancelFrame(frameIdRef.current);
+      frameIdRef.current = null;
     }
-  };
+
+    const pendingDomain = pendingDomainRef.current;
+
+    if (!pendingDomain) {
+      return;
+    }
+
+    pendingDomainRef.current = null;
+    setPreviewDomain(null);
+
+    if (!areDomainsEqual(pendingDomain, domainRef.current)) {
+      domainRef.current = pendingDomain;
+      onDomainChangeRef.current(pendingDomain);
+    }
+  }, []);
+  const previewPendingDomain = useCallback(() => {
+    if (frameIdRef.current !== null) {
+      return;
+    }
+
+    frameIdRef.current = requestFrame(() => {
+      frameIdRef.current = null;
+
+      if (pendingDomainRef.current) {
+        setPreviewDomain(pendingDomainRef.current);
+      }
+    });
+  }, []);
+  const stageDomainChange = useCallback((nextDomain: [number, number]) => {
+    const normalized = normalizeDomain(
+      nextDomain,
+      fullDomainRef.current,
+      resolvedMinSpanRef.current,
+    );
+    const currentDomain = pendingDomainRef.current ?? domainRef.current;
+
+    if (areDomainsEqual(normalized, currentDomain)) {
+      return;
+    }
+
+    pendingDomainRef.current = normalized;
+    previewPendingDomain();
+  }, [previewPendingDomain]);
+  const stopDragging = useCallback(
+    (event: PointerEvent<SVGSVGElement>) => {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      dragStateRef.current = null;
+      flushPendingDomain();
+    },
+    [flushPendingDomain],
+  );
+
+  useEffect(
+    () => () => {
+      if (frameIdRef.current !== null) {
+        cancelFrame(frameIdRef.current);
+      }
+
+      frameIdRef.current = null;
+    },
+    [],
+  );
+
   const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
-    const value = getDomainValueFromPointerEvent(event, fullDomain);
-    const threshold = getDomainHandleThreshold(event.currentTarget, fullDomain);
+    const bounds = getDomainPointerBounds(event.currentTarget);
+    const value = getDomainValueFromClientX(event.clientX, bounds, fullDomain);
+    const threshold = getDomainHandleThresholdFromBounds(bounds, fullDomain);
 
     event.preventDefault();
     event.currentTarget.setPointerCapture?.(event.pointerId);
 
     if (Math.abs(value - domain[0]) <= threshold) {
-      setDragState({ mode: "resize-left" });
+      dragStateRef.current = {
+        bounds,
+        mode: "resize-left",
+        startDomain: domain,
+      };
 
       return;
     }
 
     if (Math.abs(value - domain[1]) <= threshold) {
-      setDragState({ mode: "resize-right" });
+      dragStateRef.current = {
+        bounds,
+        mode: "resize-right",
+        startDomain: domain,
+      };
 
       return;
     }
 
     if (value >= domain[0] && value <= domain[1]) {
-      setDragState({
+      dragStateRef.current = {
+        bounds,
         mode: "pan",
         startDomain: domain,
         startValue: value,
-      });
+      };
 
       return;
     }
 
-    setDragState({
+    dragStateRef.current = {
       anchorValue: value,
+      bounds,
       mode: "select",
-    });
-    updateDomain([value, value]);
+    };
+    stageDomainChange([value, value]);
   };
   const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const dragState = dragStateRef.current;
+
     if (!dragState) {
       return;
     }
 
-    const value = getDomainValueFromPointerEvent(event, fullDomain);
+    const value = getDomainValueFromClientX(
+      event.clientX,
+      dragState.bounds,
+      fullDomainRef.current,
+    );
 
     event.preventDefault();
 
     if (dragState.mode === "select") {
-      updateDomain([dragState.anchorValue, value]);
+      stageDomainChange([dragState.anchorValue, value]);
 
       return;
     }
@@ -586,22 +696,24 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
     if (dragState.mode === "pan") {
       const shift = value - dragState.startValue;
 
-      updateDomain([dragState.startDomain[0] + shift, dragState.startDomain[1] + shift]);
+      stageDomainChange([dragState.startDomain[0] + shift, dragState.startDomain[1] + shift]);
 
       return;
     }
 
     if (dragState.mode === "resize-left") {
-      updateDomain([Math.min(value, domain[1] - resolvedMinSpan), domain[1]]);
+      stageDomainChange([
+        Math.min(value, dragState.startDomain[1] - resolvedMinSpanRef.current),
+        dragState.startDomain[1],
+      ]);
 
       return;
     }
 
-    updateDomain([domain[0], Math.max(value, domain[0] + resolvedMinSpan)]);
-  };
-  const stopDragging = (event: PointerEvent<SVGSVGElement>) => {
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-    setDragState(null);
+    stageDomainChange([
+      dragState.startDomain[0],
+      Math.max(value, dragState.startDomain[0] + resolvedMinSpanRef.current),
+    ]);
   };
 
   return (
@@ -914,8 +1026,10 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
   scrollScale = 1,
   zoomScale = 2,
 }: UseChartWheelDomainOptions): UseChartWheelDomainResult<TElement> {
-  const onWheel = useCallback(
-    (event: WheelEvent<TElement>) => {
+  const [element, setElement] = useState<TElement | null>(null);
+  const handledNativeWheelEventsRef = useRef<WeakSet<globalThis.WheelEvent>>(new WeakSet());
+  const handleWheel = useCallback(
+    (event: ChartWheelEvent, currentTarget: TElement) => {
       if (disabled) {
         return;
       }
@@ -936,7 +1050,7 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
 
       event.preventDefault();
 
-      const bounds = event.currentTarget.getBoundingClientRect();
+      const bounds = currentTarget.getBoundingClientRect();
       const width = Math.max(1, bounds.width);
       const pixelDelta =
         event.deltaMode === 1
@@ -990,8 +1104,40 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
     },
     [disabled, domain, fullDomain, minSpan, onDomainChange, scrollScale, zoomScale],
   );
+  const containerRef = useCallback((node: TElement | null) => {
+    setElement(node);
+  }, []);
+  const onWheel = useCallback(
+    (event: WheelEvent<TElement>) => {
+      if (handledNativeWheelEventsRef.current.has(event.nativeEvent)) {
+        return;
+      }
+
+      handleWheel(event, event.currentTarget);
+    },
+    [handleWheel],
+  );
+
+  useEffect(() => {
+    if (!element) {
+      return undefined;
+    }
+
+    const handledNativeWheelEvents = handledNativeWheelEventsRef.current;
+    const handleNativeWheel: EventListener = (event) => {
+      const wheelEvent = event as globalThis.WheelEvent;
+
+      handledNativeWheelEvents.add(wheelEvent);
+      handleWheel(wheelEvent, element);
+    };
+
+    element.addEventListener("wheel", handleNativeWheel, { passive: false });
+
+    return () => element.removeEventListener("wheel", handleNativeWheel);
+  }, [element, handleWheel]);
 
   return {
+    containerRef,
     onWheel,
   };
 }
@@ -1171,20 +1317,76 @@ function normalizeDomain(
   return clampDomain([midpoint - targetSpan / 2, midpoint + targetSpan / 2], fullDomain);
 }
 
-function getDomainValueFromPointerEvent(
-  event: PointerEvent<SVGSVGElement>,
+function areDomainsEqual(left: [number, number], right: [number, number]) {
+  return left[0] === right[0] && left[1] === right[1];
+}
+
+function getMinimapYBounds<TProperties>(samples: Array<ChartDensitySample<TProperties>>) {
+  if (samples.length === 0) {
+    return {
+      maxY: 0,
+      minY: 0,
+    };
+  }
+
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+
+  for (const sample of samples) {
+    const y = sample.y ?? 0;
+
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+
+  return {
+    maxY,
+    minY,
+  };
+}
+
+function getDomainPointerBounds(element: SVGSVGElement): ChartDomainPointerBounds {
+  const bounds = element.getBoundingClientRect();
+
+  return {
+    left: bounds.left,
+    width: bounds.width,
+  };
+}
+
+function getDomainValueFromClientX(
+  clientX: number,
+  bounds: ChartDomainPointerBounds,
   fullDomain: [number, number],
 ) {
-  const bounds = event.currentTarget.getBoundingClientRect();
-  const ratio = clamp((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1);
+  const ratio = clamp((clientX - bounds.left) / Math.max(1, bounds.width), 0, 1);
 
   return fullDomain[0] + ratio * (fullDomain[1] - fullDomain[0]);
 }
 
-function getDomainHandleThreshold(element: SVGSVGElement, fullDomain: [number, number]) {
-  const bounds = element.getBoundingClientRect();
-
+function getDomainHandleThresholdFromBounds(
+  bounds: ChartDomainPointerBounds,
+  fullDomain: [number, number],
+) {
   return (10 / Math.max(1, bounds.width)) * (fullDomain[1] - fullDomain[0]);
+}
+
+function requestFrame(callback: FrameRequestCallback) {
+  if (typeof requestAnimationFrame !== "undefined") {
+    return requestAnimationFrame(callback);
+  }
+
+  return globalThis.setTimeout(() => callback(now()), 16) as unknown as number;
+}
+
+function cancelFrame(frameId: number) {
+  if (typeof cancelAnimationFrame !== "undefined") {
+    cancelAnimationFrame(frameId);
+
+    return;
+  }
+
+  globalThis.clearTimeout(frameId);
 }
 
 function now() {

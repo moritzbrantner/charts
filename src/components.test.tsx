@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { describe, expect, test, vi } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   ChartBackendStatus,
@@ -16,6 +16,10 @@ import {
 } from "@moritzbrantner/charts";
 
 describe("@moritzbrantner/charts", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   test("renders default value modes and selects a mode", () => {
     const onValueChange = vi.fn();
 
@@ -306,6 +310,115 @@ describe("@moritzbrantner/charts", () => {
     expect(onDomainChange).toHaveBeenLastCalledWith([20, 70]);
   });
 
+  test("previews minimap drag updates without committing until release", () => {
+    const onDomainChange = vi.fn();
+    let frameCallback: FrameRequestCallback | null = null;
+
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        frameCallback = callback;
+
+        return 1;
+      }),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    render(
+      <ChartDomainMinimap
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        samples={createMinimapSamples()}
+        onDomainChange={onDomainChange}
+      />,
+    );
+    const minimap = screen.getByRole("img", { name: "Chart domain minimap" });
+
+    stubMinimapBounds(minimap);
+
+    firePointerEvent(minimap, "pointerdown", 300, 1);
+    firePointerEvent(minimap, "pointermove", 400, 1);
+    firePointerEvent(minimap, "pointermove", 500, 1);
+    firePointerEvent(minimap, "pointermove", 600, 1);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      frameCallback?.(16);
+    });
+
+    const selectedRect = minimap.querySelectorAll("rect")[3];
+
+    expect(selectedRect?.getAttribute("x")).toBe("50");
+    expect(selectedRect?.getAttribute("width")).toBe("20");
+    expect(onDomainChange).not.toHaveBeenCalled();
+
+    firePointerEvent(minimap, "pointerup", 600, 1);
+
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+    expect(onDomainChange).toHaveBeenLastCalledWith([50, 70]);
+  });
+
+  test("flushes pending minimap drag updates when dragging stops", () => {
+    const onDomainChange = vi.fn();
+    const cancelAnimationFrameMock = vi.fn();
+
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", cancelAnimationFrameMock);
+
+    render(
+      <ChartDomainMinimap
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        samples={createMinimapSamples()}
+        onDomainChange={onDomainChange}
+      />,
+    );
+    const minimap = screen.getByRole("img", { name: "Chart domain minimap" });
+
+    stubMinimapBounds(minimap);
+
+    firePointerEvent(minimap, "pointerdown", 300, 1);
+    firePointerEvent(minimap, "pointermove", 500, 1);
+    firePointerEvent(minimap, "pointerup", 500, 1);
+
+    expect(cancelAnimationFrameMock).toHaveBeenCalledWith(1);
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+    expect(onDomainChange).toHaveBeenLastCalledWith([40, 60]);
+
+    firePointerEvent(minimap, "pointermove", 700, 1);
+
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("flushes and clears pending minimap drag updates on pointer cancel", () => {
+    const onDomainChange = vi.fn();
+
+    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+
+    render(
+      <ChartDomainMinimap
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        samples={createMinimapSamples()}
+        onDomainChange={onDomainChange}
+      />,
+    );
+    const minimap = screen.getByRole("img", { name: "Chart domain minimap" });
+
+    stubMinimapBounds(minimap);
+
+    firePointerEvent(minimap, "pointerdown", 300, 1);
+    firePointerEvent(minimap, "pointermove", 500, 1);
+    firePointerEvent(minimap, "pointercancel", 500, 1);
+    firePointerEvent(minimap, "pointermove", 700, 1);
+
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+    expect(onDomainChange).toHaveBeenLastCalledWith([40, 60]);
+  });
+
   test("measures chart queries", () => {
     const index = createChartDensityIndex([
       { id: "a", x: 0, y: 2 },
@@ -447,6 +560,50 @@ describe("@moritzbrantner/charts", () => {
     expect(wheelDefaultPrevented).toBe(true);
   });
 
+  test("prevents document scrolling from the native chart wheel listener", () => {
+    const onDomainChange = vi.fn();
+
+    function WheelChart({ domain }: { domain: [number, number] }) {
+      const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+        domain,
+        fullDomain: [0, 100],
+        onDomainChange,
+      });
+
+      return <div data-testid="wheel-chart" ref={wheelDomain.containerRef} />;
+    }
+
+    render(<WheelChart domain={[20, 40]} />);
+    const target = screen.getByTestId("wheel-chart");
+    target.getBoundingClientRect = () =>
+      ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 1000,
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    const wheelEvent = new Event("wheel", { bubbles: true, cancelable: true });
+    Object.defineProperties(wheelEvent, {
+      clientX: { value: 0 },
+      ctrlKey: { value: false },
+      deltaMode: { value: 0 },
+      deltaX: { value: 0 },
+      deltaY: { value: 100 },
+      metaKey: { value: false },
+    });
+
+    target.dispatchEvent(wheelEvent);
+
+    expect(onDomainChange).toHaveBeenCalledWith([22, 42]);
+    expect(wheelEvent.defaultPrevented).toBe(true);
+  });
+
   test("zooms chart domains around the mouse position with ctrl wheel", () => {
     const onDomainChange = vi.fn();
     let wheelDefaultPrevented = false;
@@ -510,7 +667,7 @@ describe("@moritzbrantner/charts", () => {
 
 function firePointerEvent(
   element: Element,
-  type: "pointerdown" | "pointermove" | "pointerup",
+  type: "pointercancel" | "pointerdown" | "pointermove" | "pointerup",
   clientX: number,
   pointerId: number,
 ) {
@@ -528,4 +685,35 @@ function firePointerEvent(
     },
   });
   fireEvent(element, event);
+}
+
+function createMinimapSamples() {
+  const index = createChartDensityIndex([
+    { id: "a", x: 0, y: 2 },
+    { id: "b", x: 25, y: 12 },
+    { id: "c", x: 50, y: 4 },
+    { id: "d", x: 75, y: 8 },
+    { id: "e", x: 100, y: 6 },
+  ]);
+
+  return index.getChartSeries({
+    includeEmptyBins: true,
+    targetBinCount: 5,
+    xDomain: [0, 100],
+  }).samples;
+}
+
+function stubMinimapBounds(element: Element) {
+  element.getBoundingClientRect = () =>
+    ({
+      bottom: 36,
+      height: 36,
+      left: 0,
+      right: 1000,
+      top: 0,
+      width: 1000,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    }) as DOMRect;
 }
