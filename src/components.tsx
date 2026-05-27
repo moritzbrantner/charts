@@ -162,8 +162,10 @@ export type UseChartWheelDomainOptions = {
   disabled?: boolean;
   domain: [number, number];
   fullDomain: [number, number];
+  minSpan?: number;
   onDomainChange: (domain: [number, number]) => void;
   scrollScale?: number;
+  zoomScale?: number;
 };
 
 export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = {
@@ -510,9 +512,9 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
   const points = values
     .map((sample) => {
       const x = ((sample.x - fullDomain[0]) / fullSpan) * 100;
-      const y = 31 - (((sample.y ?? minY) - minY) / spread) * 26;
+      const y = 47 - (((sample.y ?? minY) - minY) / spread) * 40;
 
-      return `${clamp(x, 0, 100)},${clamp(y, 5, 31)}`;
+      return `${clamp(x, 0, 100)},${clamp(y, 6, 47)}`;
     })
     .join(" ");
 
@@ -602,16 +604,16 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
       )}
     >
       <svg
-        viewBox="0 0 100 36"
+        viewBox="0 0 100 52"
         role="img"
         aria-label={ariaLabel}
-        className="h-20 w-full touch-none select-none"
+        className="h-32 w-full touch-none select-none"
         onPointerCancel={stopDragging}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={stopDragging}
       >
-        <rect x="0" y="0" width="100" height="36" fill="transparent" />
+        <rect x="0" y="0" width="100" height="52" fill="transparent" />
         {points ? (
           <polyline
             points={points}
@@ -625,7 +627,7 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
           x="0"
           y="0"
           width={selectedLeft}
-          height="36"
+          height="52"
           fill="var(--background)"
           opacity="0.64"
         />
@@ -633,15 +635,15 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
           x={selectedRight}
           y="0"
           width={100 - selectedRight}
-          height="36"
+          height="52"
           fill="var(--background)"
           opacity="0.64"
         />
         <rect
           x={selectedLeft}
-          y="2"
+          y="3"
           width={selectedWidth}
-          height="32"
+          height="46"
           fill="var(--primary)"
           fillOpacity="0.14"
           stroke="var(--primary)"
@@ -650,16 +652,16 @@ export function ChartDomainMinimap<TProperties = Record<string, unknown>>({
         <line
           x1={selectedLeft}
           x2={selectedLeft}
-          y1="2"
-          y2="34"
+          y1="3"
+          y2="49"
           stroke="var(--primary)"
           strokeWidth="1.4"
         />
         <line
           x1={selectedRight}
           x2={selectedRight}
-          y1="2"
-          y2="34"
+          y1="3"
+          y2="49"
           stroke="var(--primary)"
           strokeWidth="1.4"
         />
@@ -898,8 +900,10 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
   disabled = false,
   domain,
   fullDomain,
+  minSpan,
   onDomainChange,
   scrollScale = 1,
+  zoomScale = 2,
 }: UseChartWheelDomainOptions): UseChartWheelDomainResult<TElement> {
   const onWheel = useCallback(
     (event: WheelEvent<TElement>) => {
@@ -910,7 +914,7 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
       const span = domain[1] - domain[0];
       const fullSpan = fullDomain[1] - fullDomain[0];
 
-      if (span <= 0 || fullSpan <= span) {
+      if (span <= 0 || fullSpan <= 0) {
         return;
       }
 
@@ -921,6 +925,8 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
         return;
       }
 
+      event.preventDefault();
+
       const bounds = event.currentTarget.getBoundingClientRect();
       const width = Math.max(1, bounds.width);
       const pixelDelta =
@@ -929,6 +935,41 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
           : event.deltaMode === 2
             ? primaryDelta * width
             : primaryDelta;
+
+      if (event.ctrlKey || event.metaKey) {
+        const resolvedMinSpan = Math.min(
+          fullSpan,
+          Math.max(minSpan ?? fullSpan / 1000, Number.EPSILON),
+        );
+        const anchorRatio = clamp((event.clientX - bounds.left) / width, 0, 1);
+        const nextSpan = clamp(
+          span * Math.exp((pixelDelta / width) * zoomScale),
+          resolvedMinSpan,
+          fullSpan,
+        );
+
+        if (nextSpan === span) {
+          return;
+        }
+
+        const scale = nextSpan / span;
+        const anchor = domain[0] + anchorRatio * span;
+        const nextDomain = clampDomain(
+          [anchor - (anchor - domain[0]) * scale, anchor + (domain[1] - anchor) * scale],
+          fullDomain,
+        );
+
+        if (nextDomain[0] !== domain[0] || nextDomain[1] !== domain[1]) {
+          onDomainChange(nextDomain);
+        }
+
+        return;
+      }
+
+      if (fullSpan <= span) {
+        return;
+      }
+
       const shift = (pixelDelta / width) * span * scrollScale;
       const nextDomain = clampDomain([domain[0] + shift, domain[1] + shift], fullDomain);
 
@@ -936,10 +977,9 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
         return;
       }
 
-      event.preventDefault();
       onDomainChange(nextDomain);
     },
-    [disabled, domain, fullDomain, onDomainChange, scrollScale],
+    [disabled, domain, fullDomain, minSpan, onDomainChange, scrollScale, zoomScale],
   );
 
   return {

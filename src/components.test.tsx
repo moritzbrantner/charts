@@ -386,6 +386,7 @@ describe("@moritzbrantner/charts", () => {
 
   test("scrolls chart domains with the mouse wheel", () => {
     const onDomainChange = vi.fn();
+    let wheelDefaultPrevented = false;
 
     function WheelChart({ domain }: { domain: [number, number] }) {
       const wheelDomain = useChartWheelDomain<HTMLDivElement>({
@@ -394,7 +395,15 @@ describe("@moritzbrantner/charts", () => {
         onDomainChange,
       });
 
-      return <div data-testid="wheel-chart" onWheel={wheelDomain.onWheel} />;
+      return (
+        <div
+          data-testid="wheel-chart"
+          onWheel={(event) => {
+            wheelDomain.onWheel(event);
+            wheelDefaultPrevented = event.isDefaultPrevented();
+          }}
+        />
+      );
     }
 
     const { rerender } = render(<WheelChart domain={[20, 40]} />);
@@ -415,11 +424,80 @@ describe("@moritzbrantner/charts", () => {
     fireEvent.wheel(target, { deltaY: 100 });
 
     expect(onDomainChange).toHaveBeenCalledWith([22, 42]);
+    expect(wheelDefaultPrevented).toBe(true);
 
     rerender(<WheelChart domain={[85, 95]} />);
     fireEvent.wheel(target, { deltaY: 1000 });
 
     expect(onDomainChange).toHaveBeenLastCalledWith([90, 100]);
+
+    onDomainChange.mockClear();
+    wheelDefaultPrevented = false;
+    rerender(<WheelChart domain={[0, 100]} />);
+    fireEvent.wheel(target, { deltaY: 100 });
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+    expect(wheelDefaultPrevented).toBe(true);
+  });
+
+  test("zooms chart domains around the mouse position with ctrl wheel", () => {
+    const onDomainChange = vi.fn();
+    let wheelDefaultPrevented = false;
+
+    function WheelChart({ domain }: { domain: [number, number] }) {
+      const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+        domain,
+        fullDomain: [0, 100],
+        onDomainChange,
+      });
+
+      return (
+        <div
+          data-testid="wheel-chart"
+          onWheel={(event) => {
+            wheelDomain.onWheel(event);
+            wheelDefaultPrevented = event.isDefaultPrevented();
+          }}
+        />
+      );
+    }
+
+    const { rerender } = render(<WheelChart domain={[20, 40]} />);
+    const target = screen.getByTestId("wheel-chart");
+    target.getBoundingClientRect = () =>
+      ({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 1000,
+        top: 0,
+        width: 1000,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireEvent.wheel(target, {
+      clientX: 500,
+      ctrlKey: true,
+      deltaY: -100,
+    });
+
+    expect(wheelDefaultPrevented).toBe(true);
+    expect(onDomainChange.mock.lastCall?.[0][0]).toBeCloseTo(21.8127, 4);
+    expect(onDomainChange.mock.lastCall?.[0][1]).toBeCloseTo(38.1873, 4);
+
+    rerender(<WheelChart domain={[20, 40]} />);
+    wheelDefaultPrevented = false;
+    fireEvent.wheel(target, {
+      clientX: 500,
+      ctrlKey: true,
+      deltaY: 100,
+    });
+
+    expect(wheelDefaultPrevented).toBe(true);
+    expect(onDomainChange.mock.lastCall?.[0][0]).toBeCloseTo(17.786, 4);
+    expect(onDomainChange.mock.lastCall?.[0][1]).toBeCloseTo(42.214, 4);
   });
 });
 
