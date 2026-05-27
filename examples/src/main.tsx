@@ -4,10 +4,15 @@ import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
+  Label,
+  NativeSelect,
+  NativeSelectOption,
+  Slider,
+  Switch,
   ToggleGroup,
   ToggleGroupItem,
 } from "@moritzbrantner/ui";
-import { StrictMode, useCallback, useMemo, useState } from "react";
+import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import {
   Area,
@@ -17,6 +22,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  ReferenceLine,
   XAxis,
   YAxis,
 } from "recharts";
@@ -56,6 +62,7 @@ import {
   useChartBinCount,
   useChartWheelDomain,
   useProgressiveChartDensity,
+  type ChartGapBehavior,
   type ChartDensitySample,
   type ChartRange,
   type ChartSeriesPoint,
@@ -70,6 +77,16 @@ type TelemetryProperties = {
 };
 
 type ChartVariantId = "comparison" | "envelope" | "revenue" | "volume";
+type ExampleDataSetId = "telemetry" | "retail" | "operations" | "sparse";
+type PlaygroundChartType = "area" | "bar" | "combo" | "heatmap" | "histogram" | "line" | "stacked";
+type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
+
+type ExampleDataSet = {
+  description: string;
+  id: ExampleDataSetId;
+  label: string;
+  points: ChartSeriesPoint<TelemetryProperties>[];
+};
 
 const ranges: ChartRange[] = [
   {
@@ -98,7 +115,10 @@ const formatNumber = new Intl.NumberFormat("en", {
 });
 
 function App() {
-  const points = useMemo(() => createTelemetryPoints(), []);
+  const datasets = useMemo(() => createExampleDataSets(), []);
+  const [datasetId, setDatasetId] = useState<ExampleDataSetId>("telemetry");
+  const selectedDataset = datasets.find((dataset) => dataset.id === datasetId) ?? datasets[0];
+  const points = selectedDataset.points;
   const gapPoints = useMemo(() => createGapPoints(), []);
   const [rangeId, setRangeId] = useState("week");
   const [activeDomain, setActiveDomain] = useState<[number, number]>(ranges[0].domain);
@@ -125,6 +145,11 @@ function App() {
     [index],
   );
   const fullSummary = createChartDensityViewportSummary(fullSeries);
+  const handleDataSetChange = (nextDatasetId: ExampleDataSetId) => {
+    setDatasetId(nextDatasetId);
+    setRangeId("week");
+    setActiveDomain(ranges[0].domain);
+  };
   const handleRangeChange = (nextRangeId: string) => {
     const nextRange = ranges.find((range) => range.id === nextRangeId);
 
@@ -150,13 +175,14 @@ function App() {
                   @moritzbrantner/charts
                 </h1>
                 <p className="max-w-2xl text-base leading-7 text-muted-foreground">
-                  Density-aware chart helpers, render data, and React controls across common product
-                  analytics views.
+                  Density-aware chart helpers, render data, and React controls across loadable
+                  datasets and common product analytics views.
                 </p>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3 lg:w-[34rem]">
+            <div className="grid gap-3 sm:grid-cols-2 lg:w-[42rem] lg:grid-cols-4">
               <ChartMetricStrip label="Points" value={formatCompact(points.length)} />
+              <ChartMetricStrip label="Dataset" value={selectedDataset.label} />
               <ChartMetricStrip
                 label="Revenue"
                 value={formatCurrency(fullSummary.metrics.revenue ?? 0)}
@@ -190,6 +216,20 @@ function App() {
           />
         </section>
 
+        <ChartPlayground
+          activeRange={activeRange}
+          datasets={datasets}
+          fullDomain={fullDomain}
+          index={index}
+          onDataSetChange={handleDataSetChange}
+          onDomainChange={setActiveDomain}
+          onRangeChange={handleRangeChange}
+          onValueModeChange={setValueMode}
+          rangeId={rangeId}
+          selectedDataset={selectedDataset}
+          valueMode={valueMode}
+        />
+
         <ValueModeExamples
           activeRange={activeRange}
           index={index}
@@ -217,6 +257,781 @@ function App() {
       </div>
     </main>
   );
+}
+
+function ChartPlayground({
+  activeRange,
+  datasets,
+  fullDomain,
+  index,
+  onDataSetChange,
+  onDomainChange,
+  onRangeChange,
+  onValueModeChange,
+  rangeId,
+  selectedDataset,
+  valueMode,
+}: {
+  activeRange: ChartRange;
+  datasets: ExampleDataSet[];
+  fullDomain: [number, number];
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+  onDataSetChange: (id: ExampleDataSetId) => void;
+  onDomainChange: (domain: [number, number]) => void;
+  onRangeChange: (rangeId: string) => void;
+  onValueModeChange: (mode: ChartValueMode) => void;
+  rangeId: string;
+  selectedDataset: ExampleDataSet;
+  valueMode: ChartValueMode;
+}) {
+  const [chartType, setChartType] = useState<PlaygroundChartType>("area");
+  const [targetBinCount, setTargetBinCount] = useState(120);
+  const [histogramBuckets, setHistogramBuckets] = useState(24);
+  const [heatmapYBins, setHeatmapYBins] = useState(12);
+  const [rollingWindow, setRollingWindow] = useState(9);
+  const [threshold, setThreshold] = useState(185);
+  const [strokeWidth, setStrokeWidth] = useState(2.2);
+  const [fillOpacity, setFillOpacity] = useState(18);
+  const [barRadius, setBarRadius] = useState(0);
+  const [curve, setCurve] = useState<PlaygroundCurve>("monotone");
+  const [gapBehavior, setGapBehavior] = useState<ChartGapBehavior>("preserve");
+  const [showGrid, setShowGrid] = useState(true);
+  const [showLabels, setShowLabels] = useState(true);
+  const [showThreshold, setShowThreshold] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(true);
+  const definition = getChartValueModeDefinition(valueMode);
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount,
+        valueMode,
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index, targetBinCount, valueMode],
+  );
+  const rollingSeries = useMemo(
+    () =>
+      createRollingChartSeries(series.samples, {
+        accessor: valueMode,
+        minPoints: 2,
+        windowSize: rollingWindow,
+      }),
+    [rollingWindow, series.samples, valueMode],
+  );
+  const renderRows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        derived: {
+          rolling: rollingSeries,
+        },
+        gapBehavior,
+        includeMetrics: true,
+        modes: [valueMode],
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [gapBehavior, rollingSeries, series.samples, valueMode],
+  );
+  const histogram = useMemo(
+    () =>
+      index.getHistogram({
+        bucketCount: histogramBuckets,
+        valueAccessor: "y",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, histogramBuckets, index],
+  );
+  const heatmap = useMemo(
+    () =>
+      index.getHeatmap({
+        xBinCount: Math.max(6, Math.round(targetBinCount / 3)),
+        xDomain: activeRange.domain,
+        yBinCount: heatmapYBins,
+      }),
+    [activeRange.domain, heatmapYBins, index, targetBinCount],
+  );
+  const grouped = useMemo(
+    () =>
+      index.getGroupedChartSeries({
+        groupBy: (point) => point.properties.plan,
+        includeEmptyBins: true,
+        maxGroups: 3,
+        targetBinCount,
+        valueMode: "count",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index, targetBinCount],
+  );
+  const groupedRows = useMemo(
+    () =>
+      createGroupedChartRenderData(grouped, {
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [grouped],
+  );
+  const minimapSeries = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 180,
+        valueMode,
+        xDomain: fullDomain,
+      }),
+    [fullDomain, index, valueMode],
+  );
+  const histogramRows = histogram.buckets.map((bucket) => ({
+    count: bucket.pointCount,
+    label: `${formatCompact(bucket.value0)}-${formatCompact(bucket.value1)}`,
+  }));
+  const thresholdAnnotations = useMemo(
+    () =>
+      getChartThresholdAnnotations(series.samples, threshold, {
+        accessor: valueMode,
+        direction: "above",
+      }),
+    [series.samples, threshold, valueMode],
+  );
+  const summary = createChartDensityViewportSummary(series);
+  const labels = showLabels ? createPlaygroundLabels(renderRows, valueMode) : [];
+  const config = playgroundChartConfig(valueMode, definition.label);
+  const groupedConfig = Object.fromEntries(
+    grouped.groups.map((group, index) => [
+      group.key,
+      {
+        color: `var(--chart-${(index % 5) + 1})`,
+        label: group.label,
+      },
+    ]),
+  );
+
+  return (
+    <section className="grid gap-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Chart playground</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Load a synthetic dataset, pick a renderer, and tune the query and visual parameters.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-full">
+          {formatCompact(summary.itemCount)} points in view
+        </Badge>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <ChartPanel
+          badge={selectedDataset.label}
+          title={playgroundChartTitles[chartType]}
+          description={selectedDataset.description}
+        >
+          <div className="grid gap-4">
+            {chartType === "heatmap" ? (
+              <ChartHeatmapGrid
+                cells={heatmap.cells}
+                formatX={formatHour}
+                formatY={formatCompact}
+                formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
+              />
+            ) : (
+              <ChartContainer
+                className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
+                config={chartType === "stacked" ? groupedConfig : config}
+              >
+                {renderPlaygroundChart({
+                  barRadius,
+                  chartType,
+                  curve,
+                  fillOpacity,
+                  gapBehavior,
+                  histogramRows,
+                  labels,
+                  rows: renderRows,
+                  showGrid,
+                  showThreshold,
+                  strokeWidth,
+                  threshold,
+                  valueMode,
+                  grouped,
+                  groupedRows,
+                })}
+              </ChartContainer>
+            )}
+
+            {showThreshold && thresholdAnnotations.length > 0 ? (
+              <ChartThresholdMarker
+                annotations={thresholdAnnotations}
+                formatLabel={(annotation) =>
+                  `${formatHour(annotation.startX)} to ${formatHour(annotation.endX)}`
+                }
+              />
+            ) : null}
+
+            {showMinimap ? (
+              <ChartDomainMinimap
+                domain={activeRange.domain}
+                fullDomain={fullDomain}
+                samples={minimapSeries.samples}
+                formatDomainValue={formatHour}
+                onDomainChange={onDomainChange}
+              />
+            ) : null}
+          </div>
+        </ChartPanel>
+
+        <ChartPanel title="Knobs" description="Configuration controls for the active preview.">
+          <div className="grid gap-5">
+            <div className="grid gap-3">
+              <ControlSelect
+                label="Dataset"
+                value={selectedDataset.id}
+                onChange={(value) => {
+                  if (isExampleDataSetId(value)) {
+                    onDataSetChange(value);
+                  }
+                }}
+              >
+                {datasets.map((dataset) => (
+                  <NativeSelectOption key={dataset.id} value={dataset.id}>
+                    {dataset.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect label="Viewport" value={rangeId} onChange={onRangeChange}>
+                {ranges.map((range) => (
+                  <NativeSelectOption key={range.id} value={range.id}>
+                    {range.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="Chart"
+                value={chartType}
+                onChange={(value) => {
+                  if (isPlaygroundChartType(value)) {
+                    setChartType(value);
+                  }
+                }}
+              >
+                {playgroundChartOptions.map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="Value"
+                value={valueMode}
+                onChange={(value) => {
+                  if (isChartValueMode(value)) {
+                    onValueModeChange(value);
+                  }
+                }}
+              >
+                {CHART_VALUE_MODE_DEFINITIONS.map((mode) => (
+                  <NativeSelectOption key={mode.id} value={mode.id}>
+                    {mode.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+            </div>
+
+            <div className="grid gap-4">
+              <KnobSlider
+                label="Bins"
+                max={240}
+                min={12}
+                onValueChange={setTargetBinCount}
+                step={6}
+                value={targetBinCount}
+              />
+              <KnobSlider
+                label="Histogram buckets"
+                max={60}
+                min={6}
+                onValueChange={setHistogramBuckets}
+                step={3}
+                value={histogramBuckets}
+              />
+              <KnobSlider
+                label="Heatmap y bins"
+                max={24}
+                min={4}
+                onValueChange={setHeatmapYBins}
+                step={1}
+                value={heatmapYBins}
+              />
+              <KnobSlider
+                label="Rolling window"
+                max={31}
+                min={1}
+                onValueChange={setRollingWindow}
+                step={2}
+                value={rollingWindow}
+              />
+              <KnobSlider
+                label="Threshold"
+                max={320}
+                min={20}
+                onValueChange={setThreshold}
+                step={5}
+                value={threshold}
+              />
+              <KnobSlider
+                label="Stroke"
+                max={5}
+                min={1}
+                onValueChange={setStrokeWidth}
+                step={0.2}
+                suffix="px"
+                value={strokeWidth}
+              />
+              <KnobSlider
+                label="Fill"
+                max={60}
+                min={0}
+                onValueChange={setFillOpacity}
+                step={2}
+                suffix="%"
+                value={fillOpacity}
+              />
+              <KnobSlider
+                label="Bar radius"
+                max={12}
+                min={0}
+                onValueChange={setBarRadius}
+                step={1}
+                suffix="px"
+                value={barRadius}
+              />
+            </div>
+
+            <div className="grid gap-3">
+              <ControlSelect
+                label="Curve"
+                value={curve}
+                onChange={(value) => {
+                  if (isPlaygroundCurve(value)) {
+                    setCurve(value);
+                  }
+                }}
+              >
+                {playgroundCurveOptions.map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="Gaps"
+                value={gapBehavior}
+                onChange={(value) => {
+                  if (isChartGapBehavior(value)) {
+                    setGapBehavior(value);
+                  }
+                }}
+              >
+                {chartGapBehaviorOptions.map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+            </div>
+
+            <div className="grid gap-3">
+              <SwitchKnob label="Grid" checked={showGrid} onCheckedChange={setShowGrid} />
+              <SwitchKnob label="Labels" checked={showLabels} onCheckedChange={setShowLabels} />
+              <SwitchKnob
+                label="Threshold"
+                checked={showThreshold}
+                onCheckedChange={setShowThreshold}
+              />
+              <SwitchKnob label="Minimap" checked={showMinimap} onCheckedChange={setShowMinimap} />
+            </div>
+          </div>
+        </ChartPanel>
+      </div>
+    </section>
+  );
+}
+
+type PlaygroundRenderRow = ReturnType<
+  typeof createChartRenderData<TelemetryProperties>
+>["rows"][number];
+type PlaygroundGroupedSeries = ReturnType<
+  ReturnType<typeof createChartDensityIndex<TelemetryProperties>>["getGroupedChartSeries"]
+>;
+
+function renderPlaygroundChart({
+  barRadius,
+  chartType,
+  curve,
+  fillOpacity,
+  gapBehavior,
+  grouped,
+  groupedRows,
+  histogramRows,
+  labels,
+  rows,
+  showGrid,
+  showThreshold,
+  strokeWidth,
+  threshold,
+  valueMode,
+}: {
+  barRadius: number;
+  chartType: PlaygroundChartType;
+  curve: PlaygroundCurve;
+  fillOpacity: number;
+  gapBehavior: ChartGapBehavior;
+  grouped: PlaygroundGroupedSeries;
+  groupedRows: Array<Record<string, unknown>>;
+  histogramRows: Array<{ count: number; label: string }>;
+  labels: Array<{
+    id: string;
+    placements: readonly ["top", "top-right", "right"];
+    priority: number;
+    text: string;
+    x: string;
+    y: number;
+  }>;
+  rows: PlaygroundRenderRow[];
+  showGrid: boolean;
+  showThreshold: boolean;
+  strokeWidth: number;
+  threshold: number;
+  valueMode: ChartValueMode;
+}) {
+  const commonMargin = { bottom: 8, left: 4, right: 14, top: 12 };
+  const connectNulls = gapBehavior === "connect";
+  const thresholdLine = showThreshold ? (
+    <ReferenceLine
+      y={threshold}
+      stroke="var(--muted-foreground)"
+      strokeDasharray="4 4"
+      strokeOpacity={0.7}
+    />
+  ) : null;
+  const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+
+  switch (chartType) {
+    case "bar":
+      return (
+        <BarChart data={rows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={52} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {thresholdLine}
+          <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
+          <ChartLabelOverlay labels={labels} maxWidth={96} />
+        </BarChart>
+      );
+    case "combo":
+      return (
+        <AreaChart data={rows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={52} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {thresholdLine}
+          <Area
+            connectNulls={connectNulls}
+            dataKey={valueMode}
+            fill="var(--color-value)"
+            fillOpacity={fillOpacity / 100}
+            isAnimationActive={false}
+            stroke="var(--color-value)"
+            strokeWidth={strokeWidth}
+            type={curve}
+          />
+          <Line
+            connectNulls={connectNulls}
+            dataKey="rolling"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-rolling)"
+            strokeWidth={Math.max(1, strokeWidth + 0.6)}
+            type={curve}
+          />
+          <ChartLabelOverlay labels={labels} maxWidth={96} />
+        </AreaChart>
+      );
+    case "histogram":
+      return (
+        <BarChart data={histogramRows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} />
+          <YAxis tickLine={false} axisLine={false} width={46} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="count" fill="var(--color-count)" radius={barRadius} />
+        </BarChart>
+      );
+    case "line":
+      return (
+        <LineChart data={rows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={52} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {thresholdLine}
+          <Line
+            connectNulls={connectNulls}
+            dataKey={valueMode}
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-value)"
+            strokeWidth={strokeWidth}
+            type={curve}
+          />
+          <Line
+            connectNulls={connectNulls}
+            dataKey="rolling"
+            dot={false}
+            isAnimationActive={false}
+            stroke="var(--color-rolling)"
+            strokeOpacity={0.65}
+            strokeWidth={Math.max(1, strokeWidth - 0.2)}
+            type={curve}
+          />
+          <ChartLabelOverlay labels={labels} maxWidth={96} />
+        </LineChart>
+      );
+    case "stacked":
+      return (
+        <BarChart data={groupedRows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={46} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {grouped.groups.map((group, index) => (
+            <Bar
+              key={group.key}
+              dataKey={group.key}
+              fill={`var(--chart-${(index % 5) + 1})`}
+              radius={barRadius}
+              stackId="playground"
+            />
+          ))}
+        </BarChart>
+      );
+    case "heatmap":
+    case "area":
+      return (
+        <AreaChart data={rows} margin={commonMargin}>
+          {grid}
+          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+          <YAxis tickLine={false} axisLine={false} width={52} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          {thresholdLine}
+          <Area
+            connectNulls={connectNulls}
+            dataKey={valueMode}
+            fill="var(--color-value)"
+            fillOpacity={fillOpacity / 100}
+            isAnimationActive={false}
+            stroke="var(--color-value)"
+            strokeWidth={strokeWidth}
+            type={curve}
+          />
+          <ChartLabelOverlay labels={labels} maxWidth={96} />
+        </AreaChart>
+      );
+  }
+}
+
+function createPlaygroundLabels(rows: PlaygroundRenderRow[], valueMode: ChartValueMode) {
+  const valuedRows = rows
+    .map((row) => ({
+      row,
+      value: getPlaygroundRowValue(row, valueMode),
+    }))
+    .filter((entry): entry is { row: PlaygroundRenderRow; value: number } => entry.value !== null);
+
+  if (valuedRows.length === 0) {
+    return [];
+  }
+
+  const peak = valuedRows.reduce((highest, entry) =>
+    entry.value > highest.value ? entry : highest,
+  );
+  const last = valuedRows[valuedRows.length - 1];
+
+  return [
+    {
+      id: "peak",
+      placements: ["top", "top-right", "right"] as const,
+      priority: 90,
+      text: `Peak ${formatCompact(peak.value)}`,
+      x: peak.row.label,
+      y: peak.value,
+    },
+    {
+      id: "latest",
+      placements: ["top", "top-right", "right"] as const,
+      priority: 70,
+      text: `Latest ${formatCompact(last.value)}`,
+      x: last.row.label,
+      y: last.value,
+    },
+  ];
+}
+
+function getPlaygroundRowValue(row: PlaygroundRenderRow, valueMode: ChartValueMode) {
+  const value = row[valueMode];
+
+  return typeof value === "number" ? value : null;
+}
+
+function ControlSelect({
+  children,
+  label,
+  onChange,
+  value,
+}: {
+  children: ReactNode;
+  label: string;
+  onChange: (value: string) => void;
+  value: string;
+}) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      <NativeSelect value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+        {children}
+      </NativeSelect>
+    </label>
+  );
+}
+
+function KnobSlider({
+  label,
+  max,
+  min,
+  onValueChange,
+  step,
+  suffix = "",
+  value,
+}: {
+  label: string;
+  max: number;
+  min: number;
+  onValueChange: (value: number) => void;
+  step: number;
+  suffix?: string;
+  value: number;
+}) {
+  return (
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-3">
+        <Label className="text-sm font-medium text-muted-foreground">{label}</Label>
+        <span className="tabular-nums text-sm font-medium">
+          {Number.isInteger(value) ? value : value.toFixed(1)}
+          {suffix}
+        </span>
+      </div>
+      <Slider
+        max={max}
+        min={min}
+        step={step}
+        value={[value]}
+        onValueChange={(nextValue) => onValueChange(nextValue[0] ?? value)}
+        thumbAriaLabel={label}
+      />
+    </div>
+  );
+}
+
+function SwitchKnob({
+  checked,
+  label,
+  onCheckedChange,
+}: {
+  checked: boolean;
+  label: string;
+  onCheckedChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-3 rounded-md border border-border/60 px-3 py-2">
+      <span className="text-sm font-medium text-muted-foreground">{label}</span>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </label>
+  );
+}
+
+const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> = [
+  { id: "area", label: "Area" },
+  { id: "line", label: "Line" },
+  { id: "bar", label: "Bar" },
+  { id: "combo", label: "Area + rolling" },
+  { id: "histogram", label: "Histogram" },
+  { id: "heatmap", label: "Heatmap" },
+  { id: "stacked", label: "Stacked bars" },
+];
+
+const playgroundChartTitles: Record<PlaygroundChartType, string> = {
+  area: "Area chart",
+  bar: "Bar chart",
+  combo: "Area chart with rolling line",
+  heatmap: "Heatmap",
+  histogram: "Histogram",
+  line: "Line chart",
+  stacked: "Stacked bars",
+};
+
+const playgroundCurveOptions: Array<{ id: PlaygroundCurve; label: string }> = [
+  { id: "monotone", label: "Monotone" },
+  { id: "linear", label: "Linear" },
+  { id: "natural", label: "Natural" },
+  { id: "step", label: "Step" },
+];
+
+const chartGapBehaviorOptions: Array<{ id: ChartGapBehavior; label: string }> = [
+  { id: "preserve", label: "Preserve" },
+  { id: "connect", label: "Connect" },
+  { id: "zero-fill", label: "Zero fill" },
+  { id: "drop", label: "Drop" },
+];
+
+function playgroundChartConfig(valueMode: ChartValueMode, valueLabel: string) {
+  return {
+    [valueMode]: {
+      color: "var(--chart-1)",
+      label: valueLabel,
+    },
+    count: {
+      color: "var(--chart-4)",
+      label: "Count",
+    },
+    rolling: {
+      color: "var(--chart-2)",
+      label: "Rolling",
+    },
+    value: {
+      color: "var(--chart-1)",
+      label: valueLabel,
+    },
+  };
+}
+
+function isExampleDataSetId(value: string): value is ExampleDataSetId {
+  return ["operations", "retail", "sparse", "telemetry"].includes(value);
+}
+
+function isPlaygroundChartType(value: string): value is PlaygroundChartType {
+  return playgroundChartOptions.some((option) => option.id === value);
+}
+
+function isPlaygroundCurve(value: string): value is PlaygroundCurve {
+  return playgroundCurveOptions.some((option) => option.id === value);
+}
+
+function isChartGapBehavior(value: string): value is ChartGapBehavior {
+  return chartGapBehaviorOptions.some((option) => option.id === value);
+}
+
+function isChartValueMode(value: string): value is ChartValueMode {
+  return CHART_VALUE_MODE_DEFINITIONS.some((definition) => definition.id === value);
 }
 
 function DenseTrendExample({
@@ -1397,6 +2212,40 @@ function GapBehaviorExample({ points }: { points: ChartSeriesPoint<TelemetryProp
   );
 }
 
+function createExampleDataSets(): ExampleDataSet[] {
+  const telemetry = createTelemetryPoints();
+
+  return [
+    {
+      description:
+        "Product telemetry with release lift, campaign pulse, quiet windows, and spikes.",
+      id: "telemetry",
+      label: "Product telemetry",
+      points: telemetry,
+    },
+    {
+      description:
+        "Retail demand with weekday cadence, weekend peaks, launch lift, and sale spikes.",
+      id: "retail",
+      label: "Retail demand",
+      points: createRetailPoints(),
+    },
+    {
+      description:
+        "Operations load with incidents, recovery periods, and a stronger latency metric.",
+      id: "operations",
+      label: "Operations load",
+      points: createOperationsPoints(),
+    },
+    {
+      description: "Sparse telemetry with intentional empty windows for gap behavior testing.",
+      id: "sparse",
+      label: "Sparse gaps",
+      points: createSparsePoints(telemetry),
+    },
+  ];
+}
+
 function createTelemetryPoints(): ChartSeriesPoint<TelemetryProperties>[] {
   const points: ChartSeriesPoint<TelemetryProperties>[] = [];
   const channels: TelemetryProperties["channel"][] = ["direct", "partner", "marketplace"];
@@ -1445,6 +2294,134 @@ function createTelemetryPoints(): ChartSeriesPoint<TelemetryProperties>[] {
   }
 
   return points;
+}
+
+function createRetailPoints(): ChartSeriesPoint<TelemetryProperties>[] {
+  const points: ChartSeriesPoint<TelemetryProperties>[] = [];
+  const channels: TelemetryProperties["channel"][] = ["marketplace", "direct", "partner"];
+  const plans: TelemetryProperties["plan"][] = ["starter", "scale", "enterprise"];
+
+  for (let hour = 0; hour <= 30 * 24; hour += 0.25) {
+    const day = hour / 24;
+    const hourOfDay = hour % 24;
+    const dailyTraffic = Math.max(0, Math.sin(((hourOfDay - 7) / 24) * Math.PI));
+    const eveningPeak = Math.exp(-Math.pow(hourOfDay - 20, 2) / 14) * 42;
+    const weekend = Math.floor(day) % 7 >= 5 ? 36 : 0;
+    const launchLift = day > 14 ? 12 * Math.log1p(day - 14) : 0;
+    const flashSale = Math.exp(-Math.pow(day - 21, 2) / 0.12) * 140;
+    const stockoutDip = day > 24.5 && day < 25.5 ? -68 : 0;
+    const deterministicNoise = seededWave(hour * 5.31) * 11;
+    const y = Math.max(
+      6,
+      44 +
+        dailyTraffic * 86 +
+        eveningPeak +
+        weekend +
+        launchLift +
+        flashSale +
+        stockoutDip +
+        deterministicNoise,
+    );
+    const revenue = y * (28 + weekend * 0.18 + seededWave(hour * 0.41) * 6);
+
+    points.push({
+      id: `retail-${hour.toFixed(2)}`,
+      label: formatHour(hour),
+      metrics: {
+        latency: Math.max(35, 170 - y * 0.26 + seededWave(hour * 1.9) * 18),
+        revenue,
+        signups: Math.max(0, Math.round(y / 11 + seededWave(hour * 1.2) * 4)),
+      },
+      properties: {
+        channel: channels[Math.floor(hour / 5) % channels.length],
+        note: `Retail sample ${formatHour(hour)}`,
+        plan: plans[Math.floor((hour + 9) / 17) % plans.length],
+      },
+      x: hour,
+      y,
+    });
+  }
+
+  return points;
+}
+
+function createOperationsPoints(): ChartSeriesPoint<TelemetryProperties>[] {
+  const points: ChartSeriesPoint<TelemetryProperties>[] = [];
+  const channels: TelemetryProperties["channel"][] = ["direct", "partner", "marketplace"];
+  const plans: TelemetryProperties["plan"][] = ["enterprise", "scale", "starter"];
+
+  for (let hour = 0; hour <= 30 * 24; hour += 0.25) {
+    const day = hour / 24;
+    const hourOfDay = hour % 24;
+    const businessHours = hourOfDay >= 8 && hourOfDay <= 18 ? 44 : 10;
+    const weeklyBatch = Math.max(0, Math.sin((day / 7) * Math.PI * 2 - 1.1)) * 28;
+    const incidentA = Math.exp(-Math.pow(day - 6.5, 2) / 0.05) * 125;
+    const incidentB = Math.exp(-Math.pow(day - 19.75, 2) / 0.08) * 165;
+    const recovery = day > 20 && day < 22 ? -34 : 0;
+    const deterministicNoise = seededWave(hour * 8.17) * 13;
+    const y = Math.max(
+      3,
+      58 + businessHours + weeklyBatch + incidentA + incidentB + recovery + deterministicNoise,
+    );
+
+    points.push({
+      id: `ops-${hour.toFixed(2)}`,
+      label: formatHour(hour),
+      metrics: {
+        latency: Math.max(25, 80 + y * 0.72 + seededWave(hour * 2.8) * 25),
+        revenue: Math.max(0, (180 - y) * 13 + seededWave(hour * 0.62) * 80),
+        signups: Math.max(0, Math.round(26 - y / 12 + seededWave(hour * 1.44) * 2)),
+      },
+      properties: {
+        channel: channels[Math.floor(hour / 7) % channels.length],
+        note: `Ops sample ${formatHour(hour)}`,
+        plan: plans[Math.floor(hour / 13) % plans.length],
+      },
+      x: hour,
+      y,
+    });
+  }
+
+  return points;
+}
+
+function createSparsePoints(
+  source: ChartSeriesPoint<TelemetryProperties>[],
+): ChartSeriesPoint<TelemetryProperties>[] {
+  return source
+    .filter((point) => {
+      const day = point.x / 24;
+
+      return (
+        !(day > 4.2 && day < 5.8) &&
+        !(day > 10.5 && day < 13.25) &&
+        !(day > 17.7 && day < 18.9) &&
+        !(day > 26 && day < 28.4) &&
+        Math.floor(point.x * 4) % 3 !== 0
+      );
+    })
+    .map((point) => {
+      const properties = point.properties ?? {
+        channel: "direct" as const,
+        note: point.label ?? "Sparse sample",
+        plan: "starter" as const,
+      };
+
+      return {
+        ...point,
+        id: `sparse-${point.id}`,
+        metrics: {
+          ...point.metrics,
+          revenue: (point.metrics?.revenue ?? 0) * 0.82,
+        },
+        properties: {
+          channel: properties.channel,
+          note: `Sparse ${point.label ?? formatHour(point.x)}`,
+          plan: properties.plan,
+        },
+        y: Math.max(2, point.y * 0.78 + Math.sin(point.x / 4) * 18),
+      };
+    });
 }
 
 function createGapPoints(): ChartSeriesPoint<TelemetryProperties>[] {
