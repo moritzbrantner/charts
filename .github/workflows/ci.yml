@@ -242,6 +242,7 @@ jobs:
 
       - name: Benchmark
         env:
+          CHARTS_BENCH_ENFORCE_WASM_RATIO: "1"
           CHARTS_BENCH_FULL: ${{ (github.event_name == 'schedule' || startsWith(github.ref_name, 'release/') || startsWith(github.ref, 'refs/tags/v')) && '1' || '0' }}
         run: bun run bench:large-data | tee benchmark-results.txt
 

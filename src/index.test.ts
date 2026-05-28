@@ -15,6 +15,8 @@ import {
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
+import { ChartDensityWasmIndex } from "./wasm/pkg/charts_density_wasm_embedded.js";
+
 describe("@moritzbrantner/charts", () => {
   test("adapts data-density bins into chart samples", () => {
     const index = createChartDensityIndex(
@@ -238,11 +240,34 @@ describe("@moritzbrantner/charts", () => {
           y: pointIndex - 12,
         })),
       },
+      {
+        name: "no-metrics",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `metricless-${pointIndex}`,
+          x: pointIndex,
+          y: pointIndex % 3,
+        })),
+      },
+      {
+        name: "many-metrics",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `wide-${pointIndex}`,
+          metrics: Object.fromEntries(
+            Array.from({ length: 10 }, (_, metricIndex) => [
+              `metric${metricIndex}`,
+              pointIndex + metricIndex,
+            ]),
+          ),
+          x: pointIndex,
+          y: pointIndex % 5,
+        })),
+      },
     ];
     const queries = [
       { includeEmptyBins: true, targetBinCount: 8, xDomain: [20, 0] as [number, number] },
       { includeEmptyBins: false, targetBinCount: 6, xDomain: [0, 6] as [number, number] },
       { includeEmptyBins: true, targetBinCount: 4, xDomain: [2, 2] as [number, number] },
+      { includeEmptyBins: true, targetBinCount: 4, xDomain: [100, 110] as [number, number] },
     ];
     const valueModes: ChartValueMode[] = [
       "average",
@@ -266,22 +291,92 @@ describe("@moritzbrantner/charts", () => {
       for (const query of queries) {
         for (const valueMode of valueModes) {
           expect(
-            wasm.getChartSeries({
-              ...query,
-              percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
-              valueMode,
-            }),
+            publicChartSeries(
+              wasm.getChartSeries({
+                ...query,
+                percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
+                valueMode,
+              }),
+            ),
             `${scenario.name} ${valueMode} ${query.xDomain.join("-")}`,
           ).toEqual(
-            hybrid.getChartSeries({
-              ...query,
-              percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
-              valueMode,
-            }),
+            publicChartSeries(
+              hybrid.getChartSeries({
+                ...query,
+                percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
+                valueMode,
+              }),
+            ),
           );
         }
       }
     }
+  });
+
+  test("keeps packed and object WASM series methods equivalent", () => {
+    const points = Array.from({ length: 48 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: Object.fromEntries(
+        Array.from({ length: 9 }, (_, metricIndex) => [
+          metricIndex === 0 ? "count" : `metric${metricIndex}`,
+          metricIndex === 0 ? 1 : pointIndex % (metricIndex + 2),
+        ]),
+      ),
+      x: pointIndex % 2 === 0 ? pointIndex : 48 - pointIndex,
+      y: Math.sin(pointIndex / 4) * 10,
+    }));
+    const wasmPrototype = ChartDensityWasmIndex.prototype as unknown as {
+      getBinnedSeriesPacked?: (query: unknown) => unknown;
+      getChartSeriesPacked?: (query: unknown) => unknown;
+    };
+    const getBinnedSeriesPacked = wasmPrototype.getBinnedSeriesPacked;
+    const getChartSeriesPacked = wasmPrototype.getChartSeriesPacked;
+
+    wasmPrototype.getBinnedSeriesPacked = undefined;
+    wasmPrototype.getChartSeriesPacked = undefined;
+
+    const binnedQuery = {
+      includeEmptyBins: false,
+      targetBinCount: 10,
+      xDomain: [0, 48] as [number, number],
+    };
+    const chartQuery = {
+      includeEmptyBins: true,
+      targetBinCount: 12,
+      valueMode: "sum" as const,
+      xDomain: [48, 0] as [number, number],
+    };
+    const percentileQuery = {
+      includeEmptyBins: true,
+      percentiles: ["p25", "p50", "p75"] as const,
+      targetBinCount: 8,
+      valueMode: "p50" as const,
+      xDomain: [0, 48] as [number, number],
+    };
+    const objectResults = (() => {
+      try {
+        const objectIndex = createChartDensityIndex(points, { backend: "wasm-index" });
+
+        return {
+          binnedSeries: objectIndex.getBinnedSeries(binnedQuery),
+          chartSeries: publicChartSeries(objectIndex.getChartSeries(chartQuery)),
+          percentileSeries: publicChartSeries(objectIndex.getChartSeries(percentileQuery)),
+        };
+      } finally {
+        wasmPrototype.getBinnedSeriesPacked = getBinnedSeriesPacked;
+        wasmPrototype.getChartSeriesPacked = getChartSeriesPacked;
+      }
+    })();
+
+    const packedIndex = createChartDensityIndex(points, { backend: "wasm-index" });
+
+    expect(packedIndex.getBinnedSeries(binnedQuery)).toEqual(objectResults.binnedSeries);
+    expect(publicChartSeries(packedIndex.getChartSeries(chartQuery))).toEqual(
+      objectResults.chartSeries,
+    );
+    expect(publicChartSeries(packedIndex.getChartSeries(percentileQuery))).toEqual(
+      objectResults.percentileSeries,
+    );
   });
 
   test("exposes chart value mode definitions", () => {
@@ -473,7 +568,7 @@ describe("@moritzbrantner/charts", () => {
     expect(series.samples.map((sample) => sample.y)).toEqual([10, null, 100]);
     expect(series.samples.map((sample) => sample.p25)).toEqual([5, null, 100]);
     expect(series.samples.map((sample) => sample.p75)).toEqual([15, null, 100]);
-    expect(wasm.getChartSeries(query)).toEqual(series);
+    expect(publicChartSeries(wasm.getChartSeries(query))).toEqual(publicChartSeries(series));
   });
 
   test("creates band and box plot data from chart samples", () => {
@@ -703,3 +798,18 @@ describe("@moritzbrantner/charts", () => {
     });
   });
 });
+
+function publicChartSeries<TSeries extends { bins: Array<Record<string, unknown>> }>(
+  series: TSeries,
+): TSeries {
+  return {
+    ...series,
+    bins: series.bins.map((bin) => {
+      const publicBin = { ...bin };
+
+      delete publicBin.points;
+
+      return publicBin;
+    }),
+  };
+}

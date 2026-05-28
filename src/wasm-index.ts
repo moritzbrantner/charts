@@ -135,7 +135,42 @@ type WasmHeatmap = {
   };
 };
 
+type PackedWasmNullableArray = Float64Array;
+
+type PackedWasmSeries = {
+  averageY: PackedWasmNullableArray;
+  binCount: number;
+  firstPointIndex: Uint32Array;
+  index?: Uint32Array;
+  lastPointIndex: Uint32Array;
+  maxY: PackedWasmNullableArray;
+  metricCount: number;
+  metrics: Float64Array;
+  minY: PackedWasmNullableArray;
+  percentiles?: Partial<Record<ChartPercentileMode, PackedWasmNullableArray>>;
+  pointCount: Uint32Array;
+  sampleCount: number;
+  sumY: Float64Array;
+  x: Float64Array;
+  x0: Float64Array;
+  x1: Float64Array;
+  xDomain: Float64Array;
+  y: PackedWasmNullableArray;
+};
+
+type PackedWasmHistogram = WasmHistogram;
+type PackedWasmHeatmap = WasmHeatmap;
+
 type WasmValueAccessor = { kind: "metric"; metric: string } | { kind: "x" | "y"; metric?: never };
+
+type WasmIndexInstance = {
+  getBinnedSeries(query: unknown): unknown;
+  getBinnedSeriesPacked?: (query: unknown) => unknown;
+  getChartSeries(query: unknown): unknown;
+  getChartSeriesPacked?: (query: unknown) => unknown;
+  getHeatmap(query: unknown): unknown;
+  getHistogram(query: unknown): unknown;
+};
 
 const WASM_CAPABILITIES: ChartBackendCapabilities = {
   backend: "wasm-index",
@@ -153,15 +188,13 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
 ): ChartDensityIndex<TProperties> {
   const normalizedPoints = normalizeWasmPoints(points, options);
   const metricKeys = collectDensityMetricKeys(normalizedPoints.map((point) => point.metrics));
-  const wasmMetrics = normalizedPoints.flatMap((point) =>
-    metricKeys.map((metricKey) => point.metrics[metricKey] ?? 0),
-  );
+  const wasmInput = createWasmIndexInput(normalizedPoints, metricKeys);
   const wasm = new (getChartsDensityWasmModule().ChartDensityWasmIndex)({
     metricKeys,
-    metrics: wasmMetrics,
-    x: normalizedPoints.map((point) => point.x),
-    y: normalizedPoints.map((point) => point.y),
-  });
+    metrics: wasmInput.metrics,
+    x: wasmInput.x,
+    y: wasmInput.y,
+  }) as WasmIndexInstance;
   const pointLookup = new Map(normalizedPoints.map((point) => [point.id, point]));
   const bounds = createSeriesBounds(normalizedPoints);
 
@@ -171,18 +204,32 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
     },
 
     getBinnedSeries(query) {
-      return mapBinnedSeries(wasm.getBinnedSeries(query) as WasmBinnedSeries, {
+      const context: PackedWasmMappingContext<TProperties> = {
         metricKeys,
         normalizedPoints,
-      });
+      };
+      const packed = wasm.getBinnedSeriesPacked?.(query) as PackedWasmSeries | undefined;
+
+      return packed
+        ? mapPackedBinnedSeries(packed, context)
+        : mapBinnedSeries(wasm.getBinnedSeries(query) as WasmBinnedSeries, context);
     },
 
     getChartSeries(query) {
-      return mapChartSeries(wasm.getChartSeries(query) as WasmChartSeries, {
+      const context: PackedWasmMappingContext<TProperties> & {
+        requestedPercentiles: readonly ChartPercentileMode[];
+        valueMode: ChartValueMode;
+      } = {
         metricKeys,
         normalizedPoints,
         requestedPercentiles: resolveRequestedPercentiles(query),
-      });
+        valueMode: query.valueMode ?? "average",
+      };
+      const packed = wasm.getChartSeriesPacked?.(query) as PackedWasmSeries | undefined;
+
+      return packed
+        ? mapPackedChartSeries(packed, context)
+        : mapChartSeries(wasm.getChartSeries(query) as WasmChartSeries, context);
     },
 
     getGroupedChartSeries(query) {
@@ -196,7 +243,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
         return fallbackIndex.getHeatmap(query);
       }
 
-      return mapHeatmap(wasm.getHeatmap(wasmQuery) as WasmHeatmap, {
+      return mapHeatmap(wasm.getHeatmap(wasmQuery) as PackedWasmHeatmap, {
         metricKeys,
         normalizedPoints,
       });
@@ -209,7 +256,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
         return fallbackIndex.getHistogram(query);
       }
 
-      return mapHistogram(wasm.getHistogram(wasmQuery) as WasmHistogram, {
+      return mapHistogram(wasm.getHistogram(wasmQuery) as PackedWasmHistogram, {
         metricKeys,
         normalizedPoints,
       });
@@ -223,6 +270,30 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
       return bounds;
     },
   };
+}
+
+function createWasmIndexInput<TProperties>(
+  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
+  metricKeys: string[],
+) {
+  const x = new Float64Array(normalizedPoints.length);
+  const y = new Float64Array(normalizedPoints.length);
+  const metrics = new Float64Array(normalizedPoints.length * metricKeys.length);
+
+  for (let pointIndex = 0; pointIndex < normalizedPoints.length; pointIndex += 1) {
+    const point = normalizedPoints[pointIndex];
+
+    x[pointIndex] = point.x;
+    y[pointIndex] = point.y;
+
+    const metricOffset = pointIndex * metricKeys.length;
+
+    for (let metricIndex = 0; metricIndex < metricKeys.length; metricIndex += 1) {
+      metrics[metricOffset + metricIndex] = point.metrics[metricKeys[metricIndex]] ?? 0;
+    }
+  }
+
+  return { metrics, x, y };
 }
 
 function normalizeWasmPoints<TProperties>(
@@ -246,10 +317,17 @@ function normalizeWasmPoints<TProperties>(
 
 function mapBinnedSeries<TProperties>(
   series: WasmBinnedSeries,
-  context: WasmMappingContext<TProperties>,
+  context: PackedWasmMappingContext<TProperties>,
 ): BinnedSeries<TProperties> {
+  const bins: BinnedSeries<TProperties>["bins"] = [];
+  bins.length = series.bins.length;
+
+  for (let index = 0; index < series.bins.length; index += 1) {
+    bins[index] = mapBin(series.bins[index], context);
+  }
+
   return {
-    bins: series.bins.map((bin) => mapBin(bin, context)),
+    bins,
     summary: {
       ...series.summary,
       metrics: mapMetrics(series.summary.metrics, context.metricKeys),
@@ -259,13 +337,27 @@ function mapBinnedSeries<TProperties>(
 
 function mapChartSeries<TProperties>(
   series: WasmChartSeries,
-  context: WasmMappingContext<TProperties> & {
+  context: PackedWasmMappingContext<TProperties> & {
     requestedPercentiles: readonly ChartPercentileMode[];
+    valueMode: ChartValueMode;
   },
 ): ChartDensitySeries<TProperties> {
+  const bins: ChartDensitySeries<TProperties>["bins"] = [];
+  const samples: ChartDensitySeries<TProperties>["samples"] = [];
+  bins.length = series.bins.length;
+  samples.length = series.samples.length;
+
+  for (let index = 0; index < series.bins.length; index += 1) {
+    bins[index] = mapBin(series.bins[index], context, context.requestedPercentiles);
+  }
+
+  for (let index = 0; index < series.samples.length; index += 1) {
+    samples[index] = mapSample(series.samples[index], context);
+  }
+
   return {
-    bins: series.bins.map((bin) => mapBin(bin, context, context.requestedPercentiles)),
-    samples: series.samples.map((sample) => mapSample(sample, context)),
+    bins,
+    samples,
     summary: {
       ...series.summary,
       metrics: mapMetrics(series.summary.metrics, context.metricKeys),
@@ -273,9 +365,85 @@ function mapChartSeries<TProperties>(
   };
 }
 
+function mapPackedBinnedSeries<TProperties>(
+  series: PackedWasmSeries,
+  context: PackedWasmMappingContext<TProperties>,
+): BinnedSeries<TProperties> {
+  const bins: BinnedSeries<TProperties>["bins"] = [];
+  const summaryMetrics = createZeroMetrics(context.metricKeys);
+  let pointCount = 0;
+
+  bins.length = series.binCount;
+
+  for (let index = 0; index < series.binCount; index += 1) {
+    const metrics = mapPackedMetrics(
+      series.metrics,
+      index * series.metricCount,
+      context.metricKeys,
+      summaryMetrics,
+    );
+
+    pointCount += series.pointCount[index] ?? 0;
+    bins[index] = mapPackedBin(series, index, metrics, context);
+  }
+
+  return {
+    bins,
+    summary: {
+      binCount: series.binCount,
+      metrics: summaryMetrics,
+      pointCount,
+      xDomain: [series.xDomain[0] ?? 0, series.xDomain[1] ?? series.xDomain[0] ?? 0],
+    },
+  };
+}
+
+function mapPackedChartSeries<TProperties>(
+  series: PackedWasmSeries,
+  context: PackedWasmMappingContext<TProperties> & {
+    requestedPercentiles: readonly ChartPercentileMode[];
+    valueMode: ChartValueMode;
+  },
+): ChartDensitySeries<TProperties> {
+  const bins: ChartDensitySeries<TProperties>["bins"] = [];
+  const samples: ChartDensitySeries<TProperties>["samples"] = [];
+  const summaryMetrics = createZeroMetrics(context.metricKeys);
+  let pointCount = 0;
+
+  bins.length = series.binCount;
+  samples.length = series.sampleCount;
+
+  for (let index = 0; index < series.binCount; index += 1) {
+    const metrics = mapPackedMetrics(
+      series.metrics,
+      index * series.metricCount,
+      context.metricKeys,
+      summaryMetrics,
+    );
+    const bin = mapPackedBin(series, index, metrics, context, context.requestedPercentiles);
+
+    pointCount += series.pointCount[index] ?? 0;
+    bins[index] = bin;
+    samples[index] = mapPackedSample(series, index, bin, metrics);
+  }
+
+  return {
+    bins,
+    samples,
+    summary: {
+      binCount: series.binCount,
+      metrics: summaryMetrics,
+      pointCount,
+      sampleCount: series.sampleCount,
+      valueMode: context.valueMode,
+      xDomain: [series.xDomain[0] ?? 0, series.xDomain[1] ?? series.xDomain[0] ?? 0],
+    },
+  };
+}
+
 function mapHistogram<TProperties>(
   histogram: WasmHistogram,
-  context: WasmMappingContext<TProperties>,
+  context: PackedWasmMappingContext<TProperties>,
 ): ChartHistogram<TProperties> {
   return {
     buckets: histogram.buckets.map((bucket) => ({
@@ -302,7 +470,7 @@ function mapHistogram<TProperties>(
 
 function mapHeatmap<TProperties>(
   heatmap: WasmHeatmap,
-  context: WasmMappingContext<TProperties>,
+  context: PackedWasmMappingContext<TProperties>,
 ): ChartHeatmap<TProperties> {
   return {
     cells: heatmap.cells.map((cell) => ({
@@ -332,7 +500,7 @@ function mapHeatmap<TProperties>(
 
 function mapBin<TProperties>(
   bin: WasmBin,
-  context: WasmMappingContext<TProperties>,
+  context: PackedWasmMappingContext<TProperties>,
   requestedPercentiles: readonly ChartPercentileMode[] = [],
 ) {
   const mappedBin = {
@@ -357,14 +525,37 @@ function mapBin<TProperties>(
     }
   }
 
-  if (requestedPercentiles.length > 0) {
-    (
-      mappedBin as typeof mappedBin & {
-        points: Array<IndexedChartSeriesPoint<TProperties>>;
-      }
-    ).points = (bin.pointIndices ?? [])
-      .map((pointIndex) => getPoint(context.normalizedPoints, pointIndex))
-      .filter((point): point is IndexedChartSeriesPoint<TProperties> => point !== null);
+  return mappedBin;
+}
+
+function mapPackedBin<TProperties>(
+  series: PackedWasmSeries,
+  index: number,
+  metrics: ChartMetricRecord,
+  context: PackedWasmMappingContext<TProperties>,
+  requestedPercentiles: readonly ChartPercentileMode[] = [],
+) {
+  const pointCount = series.pointCount[index] ?? 0;
+  const mappedBin = {
+    averageY: nullableNumber(series.averageY[index]),
+    firstPoint: getPoint(context.normalizedPoints, pointIndexOrNull(series.firstPointIndex[index])),
+    index: series.index?.[index] ?? index,
+    lastPoint: getPoint(context.normalizedPoints, pointIndexOrNull(series.lastPointIndex[index])),
+    maxY: nullableNumber(series.maxY[index]),
+    metrics,
+    minY: nullableNumber(series.minY[index]),
+    pointCount,
+    sumY: series.sumY[index] ?? 0,
+    x0: series.x0[index] ?? 0,
+    x1: series.x1[index] ?? 0,
+  };
+
+  if (pointCount > 0) {
+    for (const percentile of requestedPercentiles) {
+      (mappedBin as typeof mappedBin & Partial<Record<ChartPercentileMode, number | null>>)[
+        percentile
+      ] = nullableNumber(series.percentiles?.[percentile]?.[index]);
+    }
   }
 
   return mappedBin;
@@ -372,7 +563,7 @@ function mapBin<TProperties>(
 
 function mapSample<TProperties>(
   sample: WasmSample,
-  context: WasmMappingContext<TProperties>,
+  context: PackedWasmMappingContext<TProperties>,
 ): ChartDensitySample<TProperties> {
   return {
     averageY: sample.averageY ?? null,
@@ -398,13 +589,81 @@ function mapSample<TProperties>(
   };
 }
 
-type WasmMappingContext<TProperties> = {
+function mapPackedSample<TProperties>(
+  series: PackedWasmSeries,
+  index: number,
+  bin: ReturnType<typeof mapPackedBin<TProperties>>,
+  metrics: ChartMetricRecord,
+): ChartDensitySample<TProperties> {
+  return {
+    averageY: bin.averageY,
+    firstPoint: bin.firstPoint,
+    index: bin.index,
+    lastPoint: bin.lastPoint,
+    maxY: bin.maxY,
+    metrics,
+    minY: bin.minY,
+    p10: nullableNumber(series.percentiles?.p10?.[index]),
+    p25: nullableNumber(series.percentiles?.p25?.[index]),
+    p50: nullableNumber(series.percentiles?.p50?.[index]),
+    p75: nullableNumber(series.percentiles?.p75?.[index]),
+    p90: nullableNumber(series.percentiles?.p90?.[index]),
+    p95: nullableNumber(series.percentiles?.p95?.[index]),
+    p99: nullableNumber(series.percentiles?.p99?.[index]),
+    pointCount: bin.pointCount,
+    sumY: bin.sumY,
+    x: series.x[index] ?? (bin.x0 + bin.x1) / 2,
+    x0: bin.x0,
+    x1: bin.x1,
+    y: nullableNumber(series.y[index]),
+  };
+}
+
+type PackedWasmMappingContext<TProperties> = {
   metricKeys: string[];
   normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>;
 };
 
 function mapMetrics(metrics: WasmMetricRecord, metricKeys: string[]): ChartMetricRecord {
-  return Object.fromEntries(metricKeys.map((metricKey, index) => [metricKey, metrics[index] ?? 0]));
+  const mappedMetrics: ChartMetricRecord = {};
+
+  for (let index = 0; index < metricKeys.length; index += 1) {
+    mappedMetrics[metricKeys[index]] = metrics[index] ?? 0;
+  }
+
+  return mappedMetrics;
+}
+
+function mapPackedMetrics(
+  metrics: Float64Array,
+  offset: number,
+  metricKeys: string[],
+  totals?: ChartMetricRecord,
+): ChartMetricRecord {
+  const mappedMetrics: ChartMetricRecord = {};
+
+  for (let index = 0; index < metricKeys.length; index += 1) {
+    const metricKey = metricKeys[index];
+    const value = metrics[offset + index] ?? 0;
+
+    mappedMetrics[metricKey] = value;
+
+    if (totals) {
+      totals[metricKey] += value;
+    }
+  }
+
+  return mappedMetrics;
+}
+
+function createZeroMetrics(metricKeys: string[]): ChartMetricRecord {
+  const metrics: ChartMetricRecord = {};
+
+  for (let index = 0; index < metricKeys.length; index += 1) {
+    metrics[metricKeys[index]] = 0;
+  }
+
+  return metrics;
 }
 
 function getPoint<TProperties>(
@@ -412,6 +671,14 @@ function getPoint<TProperties>(
   pointIndex: number | null,
 ) {
   return pointIndex === null ? null : (points[pointIndex] ?? null);
+}
+
+function nullableNumber(value: number | undefined) {
+  return value === undefined || Number.isNaN(value) ? null : value;
+}
+
+function pointIndexOrNull(value: number | undefined) {
+  return value === undefined || value === 4_294_967_295 ? null : value;
 }
 
 function normalizeWasmMetrics(metrics: ChartMetricRecord | undefined): ChartMetricRecord {

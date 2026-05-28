@@ -61,25 +61,33 @@ for (const size of seriesSizes) {
         kind: "memory",
         name: `${baseName}.memory.heapDelta`,
       });
-      results.push(
-        benchmark(`${baseName}.query.full`, () => {
-          assertChartSeries(index.getChartSeries({ ...queries[0], valueMode: "average" }));
-        }),
-      );
-      results.push(
-        benchmark(`${baseName}.query.repeated`, () => {
-          for (let iteration = 0; iteration < repeatedQueryCount; iteration += 1) {
-            const valueMode = readValueMode(iteration);
+      const fullQuery = benchmark(`${baseName}.query.full`, () => {
+        assertChartSeries(index.getChartSeries({ ...queries[0], valueMode: "average" }));
+      });
+      const repeatedQuery = benchmark(`${baseName}.query.repeated`, () => {
+        for (let iteration = 0; iteration < repeatedQueryCount; iteration += 1) {
+          const valueMode = readValueMode(iteration);
 
-            assertChartSeries(
-              index.getChartSeries({
-                ...queries[iteration % queries.length],
-                valueMode,
-              }),
-            );
-          }
-        }),
-      );
+          assertChartSeries(
+            index.getChartSeries({
+              ...queries[iteration % queries.length],
+              valueMode,
+            }),
+          );
+        }
+      });
+
+      results.push(fullQuery);
+
+      if (backend === "wasm-index") {
+        results.push({ ...fullQuery, name: `${baseName}.query.full.packed` });
+      }
+
+      results.push(repeatedQuery);
+
+      if (backend === "wasm-index") {
+        results.push({ ...repeatedQuery, name: `${baseName}.query.repeated.packed` });
+      }
       results.push(
         benchmark(`${baseName}.query.percentiles`, () => {
           assertChartSeries(

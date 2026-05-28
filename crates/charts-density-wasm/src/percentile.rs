@@ -1,9 +1,7 @@
-pub fn interpolated_percentile(values: &mut [f64], percentile: f64) -> Option<f64> {
+pub fn interpolated_percentile_sorted(values: &[f64], percentile: f64) -> Option<f64> {
     if values.is_empty() {
         return None;
     }
-
-    values.sort_by(|left, right| left.total_cmp(right));
 
     if values.len() == 1 {
         return values.first().copied();

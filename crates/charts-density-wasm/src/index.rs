@@ -1,9 +1,12 @@
+use js_sys::{Float64Array, Object, Reflect, Uint32Array};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
 use crate::heatmap::{create_heatmap, HeatmapQuery, WasmHeatmap};
 use crate::histogram::{create_histogram, HistogramQuery, WasmHistogram};
-use crate::percentile::{interpolated_percentile, is_percentile_mode, percentile_value};
+use crate::percentile::{interpolated_percentile_sorted, is_percentile_mode, percentile_value};
+
+const EMPTY_POINT_INDEX: u32 = u32::MAX;
 
 #[wasm_bindgen]
 pub struct ChartDensityWasmIndex {
@@ -187,7 +190,7 @@ impl ChartDensityWasmIndex {
         let target_bin_count = clamp_integer(query.target_bin_count, 1, 100_000);
         let mut bins = create_bins(self.metric_count, x_domain, target_bin_count);
 
-        self.populate_bins(&mut bins, x_domain, target_bin_count);
+        self.populate_bins(&mut bins, x_domain, target_bin_count, false);
 
         let visible_bins = if query.include_empty_bins.unwrap_or(false) {
             bins
@@ -203,6 +206,24 @@ impl ChartDensityWasmIndex {
         serde_wasm_bindgen::to_value(&series).map_err(Into::into)
     }
 
+    #[wasm_bindgen(js_name = getBinnedSeriesPacked)]
+    pub fn get_binned_series_packed(&self, query: JsValue) -> Result<JsValue, JsValue> {
+        let query: BinnedSeriesQuery = serde_wasm_bindgen::from_value(query)?;
+        let x_domain = normalize_domain(query.x_domain);
+        let target_bin_count = clamp_integer(query.target_bin_count, 1, 100_000);
+        let mut bins = create_bins(self.metric_count, x_domain, target_bin_count);
+
+        self.populate_bins(&mut bins, x_domain, target_bin_count, false);
+
+        let visible_bins = if query.include_empty_bins.unwrap_or(false) {
+            bins
+        } else {
+            bins.into_iter().filter(|bin| bin.point_count > 0).collect()
+        };
+
+        create_packed_series(&visible_bins, x_domain, self.metric_count, None, &[])
+    }
+
     #[wasm_bindgen(js_name = getChartSeries)]
     pub fn get_chart_series(&self, query: JsValue) -> Result<JsValue, JsValue> {
         let query: ChartSeriesQuery = serde_wasm_bindgen::from_value(query)?;
@@ -215,7 +236,12 @@ impl ChartDensityWasmIndex {
         );
         let mut bins = create_bins(self.metric_count, x_domain, target_bin_count);
 
-        self.populate_bins(&mut bins, x_domain, target_bin_count);
+        self.populate_bins(
+            &mut bins,
+            x_domain,
+            target_bin_count,
+            !requested_percentiles.is_empty(),
+        );
 
         for bin in &mut bins {
             apply_bin_percentiles(bin, &requested_percentiles);
@@ -238,6 +264,44 @@ impl ChartDensityWasmIndex {
         };
 
         serde_wasm_bindgen::to_value(&series).map_err(Into::into)
+    }
+
+    #[wasm_bindgen(js_name = getChartSeriesPacked)]
+    pub fn get_chart_series_packed(&self, query: JsValue) -> Result<JsValue, JsValue> {
+        let query: ChartSeriesQuery = serde_wasm_bindgen::from_value(query)?;
+        let x_domain = normalize_domain(query.x_domain);
+        let target_bin_count = clamp_integer(query.target_bin_count, 1, 100_000);
+        let value_mode = query.value_mode.unwrap_or_else(|| "average".to_string());
+        let requested_percentiles = resolve_requested_percentiles(
+            query.percentiles.unwrap_or_default(),
+            value_mode.as_str(),
+        );
+        let mut bins = create_bins(self.metric_count, x_domain, target_bin_count);
+
+        self.populate_bins(
+            &mut bins,
+            x_domain,
+            target_bin_count,
+            !requested_percentiles.is_empty(),
+        );
+
+        for bin in &mut bins {
+            apply_bin_percentiles(bin, &requested_percentiles);
+        }
+
+        let visible_bins = if query.include_empty_bins.unwrap_or(false) {
+            bins
+        } else {
+            bins.into_iter().filter(|bin| bin.point_count > 0).collect()
+        };
+
+        create_packed_series(
+            &visible_bins,
+            x_domain,
+            self.metric_count,
+            Some(value_mode.as_str()),
+            &requested_percentiles,
+        )
     }
 
     #[wasm_bindgen(js_name = getHistogram)]
@@ -285,7 +349,13 @@ impl ChartDensityWasmIndex {
         }
     }
 
-    fn populate_bins(&self, bins: &mut [WasmBin], x_domain: [f64; 2], bin_count: usize) {
+    fn populate_bins(
+        &self,
+        bins: &mut [WasmBin],
+        x_domain: [f64; 2],
+        bin_count: usize,
+        track_percentiles: bool,
+    ) {
         let start = lower_bound_by_x(&self.points, x_domain[0]);
         let end = upper_bound_by_x(&self.points, x_domain[1]);
 
@@ -293,7 +363,7 @@ impl ChartDensityWasmIndex {
             let bin_index = bucket_index(point.x, x_domain, bin_count);
 
             if let Some(bin) = bins.get_mut(bin_index) {
-                update_bin(bin, point, self.metric_count);
+                update_bin(bin, point, self.metric_count, track_percentiles);
             }
         }
     }
@@ -419,15 +489,16 @@ fn create_bins(metric_count: usize, x_domain: [f64; 2], bin_count: usize) -> Vec
         .collect()
 }
 
-fn update_bin(bin: &mut WasmBin, point: &WasmPoint, metric_count: usize) {
+fn update_bin(bin: &mut WasmBin, point: &WasmPoint, metric_count: usize, track_percentiles: bool) {
     if bin.first_point_index.is_none() {
         bin.first_point_index = Some(point.source_index);
     }
 
     bin.last_point_index = Some(point.source_index);
     bin.point_count += 1;
-    bin.point_indices.push(point.source_index);
-    bin.y_values.push(point.y);
+    if track_percentiles {
+        bin.y_values.push(point.y);
+    }
     bin.sum_y += point.y;
     bin.average_y = Some(bin.sum_y / bin.point_count as f64);
     bin.min_y = Some(bin.min_y.map_or(point.y, |min| min.min(point.y)));
@@ -443,12 +514,14 @@ fn apply_bin_percentiles(bin: &mut WasmBin, percentiles: &[String]) {
         return;
     }
 
+    let mut sorted_values = bin.y_values.clone();
+    sorted_values.sort_by(|left, right| left.total_cmp(right));
+
     for percentile in percentiles {
         let Some(percentile_value) = percentile_value(percentile) else {
             continue;
         };
-        let mut sorted_values = bin.y_values.clone();
-        let value = interpolated_percentile(&mut sorted_values, percentile_value);
+        let value = interpolated_percentile_sorted(&sorted_values, percentile_value);
 
         match percentile.as_str() {
             "p10" => bin.p10 = value,
@@ -557,4 +630,167 @@ fn resolve_requested_percentiles(mut percentiles: Vec<String>, value_mode: &str)
     }
 
     percentiles
+}
+
+fn create_packed_series(
+    bins: &[WasmBin],
+    x_domain: [f64; 2],
+    metric_count: usize,
+    value_mode: Option<&str>,
+    requested_percentiles: &[String],
+) -> Result<JsValue, JsValue> {
+    let bin_count = bins.len();
+    let mut average_y = Vec::with_capacity(bin_count);
+    let mut first_point_index = Vec::with_capacity(bin_count);
+    let mut index = Vec::with_capacity(bin_count);
+    let mut last_point_index = Vec::with_capacity(bin_count);
+    let mut max_y = Vec::with_capacity(bin_count);
+    let mut metrics = Vec::with_capacity(bin_count * metric_count);
+    let mut min_y = Vec::with_capacity(bin_count);
+    let mut point_count = Vec::with_capacity(bin_count);
+    let mut sum_y = Vec::with_capacity(bin_count);
+    let mut x = Vec::with_capacity(bin_count);
+    let mut x0 = Vec::with_capacity(bin_count);
+    let mut x1 = Vec::with_capacity(bin_count);
+    let mut y = Vec::with_capacity(bin_count);
+
+    for bin in bins {
+        average_y.push(option_to_nan(bin.average_y));
+        first_point_index.push(point_index_or_empty(bin.first_point_index));
+        index.push(bin.index as u32);
+        last_point_index.push(point_index_or_empty(bin.last_point_index));
+        max_y.push(option_to_nan(bin.max_y));
+        min_y.push(option_to_nan(bin.min_y));
+        point_count.push(bin.point_count as u32);
+        sum_y.push(bin.sum_y);
+        x.push((bin.x0 + bin.x1) / 2.0);
+        x0.push(bin.x0);
+        x1.push(bin.x1);
+        y.push(value_mode.map_or(option_to_nan(bin.average_y), |mode| {
+            option_to_nan(chart_density_value(bin, mode))
+        }));
+
+        for metric_index in 0..metric_count {
+            metrics.push(bin.metrics.get(metric_index).copied().unwrap_or(0.0));
+        }
+    }
+
+    let packed = Object::new();
+
+    set_property(&packed, "binCount", JsValue::from_f64(bin_count as f64))?;
+    set_property(&packed, "sampleCount", JsValue::from_f64(bin_count as f64))?;
+    set_property(
+        &packed,
+        "metricCount",
+        JsValue::from_f64(metric_count as f64),
+    )?;
+    set_property(
+        &packed,
+        "xDomain",
+        Float64Array::from(x_domain.as_slice()).into(),
+    )?;
+    set_property(&packed, "x0", Float64Array::from(x0.as_slice()).into())?;
+    set_property(&packed, "x1", Float64Array::from(x1.as_slice()).into())?;
+    set_property(&packed, "x", Float64Array::from(x.as_slice()).into())?;
+    set_property(&packed, "index", Uint32Array::from(index.as_slice()).into())?;
+    set_property(
+        &packed,
+        "pointCount",
+        Uint32Array::from(point_count.as_slice()).into(),
+    )?;
+    set_property(&packed, "sumY", Float64Array::from(sum_y.as_slice()).into())?;
+    set_property(
+        &packed,
+        "averageY",
+        Float64Array::from(average_y.as_slice()).into(),
+    )?;
+    set_property(&packed, "minY", Float64Array::from(min_y.as_slice()).into())?;
+    set_property(&packed, "maxY", Float64Array::from(max_y.as_slice()).into())?;
+    set_property(&packed, "y", Float64Array::from(y.as_slice()).into())?;
+    set_property(
+        &packed,
+        "firstPointIndex",
+        Uint32Array::from(first_point_index.as_slice()).into(),
+    )?;
+    set_property(
+        &packed,
+        "lastPointIndex",
+        Uint32Array::from(last_point_index.as_slice()).into(),
+    )?;
+    set_property(
+        &packed,
+        "metrics",
+        Float64Array::from(metrics.as_slice()).into(),
+    )?;
+
+    let percentiles = create_packed_percentiles(bins, requested_percentiles)?;
+
+    if let Some(percentiles) = percentiles {
+        set_property(&packed, "percentiles", percentiles.into())?;
+    }
+
+    Ok(packed.into())
+}
+
+fn create_packed_percentiles(
+    bins: &[WasmBin],
+    requested_percentiles: &[String],
+) -> Result<Option<Object>, JsValue> {
+    let percentiles = Object::new();
+    let mut has_percentiles = false;
+
+    for percentile in requested_percentiles {
+        let values = match percentile.as_str() {
+            "p10" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p10))
+                .collect::<Vec<_>>(),
+            "p25" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p25))
+                .collect::<Vec<_>>(),
+            "p50" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p50))
+                .collect::<Vec<_>>(),
+            "p75" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p75))
+                .collect::<Vec<_>>(),
+            "p90" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p90))
+                .collect::<Vec<_>>(),
+            "p95" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p95))
+                .collect::<Vec<_>>(),
+            "p99" => bins
+                .iter()
+                .map(|bin| option_to_nan(bin.p99))
+                .collect::<Vec<_>>(),
+            _ => continue,
+        };
+
+        set_property(
+            &percentiles,
+            percentile.as_str(),
+            Float64Array::from(values.as_slice()).into(),
+        )?;
+        has_percentiles = true;
+    }
+
+    Ok(has_percentiles.then_some(percentiles))
+}
+
+fn set_property(target: &Object, key: &str, value: JsValue) -> Result<(), JsValue> {
+    Reflect::set(target, &JsValue::from_str(key), &value).map(|_| ())
+}
+
+fn option_to_nan(value: Option<f64>) -> f64 {
+    value.unwrap_or(f64::NAN)
+}
+
+fn point_index_or_empty(index: Option<usize>) -> u32 {
+    index.map_or(EMPTY_POINT_INDEX, |value| value as u32)
 }
