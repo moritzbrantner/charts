@@ -9,6 +9,7 @@ import {
   ChartContainer,
   Checkbox,
   type ChartConfig,
+  Input,
   Item,
   ItemContent,
   ItemDescription,
@@ -20,6 +21,7 @@ import {
 import {
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -31,6 +33,7 @@ import {
   type WheelEvent,
   type WheelEventHandler,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   Bar,
   BarChart,
@@ -76,6 +79,8 @@ export type ChartRange = {
   id: string;
   label: string;
 };
+
+export type ChartAxisRange = [number, number] | null;
 
 export type MeasuredChartSeries<TProperties = Record<string, unknown>> = {
   queryMs: number;
@@ -128,6 +133,21 @@ export type ChartSeriesLegendProps = {
   onHiddenIdsChange?: (hiddenIds: string[]) => void;
   orientation?: "horizontal" | "vertical";
   showCounts?: boolean;
+};
+
+export type ChartYAxisRangeMenuProps = {
+  "aria-label"?: string;
+  axisWidth?: number;
+  className?: string;
+  dataDomain?: [number, number] | null;
+  formatValue?: (value: number) => string;
+  hiddenIds?: readonly string[];
+  legendItems?: readonly ChartLegendItem[];
+  minSpan?: number;
+  onHiddenIdsChange?: (hiddenIds: string[]) => void;
+  onValueChange: (range: ChartAxisRange) => void;
+  orientation?: "left" | "right";
+  value: ChartAxisRange;
 };
 
 export type ChartWithLegendProps = {
@@ -849,6 +869,252 @@ export function ChartLabelOverlay<TPayload = unknown>({
         );
       })}
     </g>
+  );
+}
+
+export function ChartYAxisRangeMenu({
+  "aria-label": ariaLabel = "Y-axis range menu",
+  axisWidth = 60,
+  className,
+  dataDomain = null,
+  formatValue = formatCompactNumber,
+  hiddenIds,
+  legendItems = [],
+  minSpan,
+  onHiddenIdsChange,
+  onValueChange,
+  orientation = "left",
+  value,
+}: ChartYAxisRangeMenuProps): JSX.Element | null {
+  const plotArea = usePlotArea();
+  const minInputId = useId();
+  const maxInputId = useId();
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [minInput, setMinInput] = useState("");
+  const [maxInput, setMaxInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const open = menuPosition !== null;
+  const resolvedAxisWidth = Math.max(1, axisWidth);
+  const triggerX =
+    orientation === "right"
+      ? (plotArea?.x ?? 0) + (plotArea?.width ?? 0)
+      : Math.max(0, (plotArea?.x ?? 0) - resolvedAxisWidth);
+  const activeDomain = value ?? dataDomain;
+
+  const resetInputs = useCallback(() => {
+    const nextDomain = value ?? dataDomain;
+
+    setMinInput(nextDomain ? String(nextDomain[0]) : "");
+    setMaxInput(nextDomain ? String(nextDomain[1]) : "");
+    setError(null);
+  }, [dataDomain, value]);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const menu = menuRef.current;
+
+      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+        return;
+      }
+
+      setMenuPosition(null);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open) {
+      menuRef.current?.focus();
+    }
+  }, [open]);
+
+  if (!plotArea) {
+    return null;
+  }
+
+  const handleContextMenu = (event: MouseEvent<SVGRectElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    resetInputs();
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+  const handleApply = () => {
+    const nextMin = Number(minInput);
+    const nextMax = Number(maxInput);
+
+    if (
+      !minInput.trim() ||
+      !maxInput.trim() ||
+      !isFiniteNumber(nextMin) ||
+      !isFiniteNumber(nextMax)
+    ) {
+      setError("Enter finite min and max values.");
+      return;
+    }
+
+    if (nextMax <= nextMin) {
+      setError("Max must be greater than min.");
+      return;
+    }
+
+    if (minSpan !== undefined && nextMax - nextMin < minSpan) {
+      setError(`Range must span at least ${formatValue(minSpan)}.`);
+      return;
+    }
+
+    onValueChange([nextMin, nextMax]);
+    setMenuPosition(null);
+  };
+  const handleAuto = () => {
+    onValueChange(null);
+    setMinInput(dataDomain ? String(dataDomain[0]) : "");
+    setMaxInput(dataDomain ? String(dataDomain[1]) : "");
+    setError(null);
+    setMenuPosition(null);
+  };
+  const menu =
+    open && typeof document !== "undefined" && menuPosition
+      ? createPortal(
+          <div
+            ref={menuRef}
+            aria-label={ariaLabel}
+            className={joinClassNames(
+              "fixed z-50 w-72 border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none",
+              className,
+            )}
+            role="dialog"
+            style={getChartAxisMenuStyle(menuPosition)}
+            tabIndex={-1}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) {
+                setMenuPosition(null);
+              }
+            }}
+          >
+            <form
+              className="grid gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleApply();
+              }}
+            >
+              <div className="grid gap-1">
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-semibold">Y-axis range</h3>
+                  <span className="text-xs text-muted-foreground">{value ? "Manual" : "Auto"}</span>
+                </div>
+                {activeDomain ? (
+                  <p className="text-xs text-muted-foreground">
+                    {formatValue(activeDomain[0])} to {formatValue(activeDomain[1])}
+                  </p>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="grid gap-1 text-xs font-medium" htmlFor={minInputId}>
+                  Min
+                  <Input
+                    id={minInputId}
+                    type="number"
+                    value={minInput}
+                    onChange={(event) => {
+                      setMinInput(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                </label>
+                <label className="grid gap-1 text-xs font-medium" htmlFor={maxInputId}>
+                  Max
+                  <Input
+                    id={maxInputId}
+                    type="number"
+                    value={maxInput}
+                    onChange={(event) => {
+                      setMaxInput(event.target.value);
+                      setError(null);
+                    }}
+                  />
+                </label>
+              </div>
+              {error ? <p className="text-xs text-destructive">{error}</p> : null}
+              <div className="flex items-center justify-end gap-2">
+                <Button type="button" variant="ghost" size="sm" onClick={handleAuto}>
+                  Auto
+                </Button>
+                <Button type="submit" size="sm">
+                  Apply
+                </Button>
+              </div>
+            </form>
+            {legendItems.length > 0 ? (
+              <div className="mt-3 border-t border-border/60 pt-3">
+                {onHiddenIdsChange ? (
+                  <ChartSeriesLegend
+                    aria-label="Y-axis series legend"
+                    className="gap-1"
+                    hiddenIds={hiddenIds}
+                    items={legendItems}
+                    onHiddenIdsChange={onHiddenIdsChange}
+                    showCounts={false}
+                  />
+                ) : (
+                  <ChartYAxisRangeLegendList items={legendItems} />
+                )}
+              </div>
+            ) : null}
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <g className={className} data-chart-y-axis-range-menu="">
+        <rect
+          aria-label={ariaLabel}
+          data-chart-y-axis-range-trigger=""
+          x={triggerX}
+          y={plotArea.y}
+          width={resolvedAxisWidth}
+          height={plotArea.height}
+          fill="transparent"
+          role="button"
+          tabIndex={0}
+          onContextMenu={handleContextMenu}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              const bounds = event.currentTarget.getBoundingClientRect();
+
+              event.preventDefault();
+              resetInputs();
+              setMenuPosition({
+                x: bounds.left + bounds.width / 2,
+                y: bounds.top + bounds.height / 2,
+              });
+            }
+          }}
+        >
+          <title>{ariaLabel}</title>
+        </rect>
+      </g>
+      {menu}
+    </>
   );
 }
 
@@ -2277,6 +2543,34 @@ export function getChartSampleYBounds<TProperties = Record<string, unknown>>(
   };
 }
 
+export function getChartDataYBounds(
+  rows: readonly Record<string, unknown>[],
+  dataKeys: readonly string[],
+): {
+  maxY: number | null;
+  minY: number | null;
+} {
+  const values = rows.flatMap((row) =>
+    dataKeys.flatMap((dataKey) => {
+      const value = row[dataKey];
+
+      return isFiniteNumber(value) ? [value] : [];
+    }),
+  );
+
+  if (values.length === 0) {
+    return {
+      maxY: null,
+      minY: null,
+    };
+  }
+
+  return {
+    maxY: Math.max(...values),
+    minY: Math.min(...values),
+  };
+}
+
 export function getNearestChartSample<TProperties>(
   samples: readonly ChartDensitySample<TProperties>[],
   x: number,
@@ -2311,6 +2605,50 @@ function createPreviewData<TProperties>(samples: Array<ChartDensitySample<TPrope
     value: sample.y,
     x: sample.x,
   }));
+}
+
+function ChartYAxisRangeLegendList({ items }: { items: readonly ChartLegendItem[] }): JSX.Element {
+  return (
+    <div aria-label="Y-axis series legend" className="grid gap-1" role="group">
+      {items.map((item) => (
+        <div
+          key={item.id}
+          className={joinClassNames(
+            "flex items-center gap-2 border border-border/60 bg-muted/20 px-2 py-1.5 text-sm",
+            item.disabled ? "opacity-60" : null,
+          )}
+        >
+          <span
+            aria-hidden="true"
+            className="h-2.5 w-2.5 shrink-0 border border-border/60"
+            style={{ backgroundColor: item.color ?? "var(--muted-foreground)" }}
+          />
+          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          {item.meta ? (
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{item.meta}</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getChartAxisMenuStyle(position: { x: number; y: number }) {
+  if (typeof window === "undefined") {
+    return {
+      left: position.x,
+      top: position.y,
+    };
+  }
+
+  const width = 288;
+  const height = 360;
+  const padding = 8;
+
+  return {
+    left: clamp(position.x, padding, Math.max(padding, window.innerWidth - width - padding)),
+    top: clamp(position.y, padding, Math.max(padding, window.innerHeight - height - padding)),
+  };
 }
 
 function getNearestSample<TProperties>(

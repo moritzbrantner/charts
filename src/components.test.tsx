@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { Line, LineChart } from "recharts";
+import { Line, LineChart, YAxis } from "recharts";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -17,9 +17,11 @@ import {
   ChartThresholdMarker,
   ChartValueModeSelector,
   ChartWithLegend,
+  ChartYAxisRangeMenu,
   createChartBoxPlotData,
   createChartDensityIndex,
   getChartAnomalyAnnotations,
+  getChartDataYBounds,
   getNearestChartSample,
   getChartThresholdAnnotations,
   getChartValueModeDefinitions,
@@ -276,6 +278,60 @@ describe("@moritzbrantner/charts", () => {
 
     expect(container.firstElementChild?.getAttribute("data-chart-legend-side")).toBe("left");
     expect(container.firstElementChild?.firstElementChild?.textContent).toBe("Legend");
+  });
+
+  test("opens a y-axis range menu and applies manual ranges", () => {
+    const onValueChange = vi.fn();
+    const { container } = renderYAxisRangeMenu({ onValueChange });
+
+    openYAxisRangeMenu(container);
+
+    expect(screen.getByRole("dialog", { name: "Y-axis range menu" })).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Min"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Max"), { target: { value: "80" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onValueChange).toHaveBeenCalledWith([10, 80]);
+    expect(screen.queryByRole("dialog", { name: "Y-axis range menu" })).toBeNull();
+  });
+
+  test("resets a y-axis range menu to auto", () => {
+    const onValueChange = vi.fn();
+    const { container } = renderYAxisRangeMenu({ onValueChange, value: [10, 80] });
+
+    openYAxisRangeMenu(container);
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+
+    expect(onValueChange).toHaveBeenCalledWith(null);
+  });
+
+  test("keeps the y-axis range menu open for invalid ranges", () => {
+    const onValueChange = vi.fn();
+    const { container } = renderYAxisRangeMenu({ onValueChange });
+
+    openYAxisRangeMenu(container);
+    fireEvent.change(screen.getByLabelText("Min"), { target: { value: "90" } });
+    fireEvent.change(screen.getByLabelText("Max"), { target: { value: "80" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByText("Max must be greater than min.")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Y-axis range menu" })).toBeTruthy();
+  });
+
+  test("renders y-axis range menu legend items and toggles hidden ids", () => {
+    const onHiddenIdsChange = vi.fn();
+    const { container } = renderYAxisRangeMenu({ onHiddenIdsChange });
+
+    openYAxisRangeMenu(container);
+
+    expect(screen.getByRole("group", { name: "Y-axis series legend" })).toBeTruthy();
+    expect(screen.getByText("Average")).toBeTruthy();
+    expect(screen.getByText("Rolling")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Average" }));
+
+    expect(onHiddenIdsChange).toHaveBeenCalledWith(["average"]);
   });
 
   test("renders derived metric deltas", () => {
@@ -885,6 +941,26 @@ describe("@moritzbrantner/charts", () => {
     });
   });
 
+  test("gets chart data y bounds across selected keys", () => {
+    expect(
+      getChartDataYBounds(
+        [
+          { average: 2, ignored: "8", rolling: null },
+          { average: -4, ignored: Number.NaN, rolling: 12 },
+          { average: undefined, rolling: 6 },
+        ],
+        ["average", "rolling", "ignored"],
+      ),
+    ).toEqual({
+      maxY: 12,
+      minY: -4,
+    });
+    expect(getChartDataYBounds([{ label: "A" }], ["missing"])).toEqual({
+      maxY: null,
+      minY: null,
+    });
+  });
+
   test("measures responsive chart bin counts and manual overrides", () => {
     let resizeCallback: ResizeObserverCallback | null = null;
 
@@ -1139,6 +1215,50 @@ describe("@moritzbrantner/charts", () => {
     expect(onDomainChange.mock.lastCall?.[0][1]).toBeCloseTo(42.214, 4);
   });
 });
+
+function renderYAxisRangeMenu({
+  onHiddenIdsChange,
+  onValueChange = vi.fn(),
+  value = null,
+}: {
+  onHiddenIdsChange?: (hiddenIds: string[]) => void;
+  onValueChange?: (range: [number, number] | null) => void;
+  value?: [number, number] | null;
+}) {
+  return render(
+    <LineChart
+      width={400}
+      height={260}
+      data={[
+        { label: "A", average: 20, rolling: 24 },
+        { label: "B", average: 80, rolling: 72 },
+        { label: "C", average: 40, rolling: 48 },
+      ]}
+      margin={{ bottom: 20, left: 20, right: 20, top: 20 }}
+    >
+      <YAxis width={60} />
+      <Line dataKey="average" dot={false} isAnimationActive={false} />
+      <ChartYAxisRangeMenu
+        dataDomain={[20, 80]}
+        hiddenIds={[]}
+        legendItems={[
+          { color: "red", id: "average", label: "Average" },
+          { color: "blue", id: "rolling", label: "Rolling" },
+        ]}
+        onHiddenIdsChange={onHiddenIdsChange}
+        onValueChange={onValueChange}
+        value={value}
+      />
+    </LineChart>,
+  );
+}
+
+function openYAxisRangeMenu(container: HTMLElement) {
+  const trigger = container.querySelector("[data-chart-y-axis-range-trigger]");
+
+  expect(trigger).toBeTruthy();
+  fireChartInteractionEvent(trigger!, "contextmenu", 80, 80);
+}
 
 function firePointerEvent(
   element: Element,

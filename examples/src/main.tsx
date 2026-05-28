@@ -51,6 +51,7 @@ import {
   ChartSampleSparkline,
   ChartSeriesLegend,
   ChartThresholdMarker,
+  ChartYAxisRangeMenu,
   ChartValueModePreview,
   ChartValueModeSelector,
   ChartWithLegend,
@@ -64,6 +65,7 @@ import {
   createChartRenderData,
   createRollingChartSeries,
   getChartAnomalyAnnotations,
+  getChartDataYBounds,
   getChartThresholdAnnotations,
   getChartValueModeDefinition,
   measureChartSeries,
@@ -71,6 +73,7 @@ import {
   useChartSeriesVisibility,
   useChartWheelDomain,
   useProgressiveChartDensity,
+  type ChartAxisRange,
   type ChartDensitySample,
   type ChartGapBehavior,
   type ChartRange,
@@ -376,6 +379,7 @@ function ChartPlayground({
   const [showMinimap, setShowMinimap] = useState(true);
   const [hiddenLegendIds, setHiddenLegendIds] = useState<string[]>([]);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
+  const [yAxisRange, setYAxisRange] = useState<ChartAxisRange>(null);
   const definition = getChartValueModeDefinition(valueMode);
   const series = useMemo(
     () =>
@@ -489,6 +493,23 @@ function ChartPlayground({
   const visibleSeriesIds = new Set(
     legendItems.filter((item) => !hiddenLegendIds.includes(item.id)).map((item) => item.id),
   );
+  const yAxisDataKeys = getPlaygroundYAxisDataKeys({
+    chartType,
+    grouped,
+    valueMode,
+    visibleSeriesIds,
+  });
+  const yAxisRows = getPlaygroundYAxisRows({
+    chartType,
+    groupedRows,
+    histogramRows,
+    renderRows,
+  });
+  const yAxisBounds = getChartDataYBounds(yAxisRows, yAxisDataKeys);
+  const yAxisDataDomain =
+    yAxisBounds.minY === null || yAxisBounds.maxY === null
+      ? null
+      : ([yAxisBounds.minY, yAxisBounds.maxY] satisfies [number, number]);
   const chartPreview = (
     <div className="grid gap-4">
       {chartType === "heatmap" ? (
@@ -537,6 +558,12 @@ function ChartPlayground({
             visibleSeriesIds,
             grouped,
             groupedRows,
+            hiddenLegendIds,
+            legendItems,
+            onHiddenLegendIdsChange: setHiddenLegendIds,
+            yAxisDataDomain,
+            yAxisRange,
+            onYAxisRangeChange: setYAxisRange,
           })}
         </ChartContainer>
       )}
@@ -795,9 +822,13 @@ function renderPlaygroundChart({
   gapBehavior,
   grouped,
   groupedRows,
+  hiddenLegendIds,
   histogramRows,
   labels,
+  legendItems,
+  onHiddenLegendIdsChange,
   onSampleSelect,
+  onYAxisRangeChange,
   rows,
   samples,
   selectedSampleIndex,
@@ -807,6 +838,8 @@ function renderPlaygroundChart({
   threshold,
   valueMode,
   visibleSeriesIds,
+  yAxisDataDomain,
+  yAxisRange,
 }: {
   barRadius: number;
   chartType: PlaygroundChartType;
@@ -816,6 +849,7 @@ function renderPlaygroundChart({
   gapBehavior: ChartGapBehavior;
   grouped: PlaygroundGroupedSeries;
   groupedRows: Array<Record<string, unknown>>;
+  hiddenLegendIds: readonly string[];
   histogramRows: Array<{ count: number; label: string }>;
   labels: Array<{
     id: string;
@@ -825,7 +859,10 @@ function renderPlaygroundChart({
     x: string;
     y: number;
   }>;
+  legendItems: readonly ChartLegendItem[];
+  onHiddenLegendIdsChange: (hiddenIds: string[]) => void;
   onSampleSelect: (interaction: ChartSampleInteraction<TelemetryProperties>) => void;
+  onYAxisRangeChange: (range: ChartAxisRange) => void;
   rows: PlaygroundRenderRow[];
   samples: ChartDensitySample<TelemetryProperties>[];
   selectedSampleIndex: number | null;
@@ -835,9 +872,12 @@ function renderPlaygroundChart({
   threshold: number;
   valueMode: ChartValueMode;
   visibleSeriesIds: ReadonlySet<string>;
+  yAxisDataDomain: [number, number] | null;
+  yAxisRange: ChartAxisRange;
 }) {
   const commonMargin = { bottom: 8, left: 4, right: 14, top: 12 };
   const connectNulls = gapBehavior === "connect";
+  const yAxisDomain = yAxisRange ?? (["auto", "auto"] as const);
   const thresholdLine = showThreshold ? (
     <ReferenceLine
       y={threshold}
@@ -855,6 +895,16 @@ function renderPlaygroundChart({
       onSampleSelect={onSampleSelect}
     />
   );
+  const yAxisRangeMenu = (
+    <ChartYAxisRangeMenu
+      dataDomain={yAxisDataDomain}
+      hiddenIds={hiddenLegendIds}
+      legendItems={legendItems}
+      onHiddenIdsChange={onHiddenLegendIdsChange}
+      onValueChange={onYAxisRangeChange}
+      value={yAxisRange}
+    />
+  );
 
   switch (chartType) {
     case "candle":
@@ -864,13 +914,20 @@ function renderPlaygroundChart({
         <BarChart data={rows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={52} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
             <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {yAxisRangeMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -879,7 +936,13 @@ function renderPlaygroundChart({
         <AreaChart data={rows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={52} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -906,6 +969,7 @@ function renderPlaygroundChart({
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {yAxisRangeMenu}
           {sampleOverlay}
         </AreaChart>
       );
@@ -914,11 +978,18 @@ function renderPlaygroundChart({
         <BarChart data={histogramRows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} />
-          <YAxis tickLine={false} axisLine={false} width={46} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={46}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {visibleSeriesIds.has("count") ? (
             <Bar dataKey="count" fill="var(--color-count)" radius={barRadius} />
           ) : null}
+          {yAxisRangeMenu}
         </BarChart>
       );
     case "line":
@@ -926,7 +997,13 @@ function renderPlaygroundChart({
         <LineChart data={rows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={52} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -953,6 +1030,7 @@ function renderPlaygroundChart({
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {yAxisRangeMenu}
           {sampleOverlay}
         </LineChart>
       );
@@ -961,7 +1039,13 @@ function renderPlaygroundChart({
         <BarChart data={groupedRows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={46} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={46}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {grouped.groups.map((group, index) =>
             visibleSeriesIds.has(group.key) ? (
@@ -974,6 +1058,7 @@ function renderPlaygroundChart({
               />
             ) : null,
           )}
+          {yAxisRangeMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -983,7 +1068,13 @@ function renderPlaygroundChart({
         <AreaChart data={rows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={52} />
+          <YAxis
+            allowDataOverflow={yAxisRange !== null}
+            domain={yAxisDomain}
+            tickLine={false}
+            axisLine={false}
+            width={52}
+          />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -999,10 +1090,63 @@ function renderPlaygroundChart({
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
+          {yAxisRangeMenu}
           {sampleOverlay}
         </AreaChart>
       );
   }
+}
+
+function getPlaygroundYAxisDataKeys({
+  chartType,
+  grouped,
+  valueMode,
+  visibleSeriesIds,
+}: {
+  chartType: PlaygroundChartType;
+  grouped: PlaygroundGroupedSeries;
+  valueMode: ChartValueMode;
+  visibleSeriesIds: ReadonlySet<string>;
+}): string[] {
+  switch (chartType) {
+    case "histogram":
+      return visibleSeriesIds.has("count") ? ["count"] : [];
+    case "stacked":
+      return grouped.groups
+        .map((group) => group.key)
+        .filter((groupKey) => visibleSeriesIds.has(groupKey));
+    case "combo":
+    case "line":
+      return [valueMode, "rolling"].filter((dataKey) => visibleSeriesIds.has(dataKey));
+    case "bar":
+    case "area":
+      return visibleSeriesIds.has(valueMode) ? [valueMode] : [];
+    case "candle":
+    case "heatmap":
+      return [];
+  }
+}
+
+function getPlaygroundYAxisRows({
+  chartType,
+  groupedRows,
+  histogramRows,
+  renderRows,
+}: {
+  chartType: PlaygroundChartType;
+  groupedRows: Array<Record<string, unknown>>;
+  histogramRows: Array<{ count: number; label: string }>;
+  renderRows: PlaygroundRenderRow[];
+}): readonly Record<string, unknown>[] {
+  if (chartType === "histogram") {
+    return histogramRows;
+  }
+
+  if (chartType === "stacked") {
+    return groupedRows;
+  }
+
+  return renderRows;
 }
 
 function createPlaygroundLegendItems({
@@ -2509,6 +2653,7 @@ function ComposedChartExamples({
   activeRange: ChartRange;
   index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
 }) {
+  const [lineYAxisRange, setLineYAxisRange] = useState<ChartAxisRange>(null);
   const series = useMemo(
     () =>
       index.getChartSeries({
@@ -2570,6 +2715,12 @@ function ComposedChartExamples({
   const lineVisibility = useChartSeriesVisibility({
     itemIds: lineLegendItems.map((item) => item.id),
   });
+  const lineYAxisBounds = getChartDataYBounds(rows, lineVisibility.visibleIds);
+  const lineYAxisDataDomain =
+    lineYAxisBounds.minY === null || lineYAxisBounds.maxY === null
+      ? null
+      : ([lineYAxisBounds.minY, lineYAxisBounds.maxY] satisfies [number, number]);
+  const lineYAxisDomain = lineYAxisRange ?? (["auto", "auto"] as const);
   const grouped = useMemo(
     () =>
       index.getGroupedChartSeries({
@@ -2647,7 +2798,13 @@ function ComposedChartExamples({
               <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                <YAxis tickLine={false} axisLine={false} width={60} />
+                <YAxis
+                  allowDataOverflow={lineYAxisRange !== null}
+                  domain={lineYAxisDomain}
+                  tickLine={false}
+                  axisLine={false}
+                  width={60}
+                />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {lineVisibility.isVisible("average") ? (
                   <Line
@@ -2690,6 +2847,14 @@ function ComposedChartExamples({
                     type="monotone"
                   />
                 ) : null}
+                <ChartYAxisRangeMenu
+                  dataDomain={lineYAxisDataDomain}
+                  hiddenIds={lineVisibility.hiddenIds}
+                  legendItems={lineLegendItems}
+                  onHiddenIdsChange={lineVisibility.setHiddenIds}
+                  onValueChange={setLineYAxisRange}
+                  value={lineYAxisRange}
+                />
               </LineChart>
             </ChartContainer>
           </ChartWithLegend>

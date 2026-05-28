@@ -113,6 +113,18 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await playground.locator("select").nth(2).selectOption("line");
   await expect(playground).toContainText("Line chart");
 
+  const yAxisTrigger = playground.locator("[data-chart-y-axis-range-trigger]").first();
+  await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
+  const yAxisDialog = page.getByRole("dialog", { name: "Y-axis range menu" });
+  await expect(yAxisDialog).toBeVisible();
+  await yAxisDialog.getByLabel("Min").fill("0");
+  await yAxisDialog.getByLabel("Max").fill("250");
+  await yAxisDialog.getByRole("button", { name: "Apply" }).click();
+  await expect(page.getByRole("dialog", { name: "Y-axis range menu" })).toHaveCount(0);
+  await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
+  await expect(page.getByRole("group", { name: "Y-axis series legend" })).toContainText("Average");
+  await page.keyboard.press("Escape");
+
   await playground.locator("select").nth(2).selectOption("candle");
   await expect(playground).toContainText("Candle chart");
   await expect(page.getByRole("img", { name: "Candle chart" })).toBeVisible();
