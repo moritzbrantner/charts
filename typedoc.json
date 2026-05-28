@@ -8,6 +8,17 @@
   "excludeInternal": true,
   "excludePrivate": true,
   "hideGenerator": true,
+  "intentionallyNotExported": [
+    "BinnedSeries",
+    "BinnedSeriesBin",
+    "BinnedSeriesIndexOptions",
+    "BinnedSeriesQuery",
+    "BinnedSeriesSummary",
+    "DataDensityMetricRecord",
+    "DataDensityViewportSummary",
+    "IndexedNumericSeriesPoint",
+    "NumericSeriesPoint"
+  ],
   "includeVersion": true,
   "navigationLinks": {
     "GitHub": "https://github.com/moritzbrantner/charts"

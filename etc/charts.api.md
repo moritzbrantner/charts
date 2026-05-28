@@ -3,9 +3,61 @@
 This file is generated from `dist/index.d.ts`. Update it intentionally when the public API changes.
 
 ```ts
-import { DataDensityMetricRecord, IndexedNumericSeriesPoint, BinnedSeriesBin, BinnedSeriesSummary, BinnedSeriesQuery, BinnedSeries, BinnedSeriesIndexOptions, DataDensityViewportSummary, NumericSeriesPoint } from '@moritzbrantner/data-density';
 import { ChartContainer, ChartConfig } from '@moritzbrantner/ui';
 import { ComponentProps, JSX, ReactNode, MouseEvent, WheelEventHandler } from 'react';
+
+type DataDensityMetricRecord = Record<string, number>;
+type DataDensityMetricSummary = {
+    itemCount: number;
+    metricKeys: string[];
+    metrics: DataDensityMetricRecord;
+};
+type DataDensityViewportSummary = DataDensityMetricSummary & {
+    kind: "chart" | "graph" | "map" | "table";
+};
+type NumericSeriesPoint<TProperties = Record<string, unknown>> = {
+    id?: string | number;
+    label?: string;
+    metrics?: DataDensityMetricRecord;
+    properties?: TProperties;
+    x: number;
+    y: number;
+};
+type IndexedNumericSeriesPoint<TProperties = Record<string, unknown>> = Required<NumericSeriesPoint<TProperties>> & {
+    id: string;
+};
+type NumericSeriesDomain = [min: number, max: number];
+type BinnedSeriesQuery = {
+    includeEmptyBins?: boolean;
+    targetBinCount: number;
+    xDomain: NumericSeriesDomain;
+};
+type BinnedSeriesBin<TProperties = Record<string, unknown>> = {
+    averageY: number | null;
+    firstPoint: IndexedNumericSeriesPoint<TProperties> | null;
+    index: number;
+    lastPoint: IndexedNumericSeriesPoint<TProperties> | null;
+    maxY: number | null;
+    metrics: DataDensityMetricRecord;
+    minY: number | null;
+    pointCount: number;
+    sumY: number;
+    x0: number;
+    x1: number;
+};
+type BinnedSeriesSummary = {
+    binCount: number;
+    metrics: DataDensityMetricRecord;
+    pointCount: number;
+    xDomain: NumericSeriesDomain;
+};
+type BinnedSeries<TProperties = Record<string, unknown>> = {
+    bins: Array<BinnedSeriesBin<TProperties>>;
+    summary: BinnedSeriesSummary;
+};
+type BinnedSeriesIndexOptions<TProperties = Record<string, unknown>> = {
+    filterPoint?: (point: IndexedNumericSeriesPoint<TProperties>) => boolean;
+};
 
 type ChartSampleValueAccessor<TProperties = Record<string, unknown>> = ChartValueMode | {
     metric: string;

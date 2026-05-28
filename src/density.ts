@@ -12,7 +12,7 @@ import {
   type DataDensityViewportSummary,
   type IndexedNumericSeriesPoint,
   type NumericSeriesPoint,
-} from "@moritzbrantner/data-density";
+} from "./data-density";
 
 import type { ChartDerivedPoint } from "./analytics";
 
