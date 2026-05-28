@@ -37,6 +37,9 @@ try {
   assertFile(path.join(packageDir, "package.json"));
   assertFile(path.join(packageDir, "dist", "index.js"));
   assertFile(path.join(packageDir, "dist", "index.d.ts"));
+  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_bg.js"));
+  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_bg.wasm"));
+  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_embedded.js"));
 
   const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 
@@ -86,8 +89,10 @@ try {
       "",
       "const index = createChartDensityIndex([{ id: 'a', x: 0, y: 2 }], { backend: 'hybrid-js' });",
       "const series = index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
+      "const wasmIndex = createChartDensityIndex([{ id: 'b', metrics: { count: 1 }, x: 0, y: 4 }], { backend: 'wasm-index' });",
+      "const wasmSeries = wasmIndex.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
       "",
-      "if (CHART_VALUE_MODE_DEFINITIONS.length === 0 || series.samples[0]?.y !== 2) {",
+      "if (CHART_VALUE_MODE_DEFINITIONS.length === 0 || series.samples[0]?.y !== 2 || wasmSeries.samples[0]?.y !== 4) {",
       "  throw new Error('Packed package runtime import returned unexpected data.');",
       "}",
       "",
@@ -99,7 +104,7 @@ try {
       'import { createChartDensityIndex, type ChartSeriesPoint } from "@moritzbrantner/charts";',
       "",
       "const points: ChartSeriesPoint<{ plan: string }>[] = [{ id: 'a', properties: { plan: 'scale' }, x: 0, y: 2 }];",
-      "const index = createChartDensityIndex(points, { backend: 'hybrid-js' });",
+      "const index = createChartDensityIndex(points, { backend: 'wasm-index' });",
       "const sample = index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] }).samples[0];",
       "",
       "if (sample?.firstPoint?.properties.plan !== 'scale') {",
@@ -191,7 +196,7 @@ try {
       'import { Area, AreaChart } from "recharts";',
       'import { createChartDensityIndex, createChartRenderData } from "@moritzbrantner/charts";',
       "",
-      "const index = createChartDensityIndex([{ id: 'a', x: 0, y: 2 }], { backend: 'hybrid-js' });",
+      "const index = createChartDensityIndex([{ id: 'a', x: 0, y: 2 }], { backend: 'wasm-index' });",
       "const series = index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
       "const rows = createChartRenderData(series.samples).rows;",
       "",

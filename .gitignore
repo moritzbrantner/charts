@@ -10,6 +10,7 @@ temp/
 *.log
 *.tsbuildinfo
 coverage/
+crates/**/target/
 playwright-report/
 test-results/
 storybook-static/

@@ -2,6 +2,7 @@ node_modules/
 dist/
 dist-examples/
 docs/
+src/wasm/pkg/
 etc/*.api.md
 coverage/
 playwright-report/

@@ -193,6 +193,97 @@ describe("@moritzbrantner/charts", () => {
     ).toEqual([10, null, -4, null]);
   });
 
+  test("keeps wasm chart series in parity across edge-case data shapes", () => {
+    const scenarios = [
+      {
+        name: "empty",
+        points: [],
+      },
+      {
+        name: "sorted",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `sorted-${pointIndex}`,
+          metrics: { count: 1, revenue: pointIndex % 5 },
+          x: pointIndex,
+          y: pointIndex % 7,
+        })),
+      },
+      {
+        name: "reverse",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `reverse-${pointIndex}`,
+          metrics: { count: 1, revenue: pointIndex % 5 },
+          x: 24 - pointIndex,
+          y: pointIndex % 7,
+        })),
+      },
+      {
+        name: "random-and-invalid",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `random-${pointIndex}`,
+          metrics: {
+            count: 1,
+            missingSometimes: pointIndex % 3 === 0 ? Number.NaN : pointIndex,
+          },
+          x: pointIndex === 5 ? Number.POSITIVE_INFINITY : (pointIndex * 17) % 24,
+          y: pointIndex === 9 ? Number.NaN : Math.sin(pointIndex / 3) * 10,
+        })),
+      },
+      {
+        name: "duplicates",
+        points: Array.from({ length: 24 }, (_, pointIndex) => ({
+          id: `duplicate-${pointIndex}`,
+          metrics: { count: 1 },
+          x: Math.floor(pointIndex / 4),
+          y: pointIndex - 12,
+        })),
+      },
+    ];
+    const queries = [
+      { includeEmptyBins: true, targetBinCount: 8, xDomain: [20, 0] as [number, number] },
+      { includeEmptyBins: false, targetBinCount: 6, xDomain: [0, 6] as [number, number] },
+      { includeEmptyBins: true, targetBinCount: 4, xDomain: [2, 2] as [number, number] },
+    ];
+    const valueModes: ChartValueMode[] = [
+      "average",
+      "count",
+      "max",
+      "min",
+      "sum",
+      "p10",
+      "p25",
+      "p50",
+      "p75",
+      "p90",
+      "p95",
+      "p99",
+    ];
+
+    for (const scenario of scenarios) {
+      const hybrid = createChartDensityIndex(scenario.points, { backend: "hybrid-js" });
+      const wasm = createChartDensityIndex(scenario.points, { backend: "wasm-index" });
+
+      for (const query of queries) {
+        for (const valueMode of valueModes) {
+          expect(
+            wasm.getChartSeries({
+              ...query,
+              percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
+              valueMode,
+            }),
+            `${scenario.name} ${valueMode} ${query.xDomain.join("-")}`,
+          ).toEqual(
+            hybrid.getChartSeries({
+              ...query,
+              percentiles: ["p10", "p25", "p50", "p75", "p90", "p95", "p99"],
+              valueMode,
+            }),
+          );
+        }
+      }
+    }
+  });
+
   test("exposes chart value mode definitions", () => {
     expect(getChartValueModeDefinition("count")).toMatchObject({
       axisLabel: "Point count",
@@ -241,6 +332,57 @@ describe("@moritzbrantner/charts", () => {
     });
     expect(index.getHistogram({ bucketCount: 4, includeEmptyBuckets: false }).buckets.length).toBe(
       3,
+    );
+  });
+
+  test("keeps histogram and heatmap queries in parity across backends", () => {
+    const points = Array.from({ length: 60 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: {
+        count: 1,
+        latency: pointIndex % 11,
+        revenue: pointIndex % 4 === 0 ? Number.NaN : pointIndex * 2,
+      },
+      x: pointIndex % 2 === 0 ? pointIndex : 60 - pointIndex,
+      y: Math.cos(pointIndex / 5) * 20,
+    }));
+    const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
+    const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
+
+    expect(wasm.getHistogram({ bucketCount: 7 })).toEqual(hybrid.getHistogram({ bucketCount: 7 }));
+    expect(
+      wasm.getHistogram({
+        bucketCount: 5,
+        includeEmptyBuckets: false,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [0, 10],
+        xDomain: [10, 40],
+      }),
+    ).toEqual(
+      hybrid.getHistogram({
+        bucketCount: 5,
+        includeEmptyBuckets: false,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [0, 10],
+        xDomain: [10, 40],
+      }),
+    );
+    expect(
+      wasm.getHeatmap({
+        includeEmptyCells: false,
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      }),
+    ).toEqual(
+      hybrid.getHeatmap({
+        includeEmptyCells: false,
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      }),
     );
   });
 
@@ -530,5 +672,34 @@ describe("@moritzbrantner/charts", () => {
 
     expect(index.getActiveBackend()).toBe("wasm-index");
     expect(index.getPointById("point-20")?.y).toBe(0);
+  });
+
+  test("reports backend capabilities", async () => {
+    const hybrid = createChartDensityIndex([{ x: 0, y: 1 }], { backend: "hybrid-js" });
+    const wasm = createChartDensityIndex([{ x: 0, y: 1 }], { backend: "wasm-index" });
+    const progressive = createProgressiveChartDensityIndex([{ x: 0, y: 1 }], {
+      progressive: { warmup: "manual" },
+    });
+
+    expect(hybrid.getBackendCapabilities?.()).toMatchObject({
+      backend: "hybrid-js",
+      usesWasm: false,
+    });
+    expect(wasm.getBackendCapabilities?.()).toMatchObject({
+      backend: "wasm-index",
+      supportsGroupedSeries: false,
+      usesWasm: true,
+    });
+    expect(progressive.getBackendCapabilities?.()).toMatchObject({
+      backend: "hybrid-js",
+      usesWasm: false,
+    });
+
+    await progressive.warmWasmIndex();
+
+    expect(progressive.getBackendCapabilities?.()).toMatchObject({
+      backend: "wasm-index",
+      usesWasm: true,
+    });
   });
 });

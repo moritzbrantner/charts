@@ -13,6 +13,7 @@ import {
   type IndexedNumericSeriesPoint,
   type NumericSeriesPoint,
 } from "./data-density";
+import { createWasmChartDensityIndex } from "./wasm-index";
 
 import type { ChartDerivedPoint } from "./analytics";
 
@@ -142,6 +143,7 @@ export type ChartDensitySeries<TProperties = Record<string, unknown>> = {
 };
 
 export type ChartDensityIndex<TProperties = Record<string, unknown>> = {
+  getBackendCapabilities?: () => ChartBackendCapabilities;
   getBinnedSeries(query: BinnedSeriesQuery): BinnedSeries<TProperties>;
   getChartSeries(query: ChartDensityQuery): ChartDensitySeries<TProperties>;
   getGroupedChartSeries(
@@ -156,6 +158,15 @@ export type ChartDensityIndex<TProperties = Record<string, unknown>> = {
     minX: number;
     minY: number;
   } | null;
+};
+
+export type ChartBackendCapabilities = {
+  backend: BinnedSeriesBackend;
+  supportsGroupedSeries: boolean;
+  supportsHeatmap: boolean;
+  supportsHistogram: boolean;
+  supportsPercentiles: boolean;
+  usesWasm: boolean;
 };
 
 export type ChartPointValueAccessor<TProperties = Record<string, unknown>> =
@@ -546,6 +557,19 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
   }
 
   return {
+    getBackendCapabilities() {
+      return (
+        activeIndex.getBackendCapabilities?.() ?? {
+          backend: activeBackend,
+          supportsGroupedSeries: true,
+          supportsHeatmap: true,
+          supportsHistogram: true,
+          supportsPercentiles: true,
+          usesWasm: activeBackend === "wasm-index",
+        }
+      );
+    },
+
     getActiveBackend() {
       return activeBackend;
     },
@@ -599,6 +623,21 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties> & { backend?: BinnedSeriesBackend },
 ): ChartDensityIndex<TProperties> {
+  if (options.backend === "wasm-index") {
+    return createWasmChartDensityIndex(
+      points,
+      options as BinnedSeriesIndexOptions<TProperties>,
+      createHybridChartDensityIndex(points, options),
+    );
+  }
+
+  return createHybridChartDensityIndex(points, options);
+}
+
+function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
+  points: readonly ChartSeriesPoint<TProperties>[],
+  options: BinnedSeriesIndexOptions<TProperties> & { backend?: BinnedSeriesBackend },
+): ChartDensityIndex<TProperties> {
   const binnedIndex = createBinnedSeriesIndex(
     points,
     options as BinnedSeriesIndexOptions<TProperties>,
@@ -606,6 +645,17 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   const pointStore = createChartPointStore(points, options);
 
   return {
+    getBackendCapabilities() {
+      return {
+        backend: "hybrid-js",
+        supportsGroupedSeries: true,
+        supportsHeatmap: true,
+        supportsHistogram: true,
+        supportsPercentiles: true,
+        usesWasm: false,
+      };
+    },
+
     getBinnedSeries(query) {
       return binnedIndex.getBinnedSeries(query);
     },

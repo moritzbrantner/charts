@@ -22,6 +22,19 @@ const runFullMatrix = process.env.CHARTS_BENCH_FULL === "1";
 const seriesSizes = runFullMatrix ? [10_000, 100_000, 500_000] : [10_000, 100_000];
 const repeatedQueryCount = runFullMatrix ? 30 : 8;
 
+results.push(
+  benchmark("chart.wasm.module.load", () => {
+    const index = createChartDensityIndex(
+      [{ id: "wasm-load", metrics: { count: 1 }, x: 0, y: 1 }],
+      {
+        backend: "wasm-index",
+      },
+    );
+
+    assertChartSeries(index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] }));
+  }),
+);
+
 for (const size of seriesSizes) {
   for (const scenario of [
     { metricCount: 3, pattern: "sorted" },
@@ -65,6 +78,38 @@ for (const size of seriesSizes) {
               }),
             );
           }
+        }),
+      );
+      results.push(
+        benchmark(`${baseName}.query.percentiles`, () => {
+          assertChartSeries(
+            index.getChartSeries({
+              ...queries[0],
+              percentiles: ["p25", "p50", "p75", "p95"],
+              valueMode: "p95",
+            }),
+          );
+        }),
+      );
+      results.push(
+        benchmark(`${baseName}.histogram`, () => {
+          assertHistogram(
+            index.getHistogram({
+              bucketCount: 200,
+              xDomain: [0, size - 1],
+            }),
+          );
+        }),
+      );
+      results.push(
+        benchmark(`${baseName}.heatmap`, () => {
+          assertHeatmap(
+            index.getHeatmap({
+              xBinCount: 100,
+              xDomain: [0, size - 1],
+              yBinCount: 50,
+            }),
+          );
         }),
       );
       results.push(
@@ -140,6 +185,7 @@ const slowBenchmarks = results.filter(
   (result) =>
     result.kind !== "memory" && failNames.has(result.name) && result.durationMs > maxDurationMs,
 );
+const wasmRatioFailures = readWasmRatioFailures(results);
 
 for (const result of results) {
   const suffix = result.kind === "memory" ? "MB heap delta" : "ms";
@@ -159,6 +205,19 @@ if (slowBenchmarks.length > 0) {
       .join(", ")}`,
   );
   process.exit(1);
+}
+
+if (wasmRatioFailures.length > 0) {
+  const message = `@moritzbrantner/charts WASM benchmarks missed speedup targets: ${wasmRatioFailures.join(
+    ", ",
+  )}`;
+
+  if (process.env.CHARTS_BENCH_ENFORCE_WASM_RATIO === "1") {
+    console.error(message);
+    process.exit(1);
+  }
+
+  console.warn(`${message} (set CHARTS_BENCH_ENFORCE_WASM_RATIO=1 to fail this gate)`);
 }
 
 function benchmark(name, run) {
@@ -251,6 +310,18 @@ function assertChartSeries(series) {
   }
 }
 
+function assertHistogram(histogram) {
+  if (histogram.buckets.length !== histogram.summary.bucketCount) {
+    throw new Error("histogram bucket count did not match summary");
+  }
+}
+
+function assertHeatmap(heatmap) {
+  if (heatmap.summary.maxCellCount < 0) {
+    throw new Error("heatmap max cell count was invalid");
+  }
+}
+
 function assertViewportSummary(summary, series) {
   if (summary.sampleCount !== series.summary.sampleCount) {
     throw new Error("chart viewport sample count did not match series");
@@ -259,6 +330,38 @@ function assertViewportSummary(summary, series) {
   if (summary.itemCount !== series.summary.pointCount) {
     throw new Error("chart viewport item count did not match point count");
   }
+}
+
+function readWasmRatioFailures(benchmarkResults) {
+  const failures = [];
+  const requiredSpeedup = 1.5;
+  const pairs = [
+    [
+      "chart.100k.sorted.3metrics.hybrid-js.query.full",
+      "chart.100k.sorted.3metrics.wasm-index.query.full",
+    ],
+    [
+      "chart.100k.sorted.3metrics.hybrid-js.query.repeated",
+      "chart.100k.sorted.3metrics.wasm-index.query.repeated",
+    ],
+  ];
+
+  for (const [hybridName, wasmName] of pairs) {
+    const hybrid = benchmarkResults.find((result) => result.name === hybridName);
+    const wasm = benchmarkResults.find((result) => result.name === wasmName);
+
+    if (!hybrid || !wasm || hybrid.kind === "memory" || wasm.kind === "memory") {
+      continue;
+    }
+
+    const speedup = hybrid.durationMs / Math.max(wasm.durationMs, 0.001);
+
+    if (speedup < requiredSpeedup) {
+      failures.push(`${wasmName} (${speedup.toFixed(2)}x)`);
+    }
+  }
+
+  return failures;
 }
 
 function formatSize(size) {
