@@ -42,6 +42,7 @@ import {
   ChartHeatmapGrid,
   ChartHotBinRow,
   ChartLabelOverlay,
+  type ChartLegendItem,
   ChartMetricCard,
   ChartMetricStrip,
   ChartPanel,
@@ -87,7 +88,16 @@ type TelemetryProperties = {
 
 type ChartVariantId = "comparison" | "envelope" | "revenue" | "volume";
 type ExampleDataSetId = "telemetry" | "retail" | "operations" | "sparse";
-type PlaygroundChartType = "area" | "bar" | "combo" | "heatmap" | "histogram" | "line" | "stacked";
+type ExamplePage = "compose" | "examples";
+type PlaygroundChartType =
+  | "area"
+  | "bar"
+  | "candle"
+  | "combo"
+  | "heatmap"
+  | "histogram"
+  | "line"
+  | "stacked";
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
 
 type ExampleDataSet = {
@@ -124,6 +134,7 @@ const formatNumber = new Intl.NumberFormat("en", {
 });
 
 function App() {
+  const page = getExamplePage();
   const datasets = useMemo(() => createExampleDataSets(), []);
   const [datasetId, setDatasetId] = useState<ExampleDataSetId>("telemetry");
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId) ?? datasets[0];
@@ -188,6 +199,7 @@ function App() {
                   datasets and common product analytics views.
                 </p>
               </div>
+              <ExampleNav page={page} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:w-[42rem] lg:grid-cols-4">
               <ChartMetricStrip label="Points" value={formatCompact(points.length)} />
@@ -206,73 +218,118 @@ function App() {
       </section>
 
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-6 lg:px-8">
-        <section
-          className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]"
-          data-testid="dense-trend-example"
-        >
-          <ChartPanel title="Viewport" description="Switch the domain used by each chart query.">
-            <ChartRangeSelector
-              ranges={ranges}
-              value={rangeId}
-              formatDomain={(domain) => `${formatHour(domain[0])} to ${formatHour(domain[1])}`}
-              onValueChange={handleRangeChange}
-            />
-          </ChartPanel>
-          <DenseTrendExample
+        {page === "compose" ? (
+          <ChartPlayground
             activeRange={activeRange}
+            datasets={datasets}
             fullDomain={fullDomain}
             index={index}
+            onDataSetChange={handleDataSetChange}
             onDomainChange={setActiveDomain}
-            valueMode={valueMode}
+            onRangeChange={handleRangeChange}
             onValueModeChange={setValueMode}
+            rangeId={rangeId}
+            selectedDataset={selectedDataset}
+            valueMode={valueMode}
           />
-        </section>
+        ) : (
+          <>
+            <section
+              className="grid gap-6 lg:grid-cols-[18rem_minmax(0,1fr)]"
+              data-testid="dense-trend-example"
+            >
+              <ChartPanel
+                title="Viewport"
+                description="Switch the domain used by each chart query."
+              >
+                <ChartRangeSelector
+                  ranges={ranges}
+                  value={rangeId}
+                  formatDomain={(domain) => `${formatHour(domain[0])} to ${formatHour(domain[1])}`}
+                  onValueChange={handleRangeChange}
+                />
+              </ChartPanel>
+              <DenseTrendExample
+                activeRange={activeRange}
+                fullDomain={fullDomain}
+                index={index}
+                onDomainChange={setActiveDomain}
+                valueMode={valueMode}
+                onValueModeChange={setValueMode}
+              />
+            </section>
 
-        <ChartPlayground
-          activeRange={activeRange}
-          datasets={datasets}
-          fullDomain={fullDomain}
-          index={index}
-          onDataSetChange={handleDataSetChange}
-          onDomainChange={setActiveDomain}
-          onRangeChange={handleRangeChange}
-          onValueModeChange={setValueMode}
-          rangeId={rangeId}
-          selectedDataset={selectedDataset}
-          valueMode={valueMode}
-        />
+            <ValueModeExamples
+              activeRange={activeRange}
+              index={index}
+              valueMode={valueMode}
+              onValueModeChange={setValueMode}
+            />
 
-        <ValueModeExamples
-          activeRange={activeRange}
-          index={index}
-          valueMode={valueMode}
-          onValueModeChange={setValueMode}
-        />
+            <AnalyticsExamples activeRange={activeRange} index={index} />
 
-        <AnalyticsExamples activeRange={activeRange} index={index} />
+            <ChartVariantExamples
+              activeRange={activeRange}
+              fullDomain={fullDomain}
+              index={index}
+              onDomainChange={setActiveDomain}
+            />
 
-        <ChartVariantExamples
-          activeRange={activeRange}
-          fullDomain={fullDomain}
-          index={index}
-          onDomainChange={setActiveDomain}
-        />
+            <ComposedChartExamples activeRange={activeRange} index={index} />
 
-        <ComposedChartExamples activeRange={activeRange} index={index} />
+            <DistributionExamples activeRange={activeRange} index={index} />
 
-        <DistributionExamples activeRange={activeRange} index={index} />
+            <section
+              className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
+              data-testid="linked-and-progressive-examples"
+            >
+              <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
+              <BackendExample points={points} />
+            </section>
 
-        <section
-          className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
-          data-testid="linked-and-progressive-examples"
-        >
-          <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
-          <BackendExample points={points} />
-        </section>
-
-        <GapBehaviorExample points={gapPoints} />
+            <GapBehaviorExample points={gapPoints} />
+          </>
+        )}
       </div>
     </main>
+  );
+}
+
+function getExamplePage(): ExamplePage {
+  const pathname = window.location.pathname.replace(/\/$/, "");
+
+  return pathname.endsWith("/compose") || pathname.endsWith("/compose.html")
+    ? "compose"
+    : "examples";
+}
+
+function ExampleNav({ page }: { page: ExamplePage }) {
+  const links: Array<{ href: string; id: ExamplePage; label: string }> = [
+    { href: "./", id: "examples", label: "Examples" },
+    { href: "./compose.html", id: "compose", label: "Compose" },
+  ];
+
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label="Examples navigation">
+      {links.map((link) => {
+        const active = page === link.id;
+
+        return (
+          <a
+            key={link.id}
+            href={link.href}
+            aria-current={active ? "page" : undefined}
+            className={`inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors ${
+              active
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border/70 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
+            }`}
+          >
+            {link.label}
+          </a>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -314,8 +371,10 @@ function ChartPlayground({
   const [gapBehavior, setGapBehavior] = useState<ChartGapBehavior>("preserve");
   const [showGrid, setShowGrid] = useState(true);
   const [showLabels, setShowLabels] = useState(true);
+  const [showLegend, setShowLegend] = useState(true);
   const [showThreshold, setShowThreshold] = useState(true);
   const [showMinimap, setShowMinimap] = useState(true);
+  const [hiddenLegendIds, setHiddenLegendIds] = useState<string[]>([]);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
   const definition = getChartValueModeDefinition(valueMode);
   const series = useMemo(
@@ -421,6 +480,89 @@ function ChartPlayground({
       },
     ]),
   );
+  const legendItems = createPlaygroundLegendItems({
+    chartType,
+    definitionLabel: definition.label,
+    grouped,
+    valueMode,
+  });
+  const visibleSeriesIds = new Set(
+    legendItems.filter((item) => !hiddenLegendIds.includes(item.id)).map((item) => item.id),
+  );
+  const chartPreview = (
+    <div className="grid gap-4">
+      {chartType === "heatmap" ? (
+        <ChartHeatmapGrid
+          cells={heatmap.cells}
+          formatX={formatHour}
+          formatY={formatCompact}
+          formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
+        />
+      ) : chartType === "candle" ? (
+        <PlaygroundCandlestickChart
+          domain={activeRange.domain}
+          labels={labels}
+          samples={series.samples}
+          selectedSampleIndex={selectedSampleIndex}
+          showGrid={showGrid}
+          showLabels={showLabels}
+          showThreshold={showThreshold}
+          threshold={threshold}
+          visibleSeriesIds={visibleSeriesIds}
+          onSampleSelect={(interaction) => setSelectedSampleIndex(interaction.sample.index)}
+        />
+      ) : (
+        <ChartContainer
+          className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
+          config={chartType === "stacked" ? groupedConfig : config}
+        >
+          {renderPlaygroundChart({
+            barRadius,
+            chartType,
+            curve,
+            domain: activeRange.domain,
+            fillOpacity,
+            gapBehavior,
+            histogramRows,
+            labels,
+            onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
+            rows: renderRows,
+            samples: series.samples,
+            selectedSampleIndex,
+            showGrid,
+            showThreshold,
+            strokeWidth,
+            threshold,
+            valueMode,
+            visibleSeriesIds,
+            grouped,
+            groupedRows,
+          })}
+        </ChartContainer>
+      )}
+
+      {showLabels ? <PlaygroundActiveLabels labels={labels} /> : null}
+
+      {showThreshold && thresholdAnnotations.length > 0 ? (
+        <ChartThresholdMarker
+          annotations={thresholdAnnotations}
+          formatLabel={(annotation) =>
+            `${formatHour(annotation.startX)} to ${formatHour(annotation.endX)}`
+          }
+        />
+      ) : null}
+
+      {showMinimap ? (
+        <ChartDomainMinimap
+          domain={activeRange.domain}
+          fullDomain={fullDomain}
+          samples={minimapSeries.samples}
+          formatDomainValue={formatHour}
+          onDomainChange={onDomainChange}
+        />
+      ) : null}
+    </div>
+  );
 
   return (
     <section className="grid gap-4" data-testid="chart-playground-example">
@@ -442,62 +584,21 @@ function ChartPlayground({
           title={playgroundChartTitles[chartType]}
           description={selectedDataset.description}
         >
-          <div className="grid gap-4">
-            {chartType === "heatmap" ? (
-              <ChartHeatmapGrid
-                cells={heatmap.cells}
-                formatX={formatHour}
-                formatY={formatCompact}
-                formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
-              />
-            ) : (
-              <ChartContainer
-                className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
-                config={chartType === "stacked" ? groupedConfig : config}
-              >
-                {renderPlaygroundChart({
-                  barRadius,
-                  chartType,
-                  curve,
-                  domain: activeRange.domain,
-                  fillOpacity,
-                  gapBehavior,
-                  histogramRows,
-                  labels,
-                  onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
-                  rows: renderRows,
-                  samples: series.samples,
-                  selectedSampleIndex,
-                  showGrid,
-                  showThreshold,
-                  strokeWidth,
-                  threshold,
-                  valueMode,
-                  grouped,
-                  groupedRows,
-                })}
-              </ChartContainer>
-            )}
-
-            {showThreshold && thresholdAnnotations.length > 0 ? (
-              <ChartThresholdMarker
-                annotations={thresholdAnnotations}
-                formatLabel={(annotation) =>
-                  `${formatHour(annotation.startX)} to ${formatHour(annotation.endX)}`
-                }
-              />
-            ) : null}
-
-            {showMinimap ? (
-              <ChartDomainMinimap
-                domain={activeRange.domain}
-                fullDomain={fullDomain}
-                samples={minimapSeries.samples}
-                formatDomainValue={formatHour}
-                onDomainChange={onDomainChange}
-              />
-            ) : null}
-          </div>
+          {showLegend ? (
+            <ChartWithLegend
+              legend={
+                <ChartSeriesLegend
+                  items={legendItems}
+                  hiddenIds={hiddenLegendIds}
+                  onHiddenIdsChange={setHiddenLegendIds}
+                />
+              }
+            >
+              {chartPreview}
+            </ChartWithLegend>
+          ) : (
+            chartPreview
+          )}
         </ChartPanel>
 
         <ChartPanel title="Knobs" description="Configuration controls for the active preview.">
@@ -663,6 +764,7 @@ function ChartPlayground({
             <div className="grid gap-3">
               <SwitchKnob label="Grid" checked={showGrid} onCheckedChange={setShowGrid} />
               <SwitchKnob label="Labels" checked={showLabels} onCheckedChange={setShowLabels} />
+              <SwitchKnob label="Legend" checked={showLegend} onCheckedChange={setShowLegend} />
               <SwitchKnob
                 label="Threshold"
                 checked={showThreshold}
@@ -704,6 +806,7 @@ function renderPlaygroundChart({
   strokeWidth,
   threshold,
   valueMode,
+  visibleSeriesIds,
 }: {
   barRadius: number;
   chartType: PlaygroundChartType;
@@ -731,6 +834,7 @@ function renderPlaygroundChart({
   strokeWidth: number;
   threshold: number;
   valueMode: ChartValueMode;
+  visibleSeriesIds: ReadonlySet<string>;
 }) {
   const commonMargin = { bottom: 8, left: 4, right: 14, top: 12 };
   const connectNulls = gapBehavior === "connect";
@@ -753,6 +857,8 @@ function renderPlaygroundChart({
   );
 
   switch (chartType) {
+    case "candle":
+      return null;
     case "bar":
       return (
         <BarChart data={rows} margin={commonMargin}>
@@ -761,7 +867,9 @@ function renderPlaygroundChart({
           <YAxis tickLine={false} axisLine={false} width={52} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
-          <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
+          {visibleSeriesIds.has(valueMode) ? (
+            <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
+          ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {sampleOverlay}
         </BarChart>
@@ -774,25 +882,29 @@ function renderPlaygroundChart({
           <YAxis tickLine={false} axisLine={false} width={52} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
-          <Area
-            connectNulls={connectNulls}
-            dataKey={valueMode}
-            fill="var(--color-value)"
-            fillOpacity={fillOpacity / 100}
-            isAnimationActive={false}
-            stroke="var(--color-value)"
-            strokeWidth={strokeWidth}
-            type={curve}
-          />
-          <Line
-            connectNulls={connectNulls}
-            dataKey="rolling"
-            dot={false}
-            isAnimationActive={false}
-            stroke="var(--color-rolling)"
-            strokeWidth={Math.max(1, strokeWidth + 0.6)}
-            type={curve}
-          />
+          {visibleSeriesIds.has(valueMode) ? (
+            <Area
+              connectNulls={connectNulls}
+              dataKey={valueMode}
+              fill="var(--color-value)"
+              fillOpacity={fillOpacity / 100}
+              isAnimationActive={false}
+              stroke="var(--color-value)"
+              strokeWidth={strokeWidth}
+              type={curve}
+            />
+          ) : null}
+          {visibleSeriesIds.has("rolling") ? (
+            <Line
+              connectNulls={connectNulls}
+              dataKey="rolling"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-rolling)"
+              strokeWidth={Math.max(1, strokeWidth + 0.6)}
+              type={curve}
+            />
+          ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {sampleOverlay}
         </AreaChart>
@@ -804,7 +916,9 @@ function renderPlaygroundChart({
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} />
           <YAxis tickLine={false} axisLine={false} width={46} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          <Bar dataKey="count" fill="var(--color-count)" radius={barRadius} />
+          {visibleSeriesIds.has("count") ? (
+            <Bar dataKey="count" fill="var(--color-count)" radius={barRadius} />
+          ) : null}
         </BarChart>
       );
     case "line":
@@ -815,25 +929,29 @@ function renderPlaygroundChart({
           <YAxis tickLine={false} axisLine={false} width={52} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
-          <Line
-            connectNulls={connectNulls}
-            dataKey={valueMode}
-            dot={false}
-            isAnimationActive={false}
-            stroke="var(--color-value)"
-            strokeWidth={strokeWidth}
-            type={curve}
-          />
-          <Line
-            connectNulls={connectNulls}
-            dataKey="rolling"
-            dot={false}
-            isAnimationActive={false}
-            stroke="var(--color-rolling)"
-            strokeOpacity={0.65}
-            strokeWidth={Math.max(1, strokeWidth - 0.2)}
-            type={curve}
-          />
+          {visibleSeriesIds.has(valueMode) ? (
+            <Line
+              connectNulls={connectNulls}
+              dataKey={valueMode}
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-value)"
+              strokeWidth={strokeWidth}
+              type={curve}
+            />
+          ) : null}
+          {visibleSeriesIds.has("rolling") ? (
+            <Line
+              connectNulls={connectNulls}
+              dataKey="rolling"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-rolling)"
+              strokeOpacity={0.65}
+              strokeWidth={Math.max(1, strokeWidth - 0.2)}
+              type={curve}
+            />
+          ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {sampleOverlay}
         </LineChart>
@@ -845,15 +963,17 @@ function renderPlaygroundChart({
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
           <YAxis tickLine={false} axisLine={false} width={46} />
           <ChartTooltip content={<ChartTooltipContent />} />
-          {grouped.groups.map((group, index) => (
-            <Bar
-              key={group.key}
-              dataKey={group.key}
-              fill={`var(--chart-${(index % 5) + 1})`}
-              radius={barRadius}
-              stackId="playground"
-            />
-          ))}
+          {grouped.groups.map((group, index) =>
+            visibleSeriesIds.has(group.key) ? (
+              <Bar
+                key={group.key}
+                dataKey={group.key}
+                fill={`var(--chart-${(index % 5) + 1})`}
+                radius={barRadius}
+                stackId="playground"
+              />
+            ) : null,
+          )}
           {sampleOverlay}
         </BarChart>
       );
@@ -866,21 +986,382 @@ function renderPlaygroundChart({
           <YAxis tickLine={false} axisLine={false} width={52} />
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
-          <Area
-            connectNulls={connectNulls}
-            dataKey={valueMode}
-            fill="var(--color-value)"
-            fillOpacity={fillOpacity / 100}
-            isAnimationActive={false}
-            stroke="var(--color-value)"
-            strokeWidth={strokeWidth}
-            type={curve}
-          />
+          {visibleSeriesIds.has(valueMode) ? (
+            <Area
+              connectNulls={connectNulls}
+              dataKey={valueMode}
+              fill="var(--color-value)"
+              fillOpacity={fillOpacity / 100}
+              isAnimationActive={false}
+              stroke="var(--color-value)"
+              strokeWidth={strokeWidth}
+              type={curve}
+            />
+          ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {sampleOverlay}
         </AreaChart>
       );
   }
+}
+
+function createPlaygroundLegendItems({
+  chartType,
+  definitionLabel,
+  grouped,
+  valueMode,
+}: {
+  chartType: PlaygroundChartType;
+  definitionLabel: string;
+  grouped: PlaygroundGroupedSeries;
+  valueMode: ChartValueMode;
+}): ChartLegendItem[] {
+  switch (chartType) {
+    case "combo":
+    case "line":
+      return [
+        {
+          color: "var(--chart-1)",
+          id: valueMode,
+          label: definitionLabel,
+        },
+        {
+          color: "var(--chart-2)",
+          id: "rolling",
+          label: "Rolling",
+        },
+      ];
+    case "histogram":
+      return [
+        {
+          color: "var(--chart-4)",
+          id: "count",
+          label: "Count",
+        },
+      ];
+    case "stacked":
+      return grouped.groups.map((group, index) => ({
+        color: `var(--chart-${(index % 5) + 1})`,
+        id: group.key,
+        label: group.label,
+        meta: formatCompact(group.pointCount),
+      }));
+    case "heatmap":
+      return [
+        {
+          color: "var(--chart-1)",
+          disabled: true,
+          id: "heatmap",
+          label: "Density",
+        },
+      ];
+    case "candle":
+      return [
+        {
+          color: "var(--chart-2)",
+          id: "up",
+          label: "Close up",
+        },
+        {
+          color: "var(--chart-4)",
+          id: "down",
+          label: "Close down",
+        },
+      ];
+    case "area":
+    case "bar":
+      return [
+        {
+          color: "var(--chart-1)",
+          id: valueMode,
+          label: definitionLabel,
+        },
+      ];
+  }
+}
+
+type PlaygroundLabel = ReturnType<typeof createPlaygroundLabels>[number];
+
+function PlaygroundActiveLabels({ labels }: { labels: PlaygroundLabel[] }) {
+  if (labels.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-label="Active chart labels"
+      className="flex flex-wrap gap-2"
+      data-testid="playground-active-labels"
+    >
+      {labels.map((label) => (
+        <span
+          key={label.id}
+          className="rounded-md border border-border/60 bg-muted/30 px-2.5 py-1 text-xs font-medium text-foreground"
+        >
+          {label.text}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+type PlaygroundCandle = {
+  close: number;
+  high: number;
+  id: string;
+  label: string;
+  low: number;
+  open: number;
+  sample: ChartDensitySample<TelemetryProperties>;
+  x: number;
+};
+
+function PlaygroundCandlestickChart({
+  domain,
+  labels,
+  onSampleSelect,
+  samples,
+  selectedSampleIndex,
+  showGrid,
+  showLabels,
+  showThreshold,
+  threshold,
+  visibleSeriesIds,
+}: {
+  domain: [number, number];
+  labels: PlaygroundLabel[];
+  onSampleSelect: (interaction: ChartSampleInteraction<TelemetryProperties>) => void;
+  samples: ChartDensitySample<TelemetryProperties>[];
+  selectedSampleIndex: number | null;
+  showGrid: boolean;
+  showLabels: boolean;
+  showThreshold: boolean;
+  threshold: number;
+  visibleSeriesIds: ReadonlySet<string>;
+}) {
+  const candles = createPlaygroundCandles(samples).filter((candle) =>
+    candle.close >= candle.open ? visibleSeriesIds.has("up") : visibleSeriesIds.has("down"),
+  );
+  const yValues = candles.flatMap((candle) => [candle.high, candle.low, candle.open, candle.close]);
+  const minY = Math.min(...yValues, threshold);
+  const maxY = Math.max(...yValues, threshold);
+  const yPadding = Math.max((maxY - minY) * 0.08, 1);
+  const yDomain: [number, number] = [minY - yPadding, maxY + yPadding];
+  const width = 960;
+  const height = 420;
+  const margin = { bottom: 42, left: 58, right: 22, top: 24 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const candleWidth = Math.max(4, Math.min(18, (plotWidth / Math.max(candles.length, 1)) * 0.56));
+  const xScale = (x: number) => {
+    const span = Math.max(domain[1] - domain[0], Number.EPSILON);
+
+    return margin.left + ((x - domain[0]) / span) * plotWidth;
+  };
+  const yScale = (value: number) => {
+    const span = Math.max(yDomain[1] - yDomain[0], Number.EPSILON);
+
+    return margin.top + (1 - (value - yDomain[0]) / span) * plotHeight;
+  };
+  const yTicks = createLinearTicks(yDomain, 5);
+  const xTicks = candles.filter((_, index) => {
+    const step = Math.max(1, Math.floor(candles.length / 5));
+
+    return index % step === 0;
+  });
+  const thresholdY = yScale(threshold);
+
+  return (
+    <div className="h-[28rem] w-full overflow-hidden rounded-md border border-border/60 bg-muted/10">
+      <svg
+        aria-label="Candle chart"
+        className="h-full w-full"
+        preserveAspectRatio="none"
+        role="img"
+        viewBox={`0 0 ${width} ${height}`}
+      >
+        {showGrid
+          ? yTicks.map((tick) => {
+              const y = yScale(tick);
+
+              return (
+                <line
+                  key={tick}
+                  x1={margin.left}
+                  x2={width - margin.right}
+                  y1={y}
+                  y2={y}
+                  stroke="var(--border)"
+                  strokeOpacity="0.7"
+                />
+              );
+            })
+          : null}
+        {showThreshold ? (
+          <line
+            x1={margin.left}
+            x2={width - margin.right}
+            y1={thresholdY}
+            y2={thresholdY}
+            stroke="var(--muted-foreground)"
+            strokeDasharray="6 6"
+            strokeOpacity="0.7"
+          />
+        ) : null}
+        {candles.map((candle) => {
+          const x = xScale(candle.x);
+          const highY = yScale(candle.high);
+          const lowY = yScale(candle.low);
+          const openY = yScale(candle.open);
+          const closeY = yScale(candle.close);
+          const up = candle.close >= candle.open;
+          const color = up ? "var(--chart-2)" : "var(--chart-4)";
+          const selected = selectedSampleIndex === candle.sample.index;
+          const bodyY = Math.min(openY, closeY);
+          const bodyHeight = Math.max(Math.abs(closeY - openY), 2);
+
+          return (
+            <g key={candle.id}>
+              <line
+                x1={x}
+                x2={x}
+                y1={highY}
+                y2={lowY}
+                stroke={color}
+                strokeWidth={selected ? 3 : 2}
+              />
+              <rect
+                x={x - candleWidth / 2}
+                y={bodyY}
+                width={candleWidth}
+                height={bodyHeight}
+                fill={up ? color : "var(--background)"}
+                stroke={color}
+                strokeWidth={selected ? 3 : 2}
+                onClick={(event) =>
+                  onSampleSelect({
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    domainValue: candle.x,
+                    sample: candle.sample,
+                  })
+                }
+              />
+            </g>
+          );
+        })}
+        {showLabels
+          ? labels.map((label) => {
+              const candle = candles.find((candidate) => candidate.label === label.x);
+
+              if (!candle) {
+                return null;
+              }
+
+              const x = Math.min(
+                width - margin.right - 92,
+                Math.max(margin.left, xScale(candle.x)),
+              );
+              const y = Math.max(margin.top + 4, yScale(label.y) - 30);
+
+              return (
+                <g key={label.id}>
+                  <rect
+                    x={x}
+                    y={y}
+                    width="86"
+                    height="24"
+                    rx="4"
+                    fill="var(--background)"
+                    stroke="var(--border)"
+                  />
+                  <text x={x + 8} y={y + 16} fill="var(--foreground)" fontSize="12">
+                    {label.text}
+                  </text>
+                </g>
+              );
+            })
+          : null}
+        <line
+          x1={margin.left}
+          x2={width - margin.right}
+          y1={height - margin.bottom}
+          y2={height - margin.bottom}
+          stroke="var(--border)"
+        />
+        <line
+          x1={margin.left}
+          x2={margin.left}
+          y1={margin.top}
+          y2={height - margin.bottom}
+          stroke="var(--border)"
+        />
+        {yTicks.map((tick) => (
+          <text
+            key={tick}
+            x={margin.left - 10}
+            y={yScale(tick) + 4}
+            fill="var(--muted-foreground)"
+            fontSize="12"
+            textAnchor="end"
+          >
+            {formatCompact(tick)}
+          </text>
+        ))}
+        {xTicks.map((candle) => (
+          <text
+            key={candle.id}
+            x={xScale(candle.x)}
+            y={height - 14}
+            fill="var(--muted-foreground)"
+            fontSize="12"
+            textAnchor="middle"
+          >
+            {candle.label}
+          </text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function createPlaygroundCandles(
+  samples: ChartDensitySample<TelemetryProperties>[],
+): PlaygroundCandle[] {
+  return samples
+    .map((sample): PlaygroundCandle | null => {
+      if (
+        sample.firstPoint === null ||
+        sample.lastPoint === null ||
+        sample.minY === null ||
+        sample.maxY === null
+      ) {
+        return null;
+      }
+
+      return {
+        close: sample.lastPoint.y,
+        high: sample.maxY,
+        id: `candle-${sample.index}`,
+        label: formatHour(sample.x),
+        low: sample.minY,
+        open: sample.firstPoint.y,
+        sample,
+        x: sample.x,
+      };
+    })
+    .filter((candle): candle is PlaygroundCandle => candle !== null);
+}
+
+function createLinearTicks(domain: [number, number], count: number) {
+  const [min, max] = domain;
+  const span = max - min;
+
+  if (span <= 0 || count <= 1) {
+    return [min];
+  }
+
+  return Array.from({ length: count }, (_, index) => min + (span / (count - 1)) * index);
 }
 
 function createPlaygroundLabels(rows: PlaygroundRenderRow[], valueMode: ChartValueMode) {
@@ -1006,6 +1487,7 @@ const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> 
   { id: "area", label: "Area" },
   { id: "line", label: "Line" },
   { id: "bar", label: "Bar" },
+  { id: "candle", label: "Candle" },
   { id: "combo", label: "Area + rolling" },
   { id: "histogram", label: "Histogram" },
   { id: "heatmap", label: "Heatmap" },
@@ -1015,6 +1497,7 @@ const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> 
 const playgroundChartTitles: Record<PlaygroundChartType, string> = {
   area: "Area chart",
   bar: "Bar chart",
+  candle: "Candle chart",
   combo: "Area chart with rolling line",
   heatmap: "Heatmap",
   histogram: "Histogram",
@@ -1787,60 +2270,6 @@ function ChartVariantExamples({
           />
         </div>
       </ChartPanel>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ChartPanel
-          title="Envelope lines"
-          description="Average, maximum, and minimum values per bin."
-        >
-          <BinnedVariantChart
-            activeRange={activeRange}
-            chartClassName="h-72 w-full"
-            fullDomain={fullDomain}
-            index={index}
-            onDomainChange={onDomainChange}
-            variant="envelope"
-          />
-        </ChartPanel>
-
-        <ChartPanel
-          title="Comparison lines"
-          description="Current viewport compared with a previous-period baseline and target."
-        >
-          <BinnedVariantChart
-            activeRange={activeRange}
-            chartClassName="h-72 w-full"
-            fullDomain={fullDomain}
-            index={index}
-            onDomainChange={onDomainChange}
-            variant="comparison"
-          />
-        </ChartPanel>
-
-        <ChartPanel title="Volume bars" description="Source point counts per bin.">
-          <BinnedVariantChart
-            activeRange={activeRange}
-            chartClassName="h-64 w-full"
-            fullDomain={fullDomain}
-            index={index}
-            onDomainChange={onDomainChange}
-            variant="volume"
-          />
-        </ChartPanel>
-
-        <ChartPanel
-          title="Revenue bars"
-          description="Aggregated revenue per bin, shown in thousands."
-        >
-          <BinnedVariantChart
-            activeRange={activeRange}
-            chartClassName="h-64 w-full"
-            fullDomain={fullDomain}
-            index={index}
-            onDomainChange={onDomainChange}
-            variant="revenue"
-          />
-        </ChartPanel>
-      </div>
     </section>
   );
 }

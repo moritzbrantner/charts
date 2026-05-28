@@ -7,6 +7,14 @@ import { defineConfig } from "vite";
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      input: {
+        compose: path.resolve(rootDir, "examples/compose.html"),
+        index: path.resolve(rootDir, "examples/index.html"),
+      },
+    },
+  },
   plugins: [tailwindcss()],
   root: path.resolve(rootDir, "examples"),
   resolve: {
