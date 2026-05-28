@@ -137,6 +137,64 @@ export function TrendWithMinimap({ activeDomain, fullDomain, index, setActiveDom
 }
 ```
 
+## Interactive side legend
+
+Use `ChartWithLegend`, `ChartSeriesLegend`, and `useChartSeriesVisibility`
+when a chart needs side controls for hiding and showing individual series. The
+visibility hook is renderer-agnostic: it tells the caller which ids are visible,
+and the caller decides whether to render Recharts marks, SVG paths, canvas
+layers, or another renderer.
+
+```tsx
+import { Line, LineChart } from "recharts";
+import {
+  ChartSeriesLegend,
+  ChartWithLegend,
+  useChartSeriesVisibility,
+} from "@moritzbrantner/charts";
+import { ChartContainer } from "@moritzbrantner/ui";
+
+const legendItems = [
+  { id: "average", label: "Average", color: "var(--chart-1)" },
+  { id: "rolling", label: "Rolling", color: "var(--chart-2)" },
+];
+
+export function TrendWithLegend({ rows }) {
+  const visibility = useChartSeriesVisibility({
+    itemIds: legendItems.map((item) => item.id),
+  });
+
+  return (
+    <ChartWithLegend
+      legend={
+        <ChartSeriesLegend
+          items={legendItems}
+          hiddenIds={visibility.hiddenIds}
+          onHiddenIdsChange={visibility.setHiddenIds}
+        />
+      }
+    >
+      <ChartContainer
+        className="h-72 w-full"
+        config={{
+          average: { label: "Average", color: "var(--chart-1)" },
+          rolling: { label: "Rolling", color: "var(--chart-2)" },
+        }}
+      >
+        <LineChart data={rows}>
+          {visibility.isVisible("average") ? (
+            <Line dataKey="average" dot={false} stroke="var(--color-average)" />
+          ) : null}
+          {visibility.isVisible("rolling") ? (
+            <Line dataKey="rolling" dot={false} stroke="var(--color-rolling)" />
+          ) : null}
+        </LineChart>
+      </ChartContainer>
+    </ChartWithLegend>
+  );
+}
+```
+
 ## Responsive Recharts chart
 
 ```tsx

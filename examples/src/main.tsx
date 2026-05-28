@@ -48,9 +48,11 @@ import {
   ChartRangeSelector,
   ChartSampleInteractionOverlay,
   ChartSampleSparkline,
+  ChartSeriesLegend,
   ChartThresholdMarker,
   ChartValueModePreview,
   ChartValueModeSelector,
+  ChartWithLegend,
   createCumulativeChartSeries,
   createDeltaChartSeries,
   createChartBandRenderData,
@@ -65,6 +67,7 @@ import {
   getChartValueModeDefinition,
   measureChartSeries,
   useChartBinCount,
+  useChartSeriesVisibility,
   useChartWheelDomain,
   useProgressiveChartDensity,
   type ChartDensitySample,
@@ -254,6 +257,8 @@ function App() {
           index={index}
           onDomainChange={setActiveDomain}
         />
+
+        <ComposedChartExamples activeRange={activeRange} index={index} />
 
         <DistributionExamples activeRange={activeRange} index={index} />
 
@@ -2066,6 +2071,239 @@ function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRow[]) {
         </LineChart>
       );
   }
+}
+
+function ComposedChartExamples({
+  activeRange,
+  index,
+}: {
+  activeRange: ChartRange;
+  index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
+}) {
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 96,
+        valueMode: "average",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const rollingAverage = useMemo(
+    () =>
+      createRollingChartSeries(series.samples, {
+        accessor: "average",
+        minPoints: 3,
+        windowSize: 9,
+      }),
+    [series.samples],
+  );
+  const cumulativeRevenue = useMemo(
+    () => createCumulativeChartSeries(series.samples, { metric: "revenue" }),
+    [series.samples],
+  );
+  const revenueDelta = useMemo(
+    () =>
+      createDeltaChartSeries(series.samples, {
+        accessor: { metric: "revenue" },
+        mode: "percent",
+        offset: 12,
+      }),
+    [series.samples],
+  );
+  const rows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        derived: {
+          cumulativeRevenue,
+          revenueDelta,
+          rollingAverage,
+        },
+        modes: ["average"],
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [cumulativeRevenue, revenueDelta, rollingAverage, series.samples],
+  );
+  const lineLegendItems = useMemo(
+    () => [
+      { id: "average", label: "Average", color: "var(--chart-1)" },
+      { id: "rollingAverage", label: "Rolling avg", color: "var(--chart-2)" },
+      {
+        id: "cumulativeRevenue",
+        label: "Cumulative revenue",
+        color: "var(--chart-5)",
+      },
+      { id: "revenueDelta", label: "Revenue delta", color: "var(--chart-4)" },
+    ],
+    [],
+  );
+  const lineVisibility = useChartSeriesVisibility({
+    itemIds: lineLegendItems.map((item) => item.id),
+  });
+  const grouped = useMemo(
+    () =>
+      index.getGroupedChartSeries({
+        groupBy: (point) => point.properties.plan,
+        includeEmptyBins: true,
+        maxGroups: 3,
+        targetBinCount: 84,
+        valueMode: "count",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, index],
+  );
+  const groupedRows = useMemo(
+    () =>
+      createGroupedChartRenderData(grouped, {
+        xLabel: (sample) => formatHour(sample.x),
+      }).rows,
+    [grouped],
+  );
+  const groupedConfig = useMemo(
+    () =>
+      Object.fromEntries(
+        grouped.groups.map((group, index) => [
+          group.key,
+          {
+            color: `var(--chart-${(index % 5) + 1})`,
+            label: group.label,
+          },
+        ]),
+      ),
+    [grouped.groups],
+  );
+  const groupedLegendItems = useMemo(
+    () =>
+      grouped.groups.map((group, index) => ({
+        id: group.key,
+        label: group.label,
+        color: `var(--chart-${(index % 5) + 1})`,
+        meta: formatCompact(group.pointCount),
+      })),
+    [grouped.groups],
+  );
+  const groupedVisibility = useChartSeriesVisibility({
+    itemIds: groupedLegendItems.map((item) => item.id),
+  });
+
+  return (
+    <section className="grid gap-4" data-testid="composed-chart-examples">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold tracking-tight">Composed charts</h2>
+          <p className="text-sm leading-6 text-muted-foreground">
+            Side legends and shared visibility state layered around regular chart renderers.
+          </p>
+        </div>
+        <Badge variant="outline" className="w-fit rounded-full">
+          {activeRange.label}
+        </Badge>
+      </div>
+      <div className="grid gap-4">
+        <ChartPanel
+          title="Multi-line with side legend"
+          description="Toggle derived lines without changing the underlying binned rows."
+        >
+          <ChartWithLegend
+            legend={
+              <ChartSeriesLegend
+                items={lineLegendItems}
+                hiddenIds={lineVisibility.hiddenIds}
+                onHiddenIdsChange={lineVisibility.setHiddenIds}
+              />
+            }
+          >
+            <ChartContainer className="h-80 w-full" config={analyticsChartConfig}>
+              <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+                <YAxis tickLine={false} axisLine={false} width={60} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                {lineVisibility.isVisible("average") ? (
+                  <Line
+                    dataKey="average"
+                    dot={false}
+                    isAnimationActive={false}
+                    stroke="var(--color-average)"
+                    strokeWidth={2}
+                    type="monotone"
+                  />
+                ) : null}
+                {lineVisibility.isVisible("rollingAverage") ? (
+                  <Line
+                    dataKey="rollingAverage"
+                    dot={false}
+                    isAnimationActive={false}
+                    stroke="var(--color-rollingAverage)"
+                    strokeWidth={2.4}
+                    type="monotone"
+                  />
+                ) : null}
+                {lineVisibility.isVisible("cumulativeRevenue") ? (
+                  <Line
+                    dataKey="cumulativeRevenue"
+                    dot={false}
+                    isAnimationActive={false}
+                    stroke="var(--color-cumulativeRevenue)"
+                    strokeWidth={1.8}
+                    type="monotone"
+                  />
+                ) : null}
+                {lineVisibility.isVisible("revenueDelta") ? (
+                  <Line
+                    dataKey="revenueDelta"
+                    dot={false}
+                    isAnimationActive={false}
+                    stroke="var(--color-revenueDelta)"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.8}
+                    type="monotone"
+                  />
+                ) : null}
+              </LineChart>
+            </ChartContainer>
+          </ChartWithLegend>
+        </ChartPanel>
+
+        <ChartPanel
+          title="Grouped bars with side legend"
+          description="Hide or show plan groups while keeping the stack composition intact."
+        >
+          <ChartWithLegend
+            legend={
+              <ChartSeriesLegend
+                items={groupedLegendItems}
+                hiddenIds={groupedVisibility.hiddenIds}
+                onHiddenIdsChange={groupedVisibility.setHiddenIds}
+              />
+            }
+            legendSide="left"
+          >
+            <ChartContainer className="h-72 w-full" config={groupedConfig}>
+              <BarChart data={groupedRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
+                <YAxis tickLine={false} axisLine={false} width={42} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                {grouped.groups.map((group, index) =>
+                  groupedVisibility.isVisible(group.key) ? (
+                    <Bar
+                      key={group.key}
+                      dataKey={group.key}
+                      fill={`var(--chart-${(index % 5) + 1})`}
+                      radius={0}
+                      stackId="plan"
+                    />
+                  ) : null,
+                )}
+              </BarChart>
+            </ChartContainer>
+          </ChartWithLegend>
+        </ChartPanel>
+      </div>
+    </section>
+  );
 }
 
 function createAnnotationLabels(rows: ChartVariantRow[]) {

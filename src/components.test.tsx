@@ -13,8 +13,10 @@ import {
   ChartRangeSelector,
   ChartSampleInteractionOverlay,
   ChartSampleSparkline,
+  ChartSeriesLegend,
   ChartThresholdMarker,
   ChartValueModeSelector,
+  ChartWithLegend,
   createChartBoxPlotData,
   createChartDensityIndex,
   getChartAnomalyAnnotations,
@@ -24,6 +26,7 @@ import {
   getChartSampleYBounds,
   measureChartSeries,
   useChartBinCount,
+  useChartSeriesVisibility,
   useChartWheelDomain,
 } from "@moritzbrantner/charts";
 
@@ -97,6 +100,182 @@ describe("@moritzbrantner/charts", () => {
     fireEvent.click(screen.getByRole("radio", { name: /Focus/ }));
 
     expect(onValueChange).toHaveBeenCalledWith("focus");
+  });
+
+  test("initializes chart series visibility with all items visible by default", () => {
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({ itemIds: ["average", "rolling"] }),
+    );
+
+    expect(result.current.hiddenIds).toEqual([]);
+    expect(result.current.visibleIds).toEqual(["average", "rolling"]);
+    expect(result.current.isVisible("average")).toBe(true);
+  });
+
+  test("initializes chart series visibility with default hidden ids", () => {
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({
+        defaultHiddenIds: ["rolling"],
+        itemIds: ["average", "rolling"],
+      }),
+    );
+
+    expect(result.current.hiddenIds).toEqual(["rolling"]);
+    expect(result.current.visibleIds).toEqual(["average"]);
+  });
+
+  test("filters unknown hidden chart series ids", () => {
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({
+        defaultHiddenIds: ["rolling", "missing"],
+        itemIds: ["average", "rolling"],
+      }),
+    );
+
+    expect(result.current.hiddenIds).toEqual(["rolling"]);
+  });
+
+  test("prevents hiding the last visible chart series by default", () => {
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({
+        defaultHiddenIds: ["rolling"],
+        itemIds: ["average", "rolling"],
+      }),
+    );
+
+    act(() => {
+      result.current.toggle("average");
+    });
+
+    expect(result.current.hiddenIds).toEqual(["rolling"]);
+    expect(result.current.visibleIds).toEqual(["average"]);
+  });
+
+  test("allows hiding all chart series when min visible is zero", () => {
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({
+        itemIds: ["average", "rolling"],
+        minVisible: 0,
+      }),
+    );
+
+    act(() => {
+      result.current.toggle("average");
+    });
+    act(() => {
+      result.current.toggle("rolling");
+    });
+
+    expect(result.current.hiddenIds).toEqual(["average", "rolling"]);
+    expect(result.current.visibleIds).toEqual([]);
+  });
+
+  test("reports controlled chart series visibility changes", () => {
+    const onHiddenIdsChange = vi.fn();
+    const { result } = renderHook(() =>
+      useChartSeriesVisibility({
+        hiddenIds: ["rolling"],
+        itemIds: ["average", "rolling"],
+        onHiddenIdsChange,
+      }),
+    );
+
+    act(() => {
+      result.current.toggle("rolling");
+    });
+
+    expect(onHiddenIdsChange).toHaveBeenCalledWith([]);
+    expect(result.current.hiddenIds).toEqual(["rolling"]);
+  });
+
+  test("renders chart series legend items and toggles hidden ids", () => {
+    const onHiddenIdsChange = vi.fn();
+
+    render(
+      <ChartSeriesLegend
+        hiddenIds={["rolling"]}
+        items={[
+          {
+            color: "red",
+            description: "Viewport average",
+            id: "average",
+            label: "Average",
+            meta: "120",
+          },
+          {
+            color: "blue",
+            id: "rolling",
+            label: "Rolling",
+          },
+        ]}
+        onHiddenIdsChange={onHiddenIdsChange}
+      />,
+    );
+
+    expect(screen.getByRole("group", { name: "Chart series legend" })).toBeTruthy();
+    expect(screen.getByText("Viewport average")).toBeTruthy();
+    expect(screen.getByText("120")).toBeTruthy();
+    expect(screen.getByRole("checkbox", { name: "Average" }).getAttribute("aria-checked")).toBe(
+      "true",
+    );
+    expect(screen.getByRole("checkbox", { name: "Rolling" }).getAttribute("aria-checked")).toBe(
+      "false",
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Average" }));
+
+    expect(onHiddenIdsChange).toHaveBeenCalledWith(["rolling"]);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Rolling" }));
+
+    expect(onHiddenIdsChange).toHaveBeenCalledWith([]);
+  });
+
+  test("does not toggle disabled chart series legend items", () => {
+    const onHiddenIdsChange = vi.fn();
+
+    render(
+      <ChartSeriesLegend
+        items={[
+          {
+            disabled: true,
+            id: "average",
+            label: "Average",
+          },
+          {
+            id: "rolling",
+            label: "Rolling",
+          },
+        ]}
+        onHiddenIdsChange={onHiddenIdsChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "Average" }));
+
+    expect(onHiddenIdsChange).not.toHaveBeenCalled();
+  });
+
+  test("renders chart content with a side legend", () => {
+    const { container, rerender } = render(
+      <ChartWithLegend legend={<div>Legend</div>}>
+        <div>Chart</div>
+      </ChartWithLegend>,
+    );
+
+    expect(screen.getByText("Chart")).toBeTruthy();
+    expect(screen.getByText("Legend")).toBeTruthy();
+    expect(container.firstElementChild?.getAttribute("data-chart-legend-side")).toBe("right");
+    expect(container.firstElementChild?.firstElementChild?.textContent).toBe("Chart");
+
+    rerender(
+      <ChartWithLegend legend={<div>Legend</div>} legendSide="left">
+        <div>Chart</div>
+      </ChartWithLegend>,
+    );
+
+    expect(container.firstElementChild?.getAttribute("data-chart-legend-side")).toBe("left");
+    expect(container.firstElementChild?.firstElementChild?.textContent).toBe("Legend");
   });
 
   test("renders derived metric deltas", () => {

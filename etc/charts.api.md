@@ -497,6 +497,30 @@ type ChartPanelProps = {
     description?: ReactNode;
     title: ReactNode;
 };
+type ChartLegendItem = {
+    color?: string;
+    description?: ReactNode;
+    disabled?: boolean;
+    id: string;
+    label: ReactNode;
+    meta?: ReactNode;
+};
+type ChartSeriesLegendProps = {
+    "aria-label"?: string;
+    className?: string;
+    hiddenIds?: readonly string[];
+    items: readonly ChartLegendItem[];
+    onHiddenIdsChange?: (hiddenIds: string[]) => void;
+    orientation?: "horizontal" | "vertical";
+    showCounts?: boolean;
+};
+type ChartWithLegendProps = {
+    children: ReactNode;
+    className?: string;
+    legend: ReactNode;
+    legendSide?: "left" | "right";
+    legendWidthClassName?: string;
+};
 type BinnedChartRenderContext<TProperties = Record<string, unknown>> = {
     isAutoBinCount: boolean;
     renderData: ChartRenderData<TProperties>;
@@ -682,10 +706,27 @@ type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = {
     containerRef: (node: TElement | null) => void;
     onWheel: WheelEventHandler<TElement>;
 };
+type UseChartSeriesVisibilityOptions = {
+    defaultHiddenIds?: readonly string[];
+    hiddenIds?: readonly string[];
+    itemIds: readonly string[];
+    minVisible?: number;
+    onHiddenIdsChange?: (hiddenIds: string[]) => void;
+};
+type UseChartSeriesVisibilityResult = {
+    hiddenIds: string[];
+    isVisible: (id: string) => boolean;
+    setHiddenIds: (hiddenIds: readonly string[]) => void;
+    showAll: () => void;
+    toggle: (id: string) => void;
+    visibleIds: string[];
+};
 declare function ChartPanel({ badge, children, className, description, title, }: ChartPanelProps): JSX.Element;
 declare function ChartMetricCard({ className, hint, label, value, }: ChartMetricCardProps): JSX.Element;
 declare function ChartMetricStrip({ className, label, value }: ChartMetricStripProps): JSX.Element;
 declare function ChartDerivedMetricCard({ className, formatValue, label, previousValue, value, }: ChartDerivedMetricCardProps): JSX.Element;
+declare function ChartSeriesLegend({ "aria-label": ariaLabel, className, hiddenIds, items, onHiddenIdsChange, orientation, showCounts, }: ChartSeriesLegendProps): JSX.Element;
+declare function ChartWithLegend({ children, className, legend, legendSide, legendWidthClassName, }: ChartWithLegendProps): JSX.Element;
 declare function BinnedChart<TProperties = Record<string, unknown>>({ binCountOptions, chartClassName, children, className, config, domain, formatDomainValue, fullDomain, index, minSpan, minimap, minimapClassName, minimapTargetBinCount, onDomainChange, query, renderDataOptions, valueMode, wheel, wheelOptions, }: BinnedChartProps<TProperties>): JSX.Element;
 declare function ChartLabelOverlay<TPayload = unknown>({ boundaryPadding, className, collisionPadding, font, labels, leaderLine, lineHeight, maxWidth, obstacles, offset, padding, pixelObstacles, renderLabel, xAxisId, yAxisId, }: ChartLabelOverlayProps<TPayload>): JSX.Element | null;
 declare function ChartRangeSelector({ "aria-label": ariaLabel, className, formatDomain, onValueChange, ranges, value, }: ChartRangeSelectorProps): JSX.Element;
@@ -707,6 +748,7 @@ declare function useProgressiveChartDensity<TProperties = Record<string, unknown
 };
 declare function useChartBinCount<TElement extends Element = HTMLDivElement>(options?: UseChartBinCountOptions): UseChartBinCountResult<TElement>;
 declare function useChartWheelDomain<TElement extends Element = HTMLElement>({ disabled, domain, fullDomain, minSpan, onDomainChange, scrollScale, zoomScale, }: UseChartWheelDomainOptions): UseChartWheelDomainResult<TElement>;
+declare function useChartSeriesVisibility({ defaultHiddenIds, hiddenIds, itemIds, minVisible, onHiddenIdsChange, }: UseChartSeriesVisibilityOptions): UseChartSeriesVisibilityResult;
 declare function measureChartSeries<TProperties = Record<string, unknown>>(index: ChartDensityIndex<TProperties>, query: ChartDensityQuery): MeasuredChartSeries<TProperties>;
 declare function getChartSampleYBounds<TProperties = Record<string, unknown>>(samples: Array<ChartDensitySample<TProperties>>): {
     maxY: number | null;
@@ -716,5 +758,5 @@ declare function getNearestChartSample<TProperties>(samples: readonly ChartDensi
     isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
 }): ChartDensitySample<TProperties> | null;
 
-export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBin, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPointGroupAccessor, type ChartPointValueAccessor, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, type ChartSeriesPoint, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartRenderData, createChartSeriesIndex, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, layoutChartLabels, measureChartSeries, useChartBinCount, useChartWheelDomain, useProgressiveChartDensity };
+export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBin, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, type ChartLegendItem, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPointGroupAccessor, type ChartPointValueAccessor, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, ChartSeriesLegend, type ChartSeriesLegendProps, type ChartSeriesPoint, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, ChartWithLegend, type ChartWithLegendProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartSeriesVisibilityOptions, type UseChartSeriesVisibilityResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartRenderData, createChartSeriesIndex, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, layoutChartLabels, measureChartSeries, useChartBinCount, useChartSeriesVisibility, useChartWheelDomain, useProgressiveChartDensity };
 ```

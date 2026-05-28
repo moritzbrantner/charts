@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
   ChartContainer,
+  Checkbox,
   type ChartConfig,
   Item,
   ItemContent,
@@ -108,6 +109,33 @@ export type ChartPanelProps = {
   className?: string;
   description?: ReactNode;
   title: ReactNode;
+};
+
+export type ChartLegendItem = {
+  color?: string;
+  description?: ReactNode;
+  disabled?: boolean;
+  id: string;
+  label: ReactNode;
+  meta?: ReactNode;
+};
+
+export type ChartSeriesLegendProps = {
+  "aria-label"?: string;
+  className?: string;
+  hiddenIds?: readonly string[];
+  items: readonly ChartLegendItem[];
+  onHiddenIdsChange?: (hiddenIds: string[]) => void;
+  orientation?: "horizontal" | "vertical";
+  showCounts?: boolean;
+};
+
+export type ChartWithLegendProps = {
+  children: ReactNode;
+  className?: string;
+  legend: ReactNode;
+  legendSide?: "left" | "right";
+  legendWidthClassName?: string;
 };
 
 export type BinnedChartRenderContext<TProperties = Record<string, unknown>> = {
@@ -331,6 +359,23 @@ export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = 
   onWheel: WheelEventHandler<TElement>;
 };
 
+export type UseChartSeriesVisibilityOptions = {
+  defaultHiddenIds?: readonly string[];
+  hiddenIds?: readonly string[];
+  itemIds: readonly string[];
+  minVisible?: number;
+  onHiddenIdsChange?: (hiddenIds: string[]) => void;
+};
+
+export type UseChartSeriesVisibilityResult = {
+  hiddenIds: string[];
+  isVisible: (id: string) => boolean;
+  setHiddenIds: (hiddenIds: readonly string[]) => void;
+  showAll: () => void;
+  toggle: (id: string) => void;
+  visibleIds: string[];
+};
+
 type ChartWheelEvent = Pick<
   globalThis.WheelEvent,
   | "clientX"
@@ -459,6 +504,113 @@ export function ChartDerivedMetricCard({
         )
       }
     />
+  );
+}
+
+export function ChartSeriesLegend({
+  "aria-label": ariaLabel = "Chart series legend",
+  className,
+  hiddenIds,
+  items,
+  onHiddenIdsChange,
+  orientation = "vertical",
+  showCounts = true,
+}: ChartSeriesLegendProps): JSX.Element {
+  const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const visibility = useChartSeriesVisibility({
+    hiddenIds,
+    itemIds,
+    onHiddenIdsChange,
+  });
+
+  return (
+    <div
+      aria-label={ariaLabel}
+      className={joinClassNames(
+        orientation === "horizontal" ? "flex flex-wrap gap-2" : "grid gap-2",
+        className,
+      )}
+      role="group"
+    >
+      {items.map((item) => {
+        const visible = visibility.isVisible(item.id);
+
+        return (
+          <label
+            key={item.id}
+            className={joinClassNames(
+              "flex cursor-pointer items-start gap-3 border border-border/60 bg-muted/20 px-3 py-2 text-sm transition hover:border-primary/50",
+              item.disabled ? "cursor-not-allowed opacity-60" : null,
+              orientation === "horizontal" ? "min-w-40 flex-1" : null,
+            )}
+          >
+            <Checkbox
+              checked={visible}
+              disabled={item.disabled}
+              onCheckedChange={() => visibility.toggle(item.id)}
+              aria-label={typeof item.label === "string" ? item.label : undefined}
+              className="mt-0.5"
+            />
+            <span
+              aria-hidden="true"
+              className="mt-1 h-3 w-3 shrink-0 border border-border/60"
+              style={{ backgroundColor: item.color ?? "var(--muted-foreground)" }}
+            />
+            <span className="grid min-w-0 flex-1 gap-1">
+              <span className="flex min-w-0 items-start justify-between gap-3">
+                <span className="min-w-0 font-medium text-foreground">{item.label}</span>
+                {showCounts && item.meta ? (
+                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                    {item.meta}
+                  </span>
+                ) : null}
+              </span>
+              {item.description ? (
+                <span className="text-xs leading-5 text-muted-foreground">{item.description}</span>
+              ) : null}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+export function ChartWithLegend({
+  children,
+  className,
+  legend,
+  legendSide = "right",
+  legendWidthClassName = "lg:w-64",
+}: ChartWithLegendProps): JSX.Element {
+  const chart = (
+    <div
+      key="chart"
+      className={joinClassNames("min-w-0 flex-1", legendSide === "left" ? "lg:order-2" : null)}
+    >
+      {children}
+    </div>
+  );
+  const legendNode = (
+    <div
+      key="legend"
+      className={joinClassNames(
+        "min-w-0 shrink-0",
+        legendWidthClassName,
+        legendSide === "left" ? "lg:order-1" : null,
+      )}
+    >
+      {legend}
+    </div>
+  );
+
+  return (
+    <div
+      className={joinClassNames("flex flex-col gap-4 lg:flex-row", className)}
+      data-chart-legend-side={legendSide}
+    >
+      {legendSide === "left" ? [legendNode, chart] : [chart, legendNode]}
+    </div>
   );
 }
 
@@ -2033,6 +2185,64 @@ export function useChartWheelDomain<TElement extends Element = HTMLElement>({
   };
 }
 
+export function useChartSeriesVisibility({
+  defaultHiddenIds = [],
+  hiddenIds,
+  itemIds,
+  minVisible = 1,
+  onHiddenIdsChange,
+}: UseChartSeriesVisibilityOptions): UseChartSeriesVisibilityResult {
+  const [uncontrolledHiddenIds, setUncontrolledHiddenIds] = useState(() =>
+    normalizeHiddenChartSeriesIds(defaultHiddenIds, itemIds, Math.max(0, minVisible)),
+  );
+  const resolvedHiddenIds = useMemo(
+    () =>
+      normalizeHiddenChartSeriesIds(
+        hiddenIds ?? uncontrolledHiddenIds,
+        itemIds,
+        Math.max(0, minVisible),
+      ),
+    [hiddenIds, itemIds, minVisible, uncontrolledHiddenIds],
+  );
+  const visibleIds = useMemo(
+    () => getVisibleChartSeriesIds(itemIds, resolvedHiddenIds),
+    [itemIds, resolvedHiddenIds],
+  );
+  const setHiddenIds = useCallback(
+    (nextHiddenIds: readonly string[]) => {
+      const normalized = normalizeHiddenChartSeriesIds(
+        nextHiddenIds,
+        itemIds,
+        Math.max(0, minVisible),
+      );
+
+      if (hiddenIds === undefined) {
+        setUncontrolledHiddenIds(normalized);
+      }
+
+      onHiddenIdsChange?.(normalized);
+    },
+    [hiddenIds, itemIds, minVisible, onHiddenIdsChange],
+  );
+  const toggle = useCallback(
+    (id: string) => {
+      setHiddenIds(toggleChartSeriesId(id, resolvedHiddenIds, itemIds, Math.max(0, minVisible)));
+    },
+    [itemIds, minVisible, resolvedHiddenIds, setHiddenIds],
+  );
+  const showAll = useCallback(() => setHiddenIds([]), [setHiddenIds]);
+  const isVisible = useCallback((id: string) => visibleIds.includes(id), [visibleIds]);
+
+  return {
+    hiddenIds: resolvedHiddenIds,
+    isVisible,
+    setHiddenIds,
+    showAll,
+    toggle,
+    visibleIds,
+  };
+}
+
 export function measureChartSeries<TProperties = Record<string, unknown>>(
   index: ChartDensityIndex<TProperties>,
   query: ChartDensityQuery,
@@ -2122,6 +2332,45 @@ function getNearestSample<TProperties>(
   }
 
   return nearest?.sample ?? null;
+}
+
+function normalizeHiddenChartSeriesIds(
+  hiddenIds: readonly string[],
+  itemIds: readonly string[],
+  minVisible: number,
+) {
+  const hiddenIdSet = new Set(hiddenIds);
+  const normalized = itemIds.filter((id) => hiddenIdSet.has(id));
+  const maxHiddenCount = Math.max(0, itemIds.length - minVisible);
+
+  return normalized.slice(0, maxHiddenCount);
+}
+
+function toggleChartSeriesId(
+  id: string,
+  hiddenIds: readonly string[],
+  itemIds: readonly string[],
+  minVisible: number,
+) {
+  if (!itemIds.includes(id)) {
+    return [...hiddenIds];
+  }
+
+  if (hiddenIds.includes(id)) {
+    return hiddenIds.filter((hiddenId) => hiddenId !== id);
+  }
+
+  if (getVisibleChartSeriesIds(itemIds, hiddenIds).length <= minVisible) {
+    return [...hiddenIds];
+  }
+
+  return normalizeHiddenChartSeriesIds([...hiddenIds, id], itemIds, minVisible);
+}
+
+function getVisibleChartSeriesIds(itemIds: readonly string[], hiddenIds: readonly string[]) {
+  const hiddenIdSet = new Set(hiddenIds);
+
+  return itemIds.filter((id) => !hiddenIdSet.has(id));
 }
 
 function formatDomainRange(domain: [number, number]) {
