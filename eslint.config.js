@@ -7,7 +7,13 @@ import { fileURLToPath } from "node:url";
 import tseslint from "typescript-eslint";
 
 const rootDir = fileURLToPath(new URL("./", import.meta.url));
-const tsFiles = ["src/**/*.{ts,tsx}", "examples/**/*.{ts,tsx}", "*.{ts,tsx}"];
+const tsFiles = [
+  "src/**/*.{ts,tsx}",
+  "examples/**/*.{ts,tsx}",
+  "tests/**/*.{ts,tsx}",
+  ".storybook/**/*.{ts,tsx}",
+  "*.{ts,tsx}",
+];
 
 export default tseslint.config(
   {
@@ -18,7 +24,9 @@ export default tseslint.config(
       "docs/",
       "node_modules/",
       "playwright-report/",
+      ".unlighthouse/",
       "test-results/",
+      "storybook-static/",
     ],
   },
   js.configs.recommended,

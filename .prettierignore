@@ -5,7 +5,9 @@ docs/
 src/wasm/pkg/
 etc/*.api.md
 coverage/
+.unlighthouse/
 playwright-report/
 test-results/
+storybook-static/
 bun.lock
 *.tgz

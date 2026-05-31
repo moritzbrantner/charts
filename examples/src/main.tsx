@@ -16,7 +16,15 @@ import {
   ToggleGroupItem,
   copyText,
 } from "@moritzbrantner/ui";
-import { StrictMode, useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  StrictMode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { createRoot } from "react-dom/client";
 import {
   Area,
@@ -262,39 +270,110 @@ function App() {
               />
             </section>
 
-            <ValueModeExamples
-              activeRange={activeRange}
-              index={index}
-              valueMode={valueMode}
-              onValueModeChange={setValueMode}
-            />
+            <DeferredExampleMount testId="value-mode-examples" title="Value modes">
+              <ValueModeExamples
+                activeRange={activeRange}
+                index={index}
+                valueMode={valueMode}
+                onValueModeChange={setValueMode}
+              />
+            </DeferredExampleMount>
 
-            <AnalyticsExamples activeRange={activeRange} index={index} />
+            <DeferredExampleMount testId="analytics-examples" title="Analytics cards">
+              <AnalyticsExamples activeRange={activeRange} index={index} />
+            </DeferredExampleMount>
 
-            <ChartVariantExamples
-              activeRange={activeRange}
-              fullDomain={fullDomain}
-              index={index}
-              onDomainChange={setActiveDomain}
-            />
+            <DeferredExampleMount testId="chart-variant-examples" title="Chart variants">
+              <ChartVariantExamples
+                activeRange={activeRange}
+                fullDomain={fullDomain}
+                index={index}
+                onDomainChange={setActiveDomain}
+              />
+            </DeferredExampleMount>
 
-            <ComposedChartExamples activeRange={activeRange} index={index} />
+            <DeferredExampleMount testId="composed-chart-examples" title="Composed charts">
+              <ComposedChartExamples activeRange={activeRange} index={index} />
+            </DeferredExampleMount>
 
-            <DistributionExamples activeRange={activeRange} index={index} />
+            <DeferredExampleMount testId="distribution-examples" title="Distribution charts">
+              <DistributionExamples activeRange={activeRange} index={index} />
+            </DeferredExampleMount>
 
-            <section
+            <DeferredExampleMount
               className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]"
-              data-testid="linked-and-progressive-examples"
+              testId="linked-and-progressive-examples"
+              title="Linked and progressive examples"
             >
-              <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
-              <BackendExample points={points} />
-            </section>
+              <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+                <SparklineExample activeRange={activeRange} index={index} valueMode={valueMode} />
+                <BackendExample points={points} />
+              </section>
+            </DeferredExampleMount>
 
-            <GapBehaviorExample points={gapPoints} />
+            <DeferredExampleMount testId="gap-behavior-example" title="Gap behavior">
+              <GapBehaviorExample points={gapPoints} />
+            </DeferredExampleMount>
           </>
         )}
       </div>
     </main>
+  );
+}
+
+function DeferredExampleMount({
+  children,
+  className = "grid gap-4",
+  testId,
+  title,
+}: {
+  children: ReactNode;
+  className?: string;
+  testId: string;
+  title: string;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    if (isVisible) {
+      return;
+    }
+
+    const node = rootRef.current;
+
+    if (!node || !("IntersectionObserver" in window)) {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "120px 0px" },
+    );
+
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [isVisible]);
+
+  return (
+    <div ref={rootRef}>
+      {isVisible ? (
+        children
+      ) : (
+        <section className={className} data-testid={testId} style={{ minHeight: "24rem" }}>
+          <ChartPanel title={title} description="This example mounts when it enters the viewport.">
+            <div className="h-48 rounded-md border border-dashed border-border/80 bg-muted/20" />
+          </ChartPanel>
+        </section>
+      )}
+    </div>
   );
 }
 
@@ -376,7 +455,7 @@ function ChartPlayground({
   const [showLabels, setShowLabels] = useState(true);
   const [showLegend, setShowLegend] = useState(true);
   const [showThreshold, setShowThreshold] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(true);
+  const [showMinimap, setShowMinimap] = useState(false);
   const [hiddenLegendIds, setHiddenLegendIds] = useState<string[]>([]);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
   const [yAxisRange, setYAxisRange] = useState<ChartAxisRange>(null);
@@ -415,21 +494,25 @@ function ChartPlayground({
   );
   const histogram = useMemo(
     () =>
-      index.getHistogram({
-        bucketCount: histogramBuckets,
-        valueAccessor: "y",
-        xDomain: activeRange.domain,
-      }),
-    [activeRange.domain, histogramBuckets, index],
+      chartType === "histogram"
+        ? index.getHistogram({
+            bucketCount: histogramBuckets,
+            valueAccessor: "y",
+            xDomain: activeRange.domain,
+          })
+        : { buckets: [] },
+    [activeRange.domain, chartType, histogramBuckets, index],
   );
   const heatmap = useMemo(
     () =>
-      index.getHeatmap({
-        xBinCount: Math.max(6, Math.round(targetBinCount / 3)),
-        xDomain: activeRange.domain,
-        yBinCount: heatmapYBins,
-      }),
-    [activeRange.domain, heatmapYBins, index, targetBinCount],
+      chartType === "heatmap"
+        ? index.getHeatmap({
+            xBinCount: Math.max(6, Math.round(targetBinCount / 3)),
+            xDomain: activeRange.domain,
+            yBinCount: heatmapYBins,
+          })
+        : { cells: [] },
+    [activeRange.domain, chartType, heatmapYBins, index, targetBinCount],
   );
   const grouped = useMemo(
     () =>
@@ -2399,7 +2482,11 @@ function ChartVariantExamples({
             aria-label="Chart variant preview"
           >
             {chartVariantOptions.map((option) => (
-              <ToggleGroupItem key={option.id} value={option.id} aria-label={option.title}>
+              <ToggleGroupItem
+                key={option.id}
+                value={option.id}
+                aria-label={`${option.label} ${option.title}`}
+              >
                 {option.label}
               </ToggleGroupItem>
             ))}

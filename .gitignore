@@ -10,6 +10,7 @@ temp/
 *.log
 *.tsbuildinfo
 coverage/
+.unlighthouse/
 crates/**/target/
 playwright-report/
 test-results/

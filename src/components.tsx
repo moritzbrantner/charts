@@ -1143,15 +1143,17 @@ export function ChartRangeSelector({
             variant="outline"
             aria-checked={active}
             className={joinClassNames(
-              "h-auto w-full justify-start rounded-none border p-4 text-left transition hover:border-primary/60",
+              "h-auto w-full justify-start whitespace-normal rounded-none border p-4 text-left transition hover:border-primary/60",
               active ? "border-primary bg-primary/10" : "border-border/60 bg-muted/20",
             )}
             onClick={() => onValueChange(range.id)}
           >
-            <span className="grid w-full gap-2">
-              <span className="flex items-center justify-between gap-3">
+            <span className="grid min-w-0 w-full gap-2">
+              <span className="flex min-w-0 flex-wrap items-center justify-between gap-3">
                 <span className="font-medium">{range.label}</span>
-                <span className="text-xs text-muted-foreground">{formatDomain(range.domain)}</span>
+                <span className="min-w-0 text-xs text-muted-foreground">
+                  {formatDomain(range.domain)}
+                </span>
               </span>
               {range.description ? (
                 <span className="block text-sm leading-6 text-muted-foreground">

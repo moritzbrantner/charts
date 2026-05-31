@@ -1,21 +1,21 @@
-import { AxeBuilder } from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+
+import {
+  collectBrowserErrors,
+  expectA11yClean,
+  expectLongTasksWithinBudget,
+  expectNoBrowserErrors,
+  expectNoInvalidSvgGeometry,
+  expectNoVisibleTextOverflow,
+  installLongTaskObserver,
+} from "./helpers";
 
 test("examples app renders and supports core chart interactions", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop interaction coverage");
 
-  const consoleErrors: string[] = [];
-  const pageErrors: string[] = [];
+  const errors = collectBrowserErrors(page);
 
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
-
+  await installLongTaskObserver(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "@moritzbrantner/charts" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Compose" })).toHaveAttribute(
@@ -24,18 +24,23 @@ test("examples app renders and supports core chart interactions", async ({ page 
   );
   await expect(page.getByTestId("dense-trend-example")).toContainText("Responsive dense trend");
   await expect(page.getByTestId("chart-playground-example")).toHaveCount(0);
-  await expect(page.getByTestId("distribution-examples")).toContainText("Distribution charts");
   await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
 
   await expectA11yClean(page);
+  await expectNoInvalidSvgGeometry(page);
+  await expectNoVisibleTextOverflow(page);
+  await page.evaluate(() => {
+    window.__chartLongTasks = [];
+  });
 
-  await page.getByRole("radio", { name: /^14 days/ }).click();
+  await expectInteractionFast(page, async () => {
+    await page.getByRole("radio", { name: /^14 days/ }).click();
+    await page.getByRole("radio", { name: "Count" }).first().click();
+  });
   await expect(page.getByRole("radio", { name: /^14 days/ })).toHaveAttribute(
     "aria-checked",
     "true",
   );
-
-  await page.getByRole("radio", { name: "Count" }).first().click();
   await expect(page.getByRole("radio", { name: "Count" }).first()).toHaveAttribute(
     "aria-checked",
     "true",
@@ -50,12 +55,16 @@ test("examples app renders and supports core chart interactions", async ({ page 
 
   expect(box).not.toBeNull();
   if (box) {
-    await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.5, { steps: 4 });
-    await page.mouse.up();
+    await expectInteractionFast(page, async () => {
+      await page.mouse.move(box.x + box.width * 0.45, box.y + box.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.5, { steps: 4 });
+      await page.mouse.up();
+    });
   }
 
+  await page.getByTestId("chart-variant-examples").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("chart-variant-examples")).toContainText("Chart variants");
   await expect(page.getByTestId("chart-variant-examples").locator(".recharts-wrapper")).toHaveCount(
     1,
   );
@@ -68,25 +77,20 @@ test("examples app renders and supports core chart interactions", async ({ page 
   await expect(page.getByTestId("chart-variant-examples").locator(".recharts-wrapper")).toHaveCount(
     1,
   );
+  await page.getByTestId("distribution-examples").scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("distribution-examples")).toContainText("Distribution charts");
 
-  expect([...pageErrors, ...consoleErrors]).toEqual([]);
+  await expectNoInvalidSvgGeometry(page);
+  await expectLongTasksWithinBudget(page, 24);
+  expectNoBrowserErrors(errors);
 });
 
 test("compose page renders a single chart composer", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop interaction coverage");
 
-  const consoleErrors: string[] = [];
-  const pageErrors: string[] = [];
+  const errors = collectBrowserErrors(page);
 
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
-
+  await installLongTaskObserver(page);
   await page.goto("/compose.html");
   await expect(page.getByRole("link", { name: "Compose" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByTestId("chart-playground-example")).toContainText("Chart playground");
@@ -95,19 +99,23 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(page.locator(".recharts-wrapper").first()).toBeVisible();
 
   await expectA11yClean(page);
+  await expectNoInvalidSvgGeometry(page);
+  await expectNoVisibleTextOverflow(page);
+  await page.evaluate(() => {
+    window.__chartLongTasks = [];
+  });
 
   const playground = page.getByTestId("chart-playground-example");
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
 
-  await page.getByRole("switch", { name: "Labels" }).click();
-  await expect(page.getByLabel("Active chart labels")).toHaveCount(0);
-  await page.getByRole("switch", { name: "Labels" }).click();
+  await expectInteractionFast(page, async () => {
+    await page.getByRole("switch", { name: "Labels" }).click();
+    await page.getByRole("switch", { name: "Labels" }).click();
+    await page.getByRole("switch", { name: "Legend" }).click();
+    await page.getByRole("switch", { name: "Legend" }).click();
+  });
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
-
-  await page.getByRole("switch", { name: "Legend" }).click();
-  await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
-  await page.getByRole("switch", { name: "Legend" }).click();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
 
   await playground.locator("select").nth(2).selectOption("line");
@@ -129,23 +137,15 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(playground).toContainText("Candle chart");
   await expect(page.getByRole("img", { name: "Candle chart" })).toBeVisible();
 
-  expect([...pageErrors, ...consoleErrors]).toEqual([]);
+  await expectNoInvalidSvgGeometry(page);
+  await expectLongTasksWithinBudget(page, 24);
+  expectNoBrowserErrors(errors);
 });
 
 test("examples app renders core sections on mobile", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "mobile viewport coverage");
 
-  const consoleErrors: string[] = [];
-  const pageErrors: string[] = [];
-
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
+  const errors = collectBrowserErrors(page);
 
   await page.goto("/");
   await expect(page.getByTestId("examples-hero")).toContainText("@moritzbrantner/charts");
@@ -157,24 +157,15 @@ test("examples app renders core sections on mobile", async ({ page }, testInfo) 
   await expect(page.getByTestId("gap-behavior-example")).toContainText("Gap behavior");
 
   await expectA11yClean(page);
-
-  expect([...pageErrors, ...consoleErrors]).toEqual([]);
+  await expectNoInvalidSvgGeometry(page);
+  await expectNoVisibleTextOverflow(page);
+  expectNoBrowserErrors(errors);
 });
 
 test("compose page renders on mobile", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium", "mobile viewport coverage");
 
-  const consoleErrors: string[] = [];
-  const pageErrors: string[] = [];
-
-  page.on("console", (message) => {
-    if (message.type() === "error") {
-      consoleErrors.push(message.text());
-    }
-  });
-  page.on("pageerror", (error) => {
-    pageErrors.push(error.message);
-  });
+  const errors = collectBrowserErrors(page);
 
   await page.goto("/compose.html");
   await expect(page.getByTestId("examples-hero")).toContainText("@moritzbrantner/charts");
@@ -182,12 +173,39 @@ test("compose page renders on mobile", async ({ page }, testInfo) => {
   await expect(page.getByTestId("chart-playground-example").locator("select").nth(2)).toBeVisible();
 
   await expectA11yClean(page);
-
-  expect([...pageErrors, ...consoleErrors]).toEqual([]);
+  await expectNoInvalidSvgGeometry(page);
+  await expectNoVisibleTextOverflow(page);
+  expectNoBrowserErrors(errors);
 });
 
-async function expectA11yClean(page: Page) {
-  const results = await new AxeBuilder({ page }).disableRules(["color-contrast"]).analyze();
+test("compose controls support keyboard activation", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop keyboard coverage");
 
-  expect(results.violations).toEqual([]);
+  const errors = collectBrowserErrors(page);
+
+  await page.goto("/compose.html");
+  const labelsSwitch = page.getByRole("switch", { name: "Labels" });
+
+  await labelsSwitch.focus();
+  await page.keyboard.press("Space");
+  await expect(page.getByLabel("Active chart labels")).toHaveCount(0);
+  await page.keyboard.press("Space");
+  await expect(page.getByLabel("Active chart labels")).toBeVisible();
+
+  const lineOption = page.getByTestId("chart-playground-example").locator("select").nth(2);
+  await lineOption.focus();
+  await lineOption.selectOption("line");
+  await expect(page.getByTestId("chart-playground-example")).toContainText("Line chart");
+
+  expectNoBrowserErrors(errors);
+});
+
+async function expectInteractionFast(page: Page, run: () => Promise<void>) {
+  const startedAt = await page.evaluate(() => performance.now());
+
+  await run();
+
+  const elapsedMs = await page.evaluate((start) => performance.now() - start, startedAt);
+
+  expect(elapsedMs).toBeLessThan(3_000);
 }
