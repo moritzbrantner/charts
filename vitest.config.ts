@@ -13,7 +13,7 @@ export default defineConfig({
   },
   test: {
     coverage: {
-      exclude: ["src/**/*.test.ts", "src/**/*.test.tsx", "src/wasm/pkg/**"],
+      exclude: ["src/**/*.test.ts", "src/**/*.test.tsx"],
       include: ["src/**/*.ts", "src/**/*.tsx"],
       provider: "istanbul",
       reporter: ["text", "lcov"],

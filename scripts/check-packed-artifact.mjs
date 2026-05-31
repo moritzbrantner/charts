@@ -37,9 +37,6 @@ try {
   assertFile(path.join(packageDir, "package.json"));
   assertFile(path.join(packageDir, "dist", "index.js"));
   assertFile(path.join(packageDir, "dist", "index.d.ts"));
-  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_bg.js"));
-  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_bg.wasm"));
-  assertFile(path.join(packageDir, "dist", "wasm", "pkg", "charts_density_wasm_embedded.js"));
 
   const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 

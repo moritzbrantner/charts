@@ -27,7 +27,8 @@
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.7",
-    "@moritzbrantner/ui": "https://registry.npmjs.org/@moritzbrantner/ui/-/ui-0.8.0.tgz"
+    "@moritzbrantner/ui": "https://registry.npmjs.org/@moritzbrantner/ui/-/ui-0.8.0.tgz",
+    "@moritzbrantner/viz-engine": "file:../viz-engine"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -73,9 +74,8 @@
     "api:check": "bun run build && node ./scripts/check-api-report.mjs",
     "audit:production": "bun audit --production",
     "bench:large-data": "node ./scripts/benchmark-large-data.mjs",
-    "build": "bun run build:wasm && tsup src/index.ts --format esm --dts --clean --out-dir dist --external ./wasm/pkg/charts_density_wasm_embedded.js && node ./scripts/copy-wasm-package.mjs",
+    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist --external @moritzbrantner/viz-engine",
     "build:examples": "vite build --outDir ../dist-examples --emptyOutDir",
-    "build:wasm": "wasm-pack build crates/charts-density-wasm --target bundler --out-dir ../../src/wasm/pkg && node ./scripts/embed-wasm.mjs",
     "changeset": "changeset",
     "check-types": "tsc --noEmit",
     "dev": "vite",
@@ -88,7 +88,7 @@
     "prepack": "bun run build",
     "release": "changeset publish",
     "test": "vitest run",
-    "test:wasm": "bun run build:wasm && vitest run src/index.test.ts",
+    "test:wasm": "vitest run src/index.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "version-packages": "changeset version",

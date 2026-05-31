@@ -453,13 +453,12 @@ By default, `createChartDensityIndex` renders immediately from `hybrid-js`, warm
 a `wasm-index` in an idle slot, then serves later queries from the WASM backend.
 Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force one backend.
 
-The `wasm-index` backend is a real Rust/WASM data kernel. It owns compact numeric
-arrays for sorted x/y values and metric columns, and currently accelerates
-binning, percentiles, histograms, and heatmaps. It uses packed typed-array query
-results internally to reduce JS object allocation. Grouped series, render-row
-shaping, gap annotations, React controls, label layout, and derived analytics
-stay in TypeScript so the public API remains renderer-agnostic and easy to
-compose.
+The `wasm-index` backend is provided by `@moritzbrantner/viz-engine`. It owns
+compact numeric arrays for sorted x/y values and metric columns, and currently
+accelerates binning, percentiles, histograms, and heatmaps. Grouped series,
+render-row shaping, gap annotations, React controls, label layout, and derived
+analytics stay in TypeScript so the public API remains renderer-agnostic and
+easy to compose.
 
 Use `hybrid-js` when you need the smallest runtime surface or are running in an
 environment that does not allow WebAssembly. Use `wasm-index` when you want the
@@ -467,13 +466,10 @@ native kernel immediately and can pay construction cost up front. Use
 `progressive` for interactive screens: the first render uses JavaScript, then
 queries switch to WASM after warmup.
 
-The published package embeds the WASM binary in the generated runtime wrapper,
-so consumers do not need a special `.wasm` asset loader for the package import.
+The WASM binary is embedded by `@moritzbrantner/viz-engine`, so consumers do not
+need a special `.wasm` asset loader for the package import.
 Benchmarks generally show histograms, heatmaps, and repeated packed series
 queries as the primary WASM win cases.
-The repository still builds the crate with `wasm-pack`; local development and CI
-therefore require Rust and `wasm-pack` before running the full verification
-suite.
 
 Each index may expose `getBackendCapabilities()` for runtime inspection:
 

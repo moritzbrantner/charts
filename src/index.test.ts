@@ -15,8 +15,6 @@ import {
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
-import { ChartDensityWasmIndex } from "./wasm/pkg/charts_density_wasm_embedded.js";
-
 describe("@moritzbrantner/charts", () => {
   test("adapts data-density bins into chart samples", () => {
     const index = createChartDensityIndex(
@@ -313,7 +311,7 @@ describe("@moritzbrantner/charts", () => {
     }
   });
 
-  test("keeps packed and object WASM series methods equivalent", () => {
+  test("serves WASM series through the external viz-engine backend", () => {
     const points = Array.from({ length: 48 }, (_, pointIndex) => ({
       id: `point-${pointIndex}`,
       metrics: Object.fromEntries(
@@ -325,16 +323,8 @@ describe("@moritzbrantner/charts", () => {
       x: pointIndex % 2 === 0 ? pointIndex : 48 - pointIndex,
       y: Math.sin(pointIndex / 4) * 10,
     }));
-    const wasmPrototype = ChartDensityWasmIndex.prototype as unknown as {
-      getBinnedSeriesPacked?: (query: unknown) => unknown;
-      getChartSeriesPacked?: (query: unknown) => unknown;
-    };
-    const getBinnedSeriesPacked = wasmPrototype.getBinnedSeriesPacked;
-    const getChartSeriesPacked = wasmPrototype.getChartSeriesPacked;
-
-    wasmPrototype.getBinnedSeriesPacked = undefined;
-    wasmPrototype.getChartSeriesPacked = undefined;
-
+    const hybridIndex = createChartDensityIndex(points, { backend: "hybrid-js" });
+    const wasmIndex = createChartDensityIndex(points, { backend: "wasm-index" });
     const binnedQuery = {
       includeEmptyBins: false,
       targetBinCount: 10,
@@ -353,29 +343,19 @@ describe("@moritzbrantner/charts", () => {
       valueMode: "p50" as const,
       xDomain: [0, 48] as [number, number],
     };
-    const objectResults = (() => {
-      try {
-        const objectIndex = createChartDensityIndex(points, { backend: "wasm-index" });
 
-        return {
-          binnedSeries: objectIndex.getBinnedSeries(binnedQuery),
-          chartSeries: publicChartSeries(objectIndex.getChartSeries(chartQuery)),
-          percentileSeries: publicChartSeries(objectIndex.getChartSeries(percentileQuery)),
-        };
-      } finally {
-        wasmPrototype.getBinnedSeriesPacked = getBinnedSeriesPacked;
-        wasmPrototype.getChartSeriesPacked = getChartSeriesPacked;
-      }
-    })();
-
-    const packedIndex = createChartDensityIndex(points, { backend: "wasm-index" });
-
-    expect(packedIndex.getBinnedSeries(binnedQuery)).toEqual(objectResults.binnedSeries);
-    expect(publicChartSeries(packedIndex.getChartSeries(chartQuery))).toEqual(
-      objectResults.chartSeries,
+    expect(wasmIndex.getBackendCapabilities?.()).toMatchObject({
+      backend: "wasm-index",
+      usesWasm: true,
+    });
+    expect(wasmIndex.getBinnedSeries(binnedQuery)).toEqual(
+      hybridIndex.getBinnedSeries(binnedQuery),
     );
-    expect(publicChartSeries(packedIndex.getChartSeries(percentileQuery))).toEqual(
-      objectResults.percentileSeries,
+    expect(publicChartSeries(wasmIndex.getChartSeries(chartQuery))).toEqual(
+      publicChartSeries(hybridIndex.getChartSeries(chartQuery)),
+    );
+    expect(publicChartSeries(wasmIndex.getChartSeries(percentileQuery))).toEqual(
+      publicChartSeries(hybridIndex.getChartSeries(percentileQuery)),
     );
   });
 
