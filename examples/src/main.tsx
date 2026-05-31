@@ -496,7 +496,7 @@ function ChartPlayground({
   const [showLabels, setShowLabels] = useState(true);
   const [showLegend, setShowLegend] = useState(true);
   const [showThreshold, setShowThreshold] = useState(true);
-  const [showMinimap, setShowMinimap] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [playbackEnabled, setPlaybackEnabled] = useState(false);
   const [animationMode, setAnimationMode] = useState<PlaygroundAnimationMode>("none");
   const [axesTransform, setAxesTransform] = useState<ChartAxesTransform>({
@@ -512,6 +512,33 @@ function ChartPlayground({
     playing: false,
   });
   const effectiveDomain = playbackEnabled ? playback.domain : activeRange.domain;
+  const handleInteractiveDomainChange = useCallback(
+    (domain: [number, number]) => {
+      setPlaybackEnabled(false);
+      onDomainChange(domain);
+    },
+    [onDomainChange],
+  );
+  const { containerRef: wheelContainerRef, onWheel: handlePreviewWheel } =
+    useChartWheelDomain<HTMLDivElement>({
+      domain: effectiveDomain,
+      fullDomain,
+      onDomainChange: handleInteractiveDomainChange,
+    });
+  const {
+    containerRef: dragContainerRef,
+    isDragging: isPreviewDomainDragging,
+    onDoubleClick: handlePreviewDomainDoubleClick,
+    onPointerCancel: handlePreviewDomainPointerCancel,
+    onPointerDown: handlePreviewDomainPointerDown,
+    onPointerMove: handlePreviewDomainPointerMove,
+    onPointerUp: handlePreviewDomainPointerUp,
+    selection: previewDomainSelection,
+  } = useChartDragDomain<HTMLDivElement>({
+    domain: effectiveDomain,
+    fullDomain,
+    onDomainChange: handleInteractiveDomainChange,
+  });
   const supportsAxisOrientation = chartType !== "candle" && chartType !== "heatmap";
   const axisOrientation: ChartAxisOrientation = supportsAxisOrientation
     ? axesTransform.orientation
@@ -675,68 +702,96 @@ function ChartPlayground({
     enabled: shouldAnimateRescale && yAxisDataDomain !== null,
   });
   const chartPreview = (
-    <div className="grid gap-4">
-      {chartType === "heatmap" ? (
-        <ChartHeatmapGrid
-          cells={heatmap.cells}
-          formatX={formatHour}
-          formatY={formatCompact}
-          formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
-        />
-      ) : chartType === "candle" ? (
-        <PlaygroundCandlestickChart
-          domain={effectiveDomain}
-          labels={labels}
-          samples={series.samples}
-          selectedSampleIndex={selectedSampleIndex}
-          showGrid={showGrid}
-          showLabels={showLabels}
-          showThreshold={showThreshold}
-          threshold={threshold}
-          visibleSeriesIds={visibleSeriesIds}
-          onSampleSelect={(interaction) => setSelectedSampleIndex(interaction.sample.index)}
-        />
-      ) : (
-        <ChartContainer
-          className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
-          config={chartType === "stacked" ? groupedConfig : config}
-        >
-          {renderPlaygroundChart({
-            animationProps,
-            axesTransform,
-            barRadius,
-            chartType,
-            curve,
-            domain: effectiveDomain,
-            fillOpacity,
-            gapBehavior,
-            histogramRows,
-            labels,
-            onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
-            rows: renderRows,
-            samples: series.samples,
-            selectedSampleIndex,
-            showGrid,
-            showThreshold,
-            strokeWidth,
-            threshold,
-            valueMode,
-            visibleSeriesIds,
-            grouped,
-            groupedRows,
-            hiddenLegendIds,
-            legendItems,
-            orientation: axisOrientation,
-            onAxesTransformChange: setAxesTransform,
-            onHiddenLegendIdsChange: setHiddenLegendIds,
-            timeAxisStatus,
-            valueAxisDomain,
-            valueAxisStatus,
-            verticalXDomain,
-            yAxisDataDomain,
-          })}
-        </ChartContainer>
-      )}
+    <div ref={wheelContainerRef} className="grid gap-4" onWheel={handlePreviewWheel}>
+      <div
+        ref={dragContainerRef}
+        className="relative select-none"
+        data-chart-domain-drag-frame=""
+        data-chart-domain-dragging={isPreviewDomainDragging ? "true" : undefined}
+        onDoubleClick={handlePreviewDomainDoubleClick}
+        onPointerCancel={handlePreviewDomainPointerCancel}
+        onPointerDown={(event) => {
+          if (isChartInteractionControl(event.target)) {
+            return;
+          }
+
+          handlePreviewDomainPointerDown(event);
+        }}
+        onPointerMove={handlePreviewDomainPointerMove}
+        onPointerUp={handlePreviewDomainPointerUp}
+      >
+        {chartType === "heatmap" ? (
+          <ChartHeatmapGrid
+            cells={heatmap.cells}
+            formatX={formatHour}
+            formatY={formatCompact}
+            formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
+          />
+        ) : chartType === "candle" ? (
+          <PlaygroundCandlestickChart
+            domain={effectiveDomain}
+            labels={labels}
+            samples={series.samples}
+            selectedSampleIndex={selectedSampleIndex}
+            showGrid={showGrid}
+            showLabels={showLabels}
+            showThreshold={showThreshold}
+            threshold={threshold}
+            visibleSeriesIds={visibleSeriesIds}
+            onSampleSelect={(interaction) => setSelectedSampleIndex(interaction.sample.index)}
+          />
+        ) : (
+          <ChartContainer
+            className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
+            config={chartType === "stacked" ? groupedConfig : config}
+          >
+            {renderPlaygroundChart({
+              animationProps,
+              axesTransform,
+              barRadius,
+              chartType,
+              curve,
+              domain: effectiveDomain,
+              fillOpacity,
+              gapBehavior,
+              histogramRows,
+              labels,
+              onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
+              rows: renderRows,
+              samples: series.samples,
+              selectedSampleIndex,
+              showGrid,
+              showThreshold,
+              strokeWidth,
+              threshold,
+              valueMode,
+              visibleSeriesIds,
+              grouped,
+              groupedRows,
+              hiddenLegendIds,
+              legendItems,
+              orientation: axisOrientation,
+              onAxesTransformChange: setAxesTransform,
+              onHiddenLegendIdsChange: setHiddenLegendIds,
+              timeAxisStatus,
+              valueAxisDomain,
+              valueAxisStatus,
+              verticalXDomain,
+              yAxisDataDomain,
+            })}
+          </ChartContainer>
+        )}
+        {previewDomainSelection ? (
+          <div
+            data-chart-domain-selection=""
+            className="pointer-events-none absolute inset-y-0 border-x border-primary bg-primary/15"
+            style={{
+              left: `${previewDomainSelection.left}px`,
+              width: `${previewDomainSelection.width}px`,
+            }}
+          />
+        ) : null}
+      </div>
 
       {showLabels ? <PlaygroundActiveLabels labels={labels} /> : null}
 
@@ -755,10 +810,7 @@ function ChartPlayground({
           fullDomain={fullDomain}
           samples={minimapSeries.samples}
           formatDomainValue={formatHour}
-          onDomainChange={(domain) => {
-            setPlaybackEnabled(false);
-            onDomainChange(domain);
-          }}
+          onDomainChange={handleInteractiveDomainChange}
         />
       ) : null}
     </div>
@@ -1490,6 +1542,25 @@ function renderPlaygroundChart({
         </AreaChart>
       );
   }
+}
+
+function isChartInteractionControl(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        [
+          "[role='dialog']",
+          "button",
+          "input",
+          "select",
+          "textarea",
+          "[data-chart-axis-transform-trigger]",
+          "[data-chart-y-axis-range-trigger]",
+        ].join(", "),
+      ),
+    )
+  );
 }
 
 function getPlaygroundYAxisDataKeys({

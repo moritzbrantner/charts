@@ -996,8 +996,11 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   wheel = true,
   wheelOptions,
 }: BinnedChartProps<TProperties>): JSX.Element {
-  const { onDomainPreviewChange, updateMode = "preview", ...resolvedDragOptions } =
-    dragOptions ?? {};
+  const {
+    onDomainPreviewChange,
+    updateMode = "preview",
+    ...resolvedDragOptions
+  } = dragOptions ?? {};
   const [dragPreview, setDragPreview] = useState<ChartDomainDragPreview | null>(null);
   const handleDomainPreviewChange = useCallback(
     (preview: ChartDomainDragPreview | null) => {
@@ -1096,7 +1099,13 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
         data-chart-domain-dragging={isDomainDragging ? "true" : undefined}
         onDoubleClick={handleDomainDoubleClick}
         onPointerCancel={handleDomainPointerCancel}
-        onPointerDown={handleDomainPointerDown}
+        onPointerDown={(event) => {
+          if (isChartDomainDragIgnoredTarget(event.target)) {
+            return;
+          }
+
+          handleDomainPointerDown(event);
+        }}
         onPointerMove={handleDomainPointerMove}
         onPointerUp={handleDomainPointerUp}
       >
@@ -1134,6 +1143,25 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
         />
       ) : null}
     </div>
+  );
+}
+
+function isChartDomainDragIgnoredTarget(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(
+      target.closest(
+        [
+          "[role='dialog']",
+          "button",
+          "input",
+          "select",
+          "textarea",
+          "[data-chart-axis-transform-trigger]",
+          "[data-chart-y-axis-range-trigger]",
+        ].join(", "),
+      ),
+    )
   );
 }
 
@@ -1512,7 +1540,7 @@ function ChartAxisTransformMenuContent({
                 <Button type="button" variant="ghost" size="sm" onClick={handleAuto}>
                   Auto
                 </Button>
-                <Button type="submit" size="sm">
+                <Button type="button" size="sm" onClick={handleApply}>
                   Apply
                 </Button>
               </div>
@@ -1553,6 +1581,9 @@ function ChartAxisTransformMenuContent({
           role="button"
           tabIndex={0}
           onContextMenu={handleContextMenu}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
           onKeyDown={(event) => {
             if (event.key === "Enter" || event.key === " ") {
               const bounds = event.currentTarget.getBoundingClientRect();

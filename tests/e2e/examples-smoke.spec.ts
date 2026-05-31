@@ -282,6 +282,29 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
     await expect(page.getByRole("switch", { name: "Legend" })).toBeVisible();
     await expect(page.getByRole("switch", { name: "Minimap" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+
+    const minimap = page.getByRole("img", { name: "Chart domain minimap" }).first();
+    const minimapPanel = minimap.locator("xpath=..");
+    const chartFrame = playground.locator("[data-chart-domain-drag-frame]").first();
+    const chartBox = await chartFrame.boundingBox();
+
+    expect(chartBox).not.toBeNull();
+    if (chartBox) {
+      const beforeDrag = await minimapPanel.textContent();
+
+      await page.mouse.move(chartBox.x + chartBox.width * 0.35, chartBox.y + chartBox.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(
+        chartBox.x + chartBox.width * 0.55,
+        chartBox.y + chartBox.height * 0.5,
+        {
+          steps: 4,
+        },
+      );
+      await page.mouse.up();
+
+      await expect.poll(async () => minimapPanel.textContent()).not.toBe(beforeDrag);
+    }
   }
 
   expectNoBrowserErrors(errors);
