@@ -42,6 +42,7 @@ import {
 import {
   BinnedChart,
   CHART_VALUE_MODE_DEFINITIONS,
+  ChartAxisTransformMenu,
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
@@ -73,17 +74,26 @@ import {
   createChartRenderData,
   createRollingChartSeries,
   getChartAnomalyAnnotations,
+  getChartAxisScaleDefinitions,
   getChartDataYBounds,
+  getRechartsAnimationProps,
   getChartThresholdAnnotations,
   getChartValueModeDefinition,
   measureChartSeries,
+  resolveChartAxisTransformStatus,
+  useChartAnimatedDomain,
   useChartBinCount,
+  useChartPlaybackDomain,
   useChartSeriesVisibility,
   useChartWheelDomain,
   useProgressiveChartDensity,
+  type ChartAnimationMode,
+  type ChartAxesTransform,
   type ChartAxisRange,
+  type ChartAxisScale,
   type ChartDensitySample,
   type ChartGapBehavior,
+  type ChartAxisOrientation,
   type ChartRange,
   type ChartSampleInteraction,
   type ChartSeriesPoint,
@@ -110,6 +120,7 @@ type PlaygroundChartType =
   | "line"
   | "stacked";
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
+type PlaygroundAnimationMode = ChartAnimationMode;
 
 type ExampleDataSet = {
   description: string;
@@ -456,9 +467,25 @@ function ChartPlayground({
   const [showLegend, setShowLegend] = useState(true);
   const [showThreshold, setShowThreshold] = useState(true);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [playbackEnabled, setPlaybackEnabled] = useState(false);
+  const [animationMode, setAnimationMode] = useState<PlaygroundAnimationMode>("none");
+  const [axesTransform, setAxesTransform] = useState<ChartAxesTransform>({
+    orientation: "vertical",
+    x: { domain: null, scale: "linear" },
+    y: { domain: null, scale: "linear" },
+  });
   const [hiddenLegendIds, setHiddenLegendIds] = useState<string[]>([]);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
-  const [yAxisRange, setYAxisRange] = useState<ChartAxisRange>(null);
+  const playback = useChartPlaybackDomain({
+    enabled: playbackEnabled,
+    fullDomain,
+    playing: false,
+  });
+  const effectiveDomain = playbackEnabled ? playback.domain : activeRange.domain;
+  const supportsAxisOrientation = chartType !== "candle" && chartType !== "heatmap";
+  const axisOrientation: ChartAxisOrientation = supportsAxisOrientation
+    ? axesTransform.orientation
+    : "vertical";
   const definition = getChartValueModeDefinition(valueMode);
   const series = useMemo(
     () =>
@@ -466,9 +493,9 @@ function ChartPlayground({
         includeEmptyBins: true,
         targetBinCount,
         valueMode,
-        xDomain: activeRange.domain,
+        xDomain: effectiveDomain,
       }),
-    [activeRange.domain, index, targetBinCount, valueMode],
+    [effectiveDomain, index, targetBinCount, valueMode],
   );
   const rollingSeries = useMemo(
     () =>
@@ -498,21 +525,21 @@ function ChartPlayground({
         ? index.getHistogram({
             bucketCount: histogramBuckets,
             valueAccessor: "y",
-            xDomain: activeRange.domain,
+            xDomain: effectiveDomain,
           })
         : { buckets: [] },
-    [activeRange.domain, chartType, histogramBuckets, index],
+    [effectiveDomain, chartType, histogramBuckets, index],
   );
   const heatmap = useMemo(
     () =>
       chartType === "heatmap"
         ? index.getHeatmap({
             xBinCount: Math.max(6, Math.round(targetBinCount / 3)),
-            xDomain: activeRange.domain,
+            xDomain: effectiveDomain,
             yBinCount: heatmapYBins,
           })
         : { cells: [] },
-    [activeRange.domain, chartType, heatmapYBins, index, targetBinCount],
+    [effectiveDomain, chartType, heatmapYBins, index, targetBinCount],
   );
   const grouped = useMemo(
     () =>
@@ -522,9 +549,9 @@ function ChartPlayground({
         maxGroups: 3,
         targetBinCount,
         valueMode: "count",
-        xDomain: activeRange.domain,
+        xDomain: effectiveDomain,
       }),
-    [activeRange.domain, index, targetBinCount],
+    [effectiveDomain, index, targetBinCount],
   );
   const groupedRows = useMemo(
     () =>
@@ -556,7 +583,7 @@ function ChartPlayground({
     [series.samples, threshold, valueMode],
   );
   const summary = createChartDensityViewportSummary(series);
-  const labels = showLabels ? createPlaygroundLabels(renderRows, valueMode) : [];
+  const labels = showLabels ? createPlaygroundLabels(renderRows, valueMode, axisOrientation) : [];
   const config = playgroundChartConfig(valueMode, definition.label);
   const groupedConfig = Object.fromEntries(
     grouped.groups.map((group, index) => [
@@ -593,6 +620,30 @@ function ChartPlayground({
     yAxisBounds.minY === null || yAxisBounds.maxY === null
       ? null
       : ([yAxisBounds.minY, yAxisBounds.maxY] satisfies [number, number]);
+  const valueAxisTransform = axisOrientation === "horizontal" ? axesTransform.x : axesTransform.y;
+  const timeAxisTransform = axisOrientation === "horizontal" ? axesTransform.y : axesTransform.x;
+  const valueAxisStatus = resolveChartAxisTransformStatus({
+    dataDomain: valueAxisTransform.domain ?? yAxisDataDomain,
+    scale: valueAxisTransform.scale,
+  });
+  const timeAxisStatus = resolveChartAxisTransformStatus({
+    dataDomain: timeAxisTransform.domain ?? effectiveDomain,
+    scale: timeAxisTransform.scale,
+  });
+  const shouldAnimateDraw = animationMode === "draw" || animationMode === "draw-and-rescale";
+  const shouldAnimateRescale = animationMode === "rescale" || animationMode === "draw-and-rescale";
+  const animationProps = getRechartsAnimationProps({
+    enabled: shouldAnimateDraw,
+    mode: shouldAnimateDraw ? "draw" : "none",
+  });
+  const verticalXDomain = useChartAnimatedDomain({
+    domain: axesTransform.x.domain ?? effectiveDomain,
+    enabled: shouldAnimateRescale && axisOrientation === "vertical",
+  });
+  const valueAxisDomain = useChartAnimatedDomain({
+    domain: valueAxisTransform.domain ?? yAxisDataDomain ?? [0, 1],
+    enabled: shouldAnimateRescale && yAxisDataDomain !== null,
+  });
   const chartPreview = (
     <div className="grid gap-4">
       {chartType === "heatmap" ? (
@@ -604,7 +655,7 @@ function ChartPlayground({
         />
       ) : chartType === "candle" ? (
         <PlaygroundCandlestickChart
-          domain={activeRange.domain}
+          domain={effectiveDomain}
           labels={labels}
           samples={series.samples}
           selectedSampleIndex={selectedSampleIndex}
@@ -621,10 +672,12 @@ function ChartPlayground({
           config={chartType === "stacked" ? groupedConfig : config}
         >
           {renderPlaygroundChart({
+            animationProps,
+            axesTransform,
             barRadius,
             chartType,
             curve,
-            domain: activeRange.domain,
+            domain: effectiveDomain,
             fillOpacity,
             gapBehavior,
             histogramRows,
@@ -643,10 +696,14 @@ function ChartPlayground({
             groupedRows,
             hiddenLegendIds,
             legendItems,
+            orientation: axisOrientation,
+            onAxesTransformChange: setAxesTransform,
             onHiddenLegendIdsChange: setHiddenLegendIds,
+            timeAxisStatus,
+            valueAxisDomain,
+            valueAxisStatus,
+            verticalXDomain,
             yAxisDataDomain,
-            yAxisRange,
-            onYAxisRangeChange: setYAxisRange,
           })}
         </ChartContainer>
       )}
@@ -664,11 +721,14 @@ function ChartPlayground({
 
       {showMinimap ? (
         <ChartDomainMinimap
-          domain={activeRange.domain}
+          domain={effectiveDomain}
           fullDomain={fullDomain}
           samples={minimapSeries.samples}
           formatDomainValue={formatHour}
-          onDomainChange={onDomainChange}
+          onDomainChange={(domain) => {
+            setPlaybackEnabled(false);
+            onDomainChange(domain);
+          }}
         />
       ) : null}
     </div>
@@ -869,6 +929,76 @@ function ChartPlayground({
                   </NativeSelectOption>
                 ))}
               </ControlSelect>
+              <ControlSelect
+                label="Axes"
+                value={axesTransform.orientation}
+                onChange={(value) => {
+                  if (isChartAxisOrientation(value)) {
+                    setAxesTransform((current) => ({ ...current, orientation: value }));
+                  }
+                }}
+              >
+                {chartAxisOrientationOptions.map((option) => (
+                  <NativeSelectOption
+                    key={option.id}
+                    value={option.id}
+                    disabled={!supportsAxisOrientation && option.id === "horizontal"}
+                  >
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="X scale"
+                value={axesTransform.x.scale}
+                onChange={(value) => {
+                  if (isChartAxisScale(value)) {
+                    setAxesTransform((current) => ({
+                      ...current,
+                      x: { ...current.x, scale: value },
+                    }));
+                  }
+                }}
+              >
+                {getChartAxisScaleDefinitions().map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="Y scale"
+                value={axesTransform.y.scale}
+                onChange={(value) => {
+                  if (isChartAxisScale(value)) {
+                    setAxesTransform((current) => ({
+                      ...current,
+                      y: { ...current.y, scale: value },
+                    }));
+                  }
+                }}
+              >
+                {getChartAxisScaleDefinitions().map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
+              <ControlSelect
+                label="Animation"
+                value={animationMode}
+                onChange={(value) => {
+                  if (isPlaygroundAnimationMode(value)) {
+                    setAnimationMode(value);
+                  }
+                }}
+              >
+                {playgroundAnimationOptions.map((option) => (
+                  <NativeSelectOption key={option.id} value={option.id}>
+                    {option.label}
+                  </NativeSelectOption>
+                ))}
+              </ControlSelect>
             </div>
 
             <div className="grid gap-3">
@@ -881,6 +1011,24 @@ function ChartPlayground({
                 onCheckedChange={setShowThreshold}
               />
               <SwitchKnob label="Minimap" checked={showMinimap} onCheckedChange={setShowMinimap} />
+              <SwitchKnob
+                label="Playback"
+                checked={playbackEnabled}
+                onCheckedChange={setPlaybackEnabled}
+              />
+              {playbackEnabled ? (
+                <div className="grid grid-cols-3 gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={playback.play}>
+                    Play
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={playback.pause}>
+                    Pause
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={playback.reset}>
+                    Reset
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </ChartPanel>
@@ -897,6 +1045,8 @@ type PlaygroundGroupedSeries = ReturnType<
 >;
 
 function renderPlaygroundChart({
+  animationProps,
+  axesTransform,
   barRadius,
   chartType,
   curve,
@@ -909,9 +1059,10 @@ function renderPlaygroundChart({
   histogramRows,
   labels,
   legendItems,
+  onAxesTransformChange,
   onHiddenLegendIdsChange,
   onSampleSelect,
-  onYAxisRangeChange,
+  orientation,
   rows,
   samples,
   selectedSampleIndex,
@@ -921,9 +1072,14 @@ function renderPlaygroundChart({
   threshold,
   valueMode,
   visibleSeriesIds,
+  timeAxisStatus,
+  valueAxisDomain,
+  valueAxisStatus,
+  verticalXDomain,
   yAxisDataDomain,
-  yAxisRange,
 }: {
+  animationProps: ReturnType<typeof getRechartsAnimationProps>;
+  axesTransform: ChartAxesTransform;
   barRadius: number;
   chartType: PlaygroundChartType;
   curve: PlaygroundCurve;
@@ -939,13 +1095,14 @@ function renderPlaygroundChart({
     placements: readonly ["top", "top-right", "right"];
     priority: number;
     text: string;
-    x: string;
-    y: number;
+    x: number | string;
+    y: number | string;
   }>;
   legendItems: readonly ChartLegendItem[];
+  onAxesTransformChange: (transform: ChartAxesTransform) => void;
   onHiddenLegendIdsChange: (hiddenIds: string[]) => void;
   onSampleSelect: (interaction: ChartSampleInteraction<TelemetryProperties>) => void;
-  onYAxisRangeChange: (range: ChartAxisRange) => void;
+  orientation: ChartAxisOrientation;
   rows: PlaygroundRenderRow[];
   samples: ChartDensitySample<TelemetryProperties>[];
   selectedSampleIndex: number | null;
@@ -955,39 +1112,188 @@ function renderPlaygroundChart({
   threshold: number;
   valueMode: ChartValueMode;
   visibleSeriesIds: ReadonlySet<string>;
+  timeAxisStatus: ReturnType<typeof resolveChartAxisTransformStatus>;
+  valueAxisDomain: [number, number];
+  valueAxisStatus: ReturnType<typeof resolveChartAxisTransformStatus>;
+  verticalXDomain: [number, number];
   yAxisDataDomain: [number, number] | null;
-  yAxisRange: ChartAxisRange;
 }) {
   const commonMargin = { bottom: 8, left: 4, right: 14, top: 12 };
   const connectNulls = gapBehavior === "connect";
-  const yAxisDomain = yAxisRange ?? (["auto", "auto"] as const);
+  const rechartsAnimationProps = animationProps as typeof animationProps & {
+    animationEasing: "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear";
+  };
+  const valueAxisRenderDomain = yAxisDataDomain ? valueAxisDomain : (["auto", "auto"] as const);
   const thresholdLine = showThreshold ? (
     <ReferenceLine
-      y={threshold}
+      y={orientation === "vertical" ? threshold : undefined}
+      x={orientation === "horizontal" ? threshold : undefined}
       stroke="var(--muted-foreground)"
       strokeDasharray="4 4"
       strokeOpacity={0.7}
     />
   ) : null;
-  const grid = showGrid ? <CartesianGrid vertical={false} /> : null;
+  const grid = showGrid ? <CartesianGrid vertical={orientation === "horizontal"} /> : null;
   const sampleOverlay = (
     <ChartSampleInteractionOverlay
       domain={domain}
+      orientation={orientation}
       samples={samples}
       selectedSampleIndex={selectedSampleIndex}
       onSampleSelect={onSampleSelect}
     />
   );
-  const yAxisRangeMenu = (
-    <ChartYAxisRangeMenu
+  const axisTransformMenu = (
+    <ChartAxisTransformMenu
+      axis={orientation === "vertical" ? "y" : "x"}
       dataDomain={yAxisDataDomain}
       hiddenIds={hiddenLegendIds}
       legendItems={legendItems}
       onHiddenIdsChange={onHiddenLegendIdsChange}
-      onValueChange={onYAxisRangeChange}
-      value={yAxisRange}
+      onValueChange={(transform) => {
+        onAxesTransformChange({
+          ...axesTransform,
+          [orientation === "vertical" ? "y" : "x"]: transform,
+        });
+      }}
+      orientation={orientation === "vertical" ? "left" : "bottom"}
+      value={orientation === "vertical" ? axesTransform.y : axesTransform.x}
     />
   );
+
+  const verticalXAxis = (
+    <XAxis
+      allowDataOverflow={axesTransform.x.domain !== null}
+      axisLine={false}
+      dataKey="x"
+      domain={verticalXDomain}
+      minTickGap={26}
+      scale={timeAxisStatus.renderScale}
+      tickFormatter={formatHour}
+      tickLine={false}
+      type="number"
+    />
+  );
+  const verticalYAxis = (
+    <YAxis
+      allowDataOverflow={axesTransform.y.domain !== null}
+      axisLine={false}
+      domain={valueAxisRenderDomain}
+      scale={valueAxisStatus.renderScale}
+      tickLine={false}
+      width={52}
+    />
+  );
+  const horizontalXAxis = (
+    <XAxis
+      allowDataOverflow={axesTransform.x.domain !== null}
+      axisLine={false}
+      domain={valueAxisRenderDomain}
+      scale={valueAxisStatus.renderScale}
+      tickLine={false}
+      type="number"
+    />
+  );
+  const horizontalYAxis = (
+    <YAxis
+      axisLine={false}
+      dataKey="label"
+      interval="preserveStartEnd"
+      tickLine={false}
+      type="category"
+      width={72}
+    />
+  );
+
+  if (orientation === "horizontal") {
+    switch (chartType) {
+      case "bar":
+      case "histogram":
+      case "stacked":
+        return (
+          <BarChart
+            data={
+              chartType === "histogram"
+                ? histogramRows
+                : chartType === "stacked"
+                  ? groupedRows
+                  : rows
+            }
+            layout="vertical"
+            margin={commonMargin}
+          >
+            {grid}
+            {horizontalXAxis}
+            {horizontalYAxis}
+            <ChartTooltip content={<ChartTooltipContent />} />
+            {thresholdLine}
+            {chartType === "stacked" ? (
+              grouped.groups.map((group, index) =>
+                visibleSeriesIds.has(group.key) ? (
+                  <Bar
+                    key={group.key}
+                    dataKey={group.key}
+                    fill={`var(--chart-${(index % 5) + 1})`}
+                    radius={barRadius}
+                    stackId="playground"
+                    {...rechartsAnimationProps}
+                  />
+                ) : null,
+              )
+            ) : visibleSeriesIds.has(chartType === "histogram" ? "count" : valueMode) ? (
+              <Bar
+                dataKey={chartType === "histogram" ? "count" : valueMode}
+                fill={chartType === "histogram" ? "var(--color-count)" : "var(--color-value)"}
+                radius={barRadius}
+                {...rechartsAnimationProps}
+              />
+            ) : null}
+            {axisTransformMenu}
+            {chartType === "histogram" ? null : sampleOverlay}
+          </BarChart>
+        );
+      case "combo":
+      case "line":
+      case "area":
+        return (
+          <LineChart data={rows} layout="vertical" margin={commonMargin}>
+            {grid}
+            {horizontalXAxis}
+            {horizontalYAxis}
+            <ChartTooltip content={<ChartTooltipContent />} />
+            {thresholdLine}
+            {visibleSeriesIds.has(valueMode) ? (
+              <Line
+                connectNulls={connectNulls}
+                dataKey={valueMode}
+                dot={false}
+                stroke="var(--color-value)"
+                strokeWidth={strokeWidth}
+                type={curve}
+                {...rechartsAnimationProps}
+              />
+            ) : null}
+            {chartType === "combo" && visibleSeriesIds.has("rolling") ? (
+              <Line
+                connectNulls={connectNulls}
+                dataKey="rolling"
+                dot={false}
+                stroke="var(--color-rolling)"
+                strokeWidth={Math.max(1, strokeWidth + 0.6)}
+                type={curve}
+                {...rechartsAnimationProps}
+              />
+            ) : null}
+            <ChartLabelOverlay labels={labels} maxWidth={96} />
+            {axisTransformMenu}
+            {sampleOverlay}
+          </LineChart>
+        );
+      case "candle":
+      case "heatmap":
+        return null;
+    }
+  }
 
   switch (chartType) {
     case "candle":
@@ -996,21 +1302,20 @@ function renderPlaygroundChart({
       return (
         <BarChart data={rows} margin={commonMargin}>
           {grid}
-          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-          />
+          {verticalXAxis}
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
-            <Bar dataKey={valueMode} fill="var(--color-value)" radius={barRadius} />
+            <Bar
+              dataKey={valueMode}
+              fill="var(--color-value)"
+              radius={barRadius}
+              {...rechartsAnimationProps}
+            />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
-          {yAxisRangeMenu}
+          {axisTransformMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -1018,14 +1323,8 @@ function renderPlaygroundChart({
       return (
         <AreaChart data={rows} margin={commonMargin}>
           {grid}
-          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-          />
+          {verticalXAxis}
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -1034,10 +1333,10 @@ function renderPlaygroundChart({
               dataKey={valueMode}
               fill="var(--color-value)"
               fillOpacity={fillOpacity / 100}
-              isAnimationActive={false}
               stroke="var(--color-value)"
               strokeWidth={strokeWidth}
               type={curve}
+              {...rechartsAnimationProps}
             />
           ) : null}
           {visibleSeriesIds.has("rolling") ? (
@@ -1045,14 +1344,14 @@ function renderPlaygroundChart({
               connectNulls={connectNulls}
               dataKey="rolling"
               dot={false}
-              isAnimationActive={false}
               stroke="var(--color-rolling)"
               strokeWidth={Math.max(1, strokeWidth + 0.6)}
               type={curve}
+              {...rechartsAnimationProps}
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
-          {yAxisRangeMenu}
+          {axisTransformMenu}
           {sampleOverlay}
         </AreaChart>
       );
@@ -1061,32 +1360,25 @@ function renderPlaygroundChart({
         <BarChart data={histogramRows} margin={commonMargin}>
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={46}
-          />
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {visibleSeriesIds.has("count") ? (
-            <Bar dataKey="count" fill="var(--color-count)" radius={barRadius} />
+            <Bar
+              dataKey="count"
+              fill="var(--color-count)"
+              radius={barRadius}
+              {...rechartsAnimationProps}
+            />
           ) : null}
-          {yAxisRangeMenu}
+          {axisTransformMenu}
         </BarChart>
       );
     case "line":
       return (
         <LineChart data={rows} margin={commonMargin}>
           {grid}
-          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-          />
+          {verticalXAxis}
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -1094,10 +1386,10 @@ function renderPlaygroundChart({
               connectNulls={connectNulls}
               dataKey={valueMode}
               dot={false}
-              isAnimationActive={false}
               stroke="var(--color-value)"
               strokeWidth={strokeWidth}
               type={curve}
+              {...rechartsAnimationProps}
             />
           ) : null}
           {visibleSeriesIds.has("rolling") ? (
@@ -1105,15 +1397,15 @@ function renderPlaygroundChart({
               connectNulls={connectNulls}
               dataKey="rolling"
               dot={false}
-              isAnimationActive={false}
               stroke="var(--color-rolling)"
               strokeOpacity={0.65}
               strokeWidth={Math.max(1, strokeWidth - 0.2)}
               type={curve}
+              {...rechartsAnimationProps}
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
-          {yAxisRangeMenu}
+          {axisTransformMenu}
           {sampleOverlay}
         </LineChart>
       );
@@ -1121,14 +1413,8 @@ function renderPlaygroundChart({
       return (
         <BarChart data={groupedRows} margin={commonMargin}>
           {grid}
-          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={46}
-          />
+          {verticalXAxis}
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {grouped.groups.map((group, index) =>
             visibleSeriesIds.has(group.key) ? (
@@ -1138,10 +1424,11 @@ function renderPlaygroundChart({
                 fill={`var(--chart-${(index % 5) + 1})`}
                 radius={barRadius}
                 stackId="playground"
+                {...rechartsAnimationProps}
               />
             ) : null,
           )}
-          {yAxisRangeMenu}
+          {axisTransformMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -1150,14 +1437,8 @@ function renderPlaygroundChart({
       return (
         <AreaChart data={rows} margin={commonMargin}>
           {grid}
-          <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis
-            allowDataOverflow={yAxisRange !== null}
-            domain={yAxisDomain}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-          />
+          {verticalXAxis}
+          {verticalYAxis}
           <ChartTooltip content={<ChartTooltipContent />} />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
@@ -1166,14 +1447,14 @@ function renderPlaygroundChart({
               dataKey={valueMode}
               fill="var(--color-value)"
               fillOpacity={fillOpacity / 100}
-              isAnimationActive={false}
               stroke="var(--color-value)"
               strokeWidth={strokeWidth}
               type={curve}
+              {...rechartsAnimationProps}
             />
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
-          {yAxisRangeMenu}
+          {axisTransformMenu}
           {sampleOverlay}
         </AreaChart>
       );
@@ -1479,7 +1760,9 @@ function PlaygroundCandlestickChart({
         })}
         {showLabels
           ? labels.map((label) => {
-              const candle = candles.find((candidate) => candidate.label === label.x);
+              const candle = candles.find((candidate) =>
+                typeof label.x === "number" ? candidate.x === label.x : candidate.label === label.x,
+              );
 
               if (!candle) {
                 return null;
@@ -1489,7 +1772,8 @@ function PlaygroundCandlestickChart({
                 width - margin.right - 92,
                 Math.max(margin.left, xScale(candle.x)),
               );
-              const y = Math.max(margin.top + 4, yScale(label.y) - 30);
+              const yValue = typeof label.y === "number" ? label.y : candle.close;
+              const y = Math.max(margin.top + 4, yScale(yValue) - 30);
 
               return (
                 <g key={label.id}>
@@ -1591,7 +1875,11 @@ function createLinearTicks(domain: [number, number], count: number) {
   return Array.from({ length: count }, (_, index) => min + (span / (count - 1)) * index);
 }
 
-function createPlaygroundLabels(rows: PlaygroundRenderRow[], valueMode: ChartValueMode) {
+function createPlaygroundLabels(
+  rows: PlaygroundRenderRow[],
+  valueMode: ChartValueMode,
+  orientation: ChartAxisOrientation = "vertical",
+) {
   const valuedRows = rows
     .map((row) => ({
       row,
@@ -1614,16 +1902,16 @@ function createPlaygroundLabels(rows: PlaygroundRenderRow[], valueMode: ChartVal
       placements: ["top", "top-right", "right"] as const,
       priority: 90,
       text: `Peak ${formatCompact(peak.value)}`,
-      x: peak.row.label,
-      y: peak.value,
+      x: orientation === "horizontal" ? peak.value : peak.row.x,
+      y: orientation === "horizontal" ? peak.row.label : peak.value,
     },
     {
       id: "latest",
       placements: ["top", "top-right", "right"] as const,
       priority: 70,
       text: `Latest ${formatCompact(last.value)}`,
-      x: last.row.label,
-      y: last.value,
+      x: orientation === "horizontal" ? last.value : last.row.x,
+      y: orientation === "horizontal" ? last.row.label : last.value,
     },
   ];
 }
@@ -1746,6 +2034,18 @@ const chartGapBehaviorOptions: Array<{ id: ChartGapBehavior; label: string }> = 
   { id: "drop", label: "Drop" },
 ];
 
+const chartAxisOrientationOptions: Array<{ id: ChartAxisOrientation; label: string }> = [
+  { id: "vertical", label: "Vertical" },
+  { id: "horizontal", label: "Horizontal" },
+];
+
+const playgroundAnimationOptions: Array<{ id: PlaygroundAnimationMode; label: string }> = [
+  { id: "none", label: "None" },
+  { id: "draw", label: "Draw" },
+  { id: "rescale", label: "Rescale" },
+  { id: "draw-and-rescale", label: "Draw + rescale" },
+];
+
 function playgroundChartConfig(valueMode: ChartValueMode, valueLabel: string) {
   return {
     [valueMode]: {
@@ -1781,6 +2081,18 @@ function isPlaygroundCurve(value: string): value is PlaygroundCurve {
 
 function isChartGapBehavior(value: string): value is ChartGapBehavior {
   return chartGapBehaviorOptions.some((option) => option.id === value);
+}
+
+function isChartAxisOrientation(value: string): value is ChartAxisOrientation {
+  return chartAxisOrientationOptions.some((option) => option.id === value);
+}
+
+function isChartAxisScale(value: string): value is ChartAxisScale {
+  return getChartAxisScaleDefinitions().some((definition) => definition.id === value);
+}
+
+function isPlaygroundAnimationMode(value: string): value is PlaygroundAnimationMode {
+  return playgroundAnimationOptions.some((option) => option.id === value);
 }
 
 function isChartValueMode(value: string): value is ChartValueMode {

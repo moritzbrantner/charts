@@ -123,15 +123,28 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
 
   const yAxisTrigger = playground.locator("[data-chart-y-axis-range-trigger]").first();
   await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
-  const yAxisDialog = page.getByRole("dialog", { name: "Y-axis range menu" });
+  const yAxisDialog = page.getByRole("dialog", { name: "Y-axis transform menu" });
   await expect(yAxisDialog).toBeVisible();
   await yAxisDialog.getByLabel("Min").fill("0");
   await yAxisDialog.getByLabel("Max").fill("250");
   await yAxisDialog.getByRole("button", { name: "Apply" }).click();
-  await expect(page.getByRole("dialog", { name: "Y-axis range menu" })).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Y-axis transform menu" })).toHaveCount(0);
   await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
   await expect(page.getByRole("group", { name: "Y-axis series legend" })).toContainText("Average");
   await page.keyboard.press("Escape");
+
+  await page.getByLabel("Y scale").selectOption("log");
+  await expect(playground.locator("[data-chart-axis-transform-trigger='y']").first()).toBeVisible();
+  await page.getByLabel("Axes").selectOption("horizontal");
+  await expect(playground.locator("[data-chart-axis-transform-trigger='x']").first()).toBeVisible();
+  await page.getByLabel("Animation").selectOption("draw");
+  await page.getByRole("switch", { name: "Playback" }).click();
+  await page.getByRole("button", { name: "Play" }).click();
+  await page.getByRole("button", { name: "Pause" }).click();
+  await page.getByRole("button", { name: "Reset" }).click();
+  await page.getByRole("switch", { name: "Playback" }).click();
+  await page.getByLabel("Axes").selectOption("vertical");
+  await page.getByLabel("Y scale").selectOption("linear");
 
   await playground.locator("select").nth(2).selectOption("candle");
   await expect(playground).toContainText("Candle chart");

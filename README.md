@@ -245,6 +245,81 @@ export function DenseAreaChart() {
 }
 ```
 
+## Axis transforms
+
+Use `ChartAxisTransformMenu` when a Recharts-backed chart should expose axis
+range and scale controls. The helper validates log scale domains and falls back
+to linear rendering when a data domain includes zero or negative values.
+
+```tsx
+import { useState } from "react";
+import { Line, LineChart, XAxis, YAxis } from "recharts";
+import {
+  ChartAxisTransformMenu,
+  resolveChartAxisTransformStatus,
+  type ChartAxisTransform,
+} from "@moritzbrantner/charts";
+
+export function TransformableChart({ rows }) {
+  const [yAxis, setYAxis] = useState<ChartAxisTransform>({
+    domain: null,
+    scale: "linear",
+  });
+  const status = resolveChartAxisTransformStatus({
+    dataDomain: yAxis.domain ?? [1, 1_000],
+    scale: yAxis.scale,
+  });
+
+  return (
+    <LineChart data={rows}>
+      <XAxis dataKey="x" tickFormatter={(value) => `${value}m`} type="number" />
+      <YAxis domain={yAxis.domain ?? ["auto", "auto"]} scale={status.renderScale} />
+      <Line dataKey="average" dot={false} type="monotone" />
+      <ChartAxisTransformMenu
+        axis="y"
+        dataDomain={[1, 1_000]}
+        onValueChange={setYAxis}
+        value={yAxis}
+      />
+    </LineChart>
+  );
+}
+```
+
+For switched axes, render Recharts with `layout="vertical"`, place numeric values
+on `XAxis type="number"`, and place binned labels on `YAxis type="category"`.
+
+## Animation
+
+`getRechartsAnimationProps` provides consistent Recharts mark animation props and
+respects reduced-motion by default. `useChartAnimatedDomain` interpolates numeric
+axis domains for rescale transitions, while `useChartPlaybackDomain` derives a
+domain that expands over time for play/pause chart playback.
+
+```tsx
+import { Area, AreaChart, XAxis, YAxis } from "recharts";
+import { getRechartsAnimationProps, useChartAnimatedDomain } from "@moritzbrantner/charts";
+
+export function AnimatedChart({ rows, yDomain }) {
+  const animatedYDomain = useChartAnimatedDomain({
+    domain: yDomain,
+    enabled: true,
+  });
+  const animation = getRechartsAnimationProps({
+    enabled: true,
+    mode: "draw-and-rescale",
+  });
+
+  return (
+    <AreaChart data={rows}>
+      <XAxis dataKey="x" type="number" />
+      <YAxis domain={animatedYDomain} />
+      <Area dataKey="average" type="monotone" {...animation} />
+    </AreaChart>
+  );
+}
+```
+
 ## Linked detail pane
 
 ```tsx

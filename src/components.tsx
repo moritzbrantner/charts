@@ -14,6 +14,8 @@ import {
   ItemContent,
   ItemDescription,
   ItemTitle,
+  NativeSelect,
+  NativeSelectOption,
   Progress,
   ToggleGroup,
   ToggleGroupItem,
@@ -82,6 +84,42 @@ export type ChartRange = {
 
 export type ChartAxisRange = [number, number] | null;
 
+export type ChartAxisScale = "linear" | "log" | "sqrt" | "symlog";
+
+export type ChartAxisOrientation = "vertical" | "horizontal";
+
+export type ChartAxisTransform = {
+  domain: ChartAxisRange;
+  scale: ChartAxisScale;
+};
+
+export type ChartAxesTransform = {
+  orientation: ChartAxisOrientation;
+  x: ChartAxisTransform;
+  y: ChartAxisTransform;
+};
+
+export type ChartAxisTransformStatus = {
+  message: string | null;
+  renderScale: ChartAxisScale;
+  valid: boolean;
+};
+
+export type ChartAnimationMode = "none" | "draw" | "rescale" | "draw-and-rescale";
+
+export type ChartAnimationOptions = {
+  durationMs?: number;
+  enabled?: boolean;
+  easing?: "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear";
+  mode?: ChartAnimationMode;
+  respectReducedMotion?: boolean;
+};
+
+export type ChartPlaybackState = {
+  playing: boolean;
+  progress: number;
+};
+
 export type MeasuredChartSeries<TProperties = Record<string, unknown>> = {
   queryMs: number;
   series: ChartDensitySeries<TProperties>;
@@ -148,6 +186,22 @@ export type ChartYAxisRangeMenuProps = {
   onValueChange: (range: ChartAxisRange) => void;
   orientation?: "left" | "right";
   value: ChartAxisRange;
+};
+
+export type ChartAxisTransformMenuProps = {
+  "aria-label"?: string;
+  axis: "x" | "y";
+  axisWidth?: number;
+  className?: string;
+  dataDomain?: [number, number] | null;
+  formatValue?: (value: number) => string;
+  hiddenIds?: readonly string[];
+  legendItems?: readonly ChartLegendItem[];
+  minSpan?: number;
+  onHiddenIdsChange?: (hiddenIds: string[]) => void;
+  onValueChange: (transform: ChartAxisTransform) => void;
+  orientation?: "left" | "right" | "top" | "bottom";
+  value: ChartAxisTransform;
 };
 
 export type ChartWithLegendProps = {
@@ -280,6 +334,7 @@ export type ChartSampleInteractionOverlayProps<TProperties = Record<string, unkn
   domain: [number, number];
   formatSampleLabel?: (sample: ChartDensitySample<TProperties>) => string;
   isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
+  orientation?: ChartAxisOrientation;
   onSampleContextMenu?: (
     interaction: ChartSampleInteraction<TProperties>,
     event: MouseEvent<SVGRectElement>,
@@ -430,6 +485,235 @@ type ChartDomainPointerBounds = {
   left: number;
   width: number;
 };
+
+const CHART_AXIS_SCALE_DEFINITIONS: Array<{
+  description: string;
+  id: ChartAxisScale;
+  label: string;
+}> = [
+  {
+    description: "Even spacing for ordinary numeric values.",
+    id: "linear",
+    label: "Linear",
+  },
+  {
+    description: "Compresses positive values across orders of magnitude.",
+    id: "log",
+    label: "Logarithmic",
+  },
+  {
+    description: "Softens large values while preserving zero.",
+    id: "sqrt",
+    label: "Square root",
+  },
+  {
+    description: "Log-like scaling that also supports zero and negative values.",
+    id: "symlog",
+    label: "Symmetric log",
+  },
+];
+
+export function getChartAxisScaleDefinitions(): Array<{
+  id: ChartAxisScale;
+  label: string;
+  description: string;
+}> {
+  return [...CHART_AXIS_SCALE_DEFINITIONS];
+}
+
+export function resolveChartAxisTransformStatus({
+  dataDomain,
+  scale,
+}: {
+  dataDomain: [number, number] | null;
+  scale: ChartAxisScale;
+}): ChartAxisTransformStatus {
+  if (scale === "log" && (!dataDomain || dataDomain[0] <= 0)) {
+    return {
+      message: "Log scale needs a strictly positive data domain.",
+      renderScale: "linear",
+      valid: false,
+    };
+  }
+
+  return {
+    message: null,
+    renderScale: scale,
+    valid: true,
+  };
+}
+
+export function getRechartsAnimationProps(options: ChartAnimationOptions = {}): {
+  animationDuration: number;
+  animationEasing: string;
+  isAnimationActive: boolean;
+} {
+  const {
+    durationMs = 600,
+    easing = "ease",
+    enabled = false,
+    mode = enabled ? "draw" : "none",
+    respectReducedMotion = true,
+  } = options;
+  const reducedMotion =
+    respectReducedMotion &&
+    typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const isAnimationActive = enabled && mode !== "none" && !reducedMotion;
+
+  return {
+    animationDuration: isAnimationActive ? durationMs : 0,
+    animationEasing: easing,
+    isAnimationActive,
+  };
+}
+
+export function useChartAnimatedDomain({
+  domain,
+  durationMs = 600,
+  enabled = false,
+  respectReducedMotion = true,
+}: {
+  domain: [number, number];
+  durationMs?: number;
+  enabled?: boolean;
+  respectReducedMotion?: boolean;
+}): [number, number] {
+  const [animatedDomain, setAnimatedDomain] = useState<[number, number]>(domain);
+  const previousDomainRef = useRef(domain);
+  const reducedMotion =
+    respectReducedMotion &&
+    typeof matchMedia !== "undefined" &&
+    matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const active = enabled && !reducedMotion && durationMs > 0;
+
+  useEffect(() => {
+    if (!active) {
+      previousDomainRef.current = domain;
+
+      return undefined;
+    }
+
+    const startDomain = previousDomainRef.current;
+    const startTime = now();
+    let frameId: number | null = null;
+
+    const tick: FrameRequestCallback = () => {
+      const progress = clamp((now() - startTime) / durationMs, 0, 1);
+      const nextDomain: [number, number] = [
+        interpolateNumber(startDomain[0], domain[0], progress),
+        interpolateNumber(startDomain[1], domain[1], progress),
+      ];
+
+      setAnimatedDomain(nextDomain);
+
+      if (progress < 1) {
+        frameId = requestFrame(tick);
+
+        return;
+      }
+
+      previousDomainRef.current = domain;
+    };
+
+    frameId = requestFrame(tick);
+
+    return () => {
+      if (frameId !== null) {
+        cancelFrame(frameId);
+      }
+    };
+  }, [active, domain, durationMs]);
+
+  return active ? animatedDomain : domain;
+}
+
+export function useChartPlaybackDomain({
+  durationMs = 4000,
+  enabled,
+  fullDomain,
+  onComplete,
+  playing,
+}: {
+  durationMs?: number;
+  enabled: boolean;
+  fullDomain: [number, number];
+  onComplete?: () => void;
+  playing: boolean;
+}): {
+  domain: [number, number];
+  pause: () => void;
+  play: () => void;
+  progress: number;
+  reset: () => void;
+} {
+  const [internalPlaying, setInternalPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const onCompleteRef = useRef(onComplete);
+  const progressRef = useRef(0);
+  const resolvedProgress = enabled ? progress : 0;
+  const resolvedPlaying = enabled && (playing || internalPlaying);
+  const span = Math.max(Number.EPSILON, fullDomain[1] - fullDomain[0]);
+  const minimumSpan = span / 100;
+  const playbackSpan = minimumSpan + (span - minimumSpan) * resolvedProgress;
+  const domain: [number, number] = [
+    fullDomain[0],
+    Math.min(fullDomain[1], fullDomain[0] + playbackSpan),
+  ];
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
+
+  useEffect(() => {
+    progressRef.current = resolvedProgress;
+  }, [resolvedProgress]);
+
+  useEffect(() => {
+    if (!resolvedPlaying) {
+      return undefined;
+    }
+
+    const startProgress = progressRef.current;
+    const startTime = now();
+    const remainingDuration = Math.max(1, durationMs * (1 - startProgress));
+    let frameId: number | null = null;
+
+    const tick: FrameRequestCallback = () => {
+      const nextProgress = clamp(startProgress + (now() - startTime) / remainingDuration, 0, 1);
+
+      setProgress(nextProgress);
+
+      if (nextProgress < 1) {
+        frameId = requestFrame(tick);
+
+        return;
+      }
+
+      setInternalPlaying(false);
+      onCompleteRef.current?.();
+    };
+
+    frameId = requestFrame(tick);
+
+    return () => {
+      if (frameId !== null) {
+        cancelFrame(frameId);
+      }
+    };
+  }, [durationMs, resolvedPlaying]);
+
+  return {
+    domain: enabled ? domain : fullDomain,
+    pause: () => setInternalPlaying(false),
+    play: () => setInternalPlaying(true),
+    progress: enabled ? resolvedProgress : 1,
+    reset: () => {
+      setInternalPlaying(false);
+      setProgress(0);
+    },
+  };
+}
 
 export function ChartPanel({
   badge,
@@ -872,8 +1156,13 @@ export function ChartLabelOverlay<TPayload = unknown>({
   );
 }
 
-export function ChartYAxisRangeMenu({
-  "aria-label": ariaLabel = "Y-axis range menu",
+export function ChartAxisTransformMenu(props: ChartAxisTransformMenuProps): JSX.Element | null {
+  return <ChartAxisTransformMenuContent {...props} />;
+}
+
+function ChartAxisTransformMenuContent({
+  "aria-label": ariaLabel,
+  axis,
   axisWidth = 60,
   className,
   dataDomain = null,
@@ -883,30 +1172,43 @@ export function ChartYAxisRangeMenu({
   minSpan,
   onHiddenIdsChange,
   onValueChange,
-  orientation = "left",
+  orientation = axis === "y" ? "left" : "bottom",
+  showScale = true,
   value,
-}: ChartYAxisRangeMenuProps): JSX.Element | null {
+}: ChartAxisTransformMenuProps & { showScale?: boolean }): JSX.Element | null {
   const plotArea = usePlotArea();
   const minInputId = useId();
   const maxInputId = useId();
+  const scaleInputId = useId();
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
   const [minInput, setMinInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
+  const [scaleInput, setScaleInput] = useState<ChartAxisScale>(value.scale);
   const [error, setError] = useState<string | null>(null);
   const open = menuPosition !== null;
   const resolvedAxisWidth = Math.max(1, axisWidth);
-  const triggerX =
-    orientation === "right"
-      ? (plotArea?.x ?? 0) + (plotArea?.width ?? 0)
-      : Math.max(0, (plotArea?.x ?? 0) - resolvedAxisWidth);
-  const activeDomain = value ?? dataDomain;
+  const triggerRect = getChartAxisTriggerRect(plotArea, orientation, resolvedAxisWidth);
+  const activeDomain = value.domain ?? dataDomain;
+  const status = resolveChartAxisTransformStatus({
+    dataDomain: activeDomain,
+    scale: scaleInput,
+  });
+  const resolvedAriaLabel =
+    ariaLabel ?? (axis === "y" ? "Y-axis transform menu" : "X-axis transform menu");
+  const title = showScale
+    ? axis === "y"
+      ? "Y-axis transform"
+      : "X-axis transform"
+    : "Y-axis range";
+  const scaleDefinitions = getChartAxisScaleDefinitions();
 
   const resetInputs = useCallback(() => {
-    const nextDomain = value ?? dataDomain;
+    const nextDomain = value.domain ?? dataDomain;
 
     setMinInput(nextDomain ? String(nextDomain[0]) : "");
     setMaxInput(nextDomain ? String(nextDomain[1]) : "");
+    setScaleInput(value.scale);
     setError(null);
   }, [dataDomain, value]);
 
@@ -979,11 +1281,22 @@ export function ChartYAxisRangeMenu({
       return;
     }
 
-    onValueChange([nextMin, nextMax]);
+    const nextStatus = resolveChartAxisTransformStatus({
+      dataDomain: [nextMin, nextMax],
+      scale: scaleInput,
+    });
+
+    onValueChange({
+      domain: [nextMin, nextMax],
+      scale: nextStatus.renderScale,
+    });
     setMenuPosition(null);
   };
   const handleAuto = () => {
-    onValueChange(null);
+    onValueChange({
+      domain: null,
+      scale: status.renderScale,
+    });
     setMinInput(dataDomain ? String(dataDomain[0]) : "");
     setMaxInput(dataDomain ? String(dataDomain[1]) : "");
     setError(null);
@@ -994,7 +1307,7 @@ export function ChartYAxisRangeMenu({
       ? createPortal(
           <div
             ref={menuRef}
-            aria-label={ariaLabel}
+            aria-label={resolvedAriaLabel}
             className={joinClassNames(
               "fixed z-50 w-72 border border-border bg-popover p-3 text-popover-foreground shadow-lg outline-none",
               className,
@@ -1017,8 +1330,10 @@ export function ChartYAxisRangeMenu({
             >
               <div className="grid gap-1">
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-sm font-semibold">Y-axis range</h3>
-                  <span className="text-xs text-muted-foreground">{value ? "Manual" : "Auto"}</span>
+                  <h3 className="text-sm font-semibold">{title}</h3>
+                  <span className="text-xs text-muted-foreground">
+                    {value.domain ? "Manual" : "Auto"}
+                  </span>
                 </div>
                 {activeDomain ? (
                   <p className="text-xs text-muted-foreground">
@@ -1026,6 +1341,30 @@ export function ChartYAxisRangeMenu({
                   </p>
                 ) : null}
               </div>
+              {showScale ? (
+                <label className="grid gap-1 text-xs font-medium" htmlFor={scaleInputId}>
+                  Scale
+                  <NativeSelect
+                    id={scaleInputId}
+                    value={scaleInput}
+                    onChange={(event) => {
+                      const nextScale = event.target.value;
+
+                      if (isChartAxisScale(nextScale)) {
+                        setScaleInput(nextScale);
+                        setError(null);
+                      }
+                    }}
+                  >
+                    {scaleDefinitions.map((definition) => (
+                      <NativeSelectOption key={definition.id} value={definition.id}>
+                        {definition.label}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </label>
+              ) : null}
+              {!status.valid ? <p className="text-xs text-destructive">{status.message}</p> : null}
               <div className="grid grid-cols-2 gap-2">
                 <label className="grid gap-1 text-xs font-medium" htmlFor={minInputId}>
                   Min
@@ -1087,12 +1426,13 @@ export function ChartYAxisRangeMenu({
     <>
       <g className={className} data-chart-y-axis-range-menu="">
         <rect
-          aria-label={ariaLabel}
+          aria-label={resolvedAriaLabel}
           data-chart-y-axis-range-trigger=""
-          x={triggerX}
-          y={plotArea.y}
-          width={resolvedAxisWidth}
-          height={plotArea.height}
+          data-chart-axis-transform-trigger={axis}
+          x={triggerRect.x}
+          y={triggerRect.y}
+          width={triggerRect.width}
+          height={triggerRect.height}
           fill="transparent"
           role="button"
           tabIndex={0}
@@ -1115,6 +1455,40 @@ export function ChartYAxisRangeMenu({
       </g>
       {menu}
     </>
+  );
+}
+
+export function ChartYAxisRangeMenu({
+  "aria-label": ariaLabel = "Y-axis range menu",
+  axisWidth,
+  className,
+  dataDomain,
+  formatValue,
+  hiddenIds,
+  legendItems,
+  minSpan,
+  onHiddenIdsChange,
+  onValueChange,
+  orientation,
+  value,
+}: ChartYAxisRangeMenuProps): JSX.Element | null {
+  return (
+    <ChartAxisTransformMenuContent
+      aria-label={ariaLabel}
+      axis="y"
+      axisWidth={axisWidth}
+      className={className}
+      dataDomain={dataDomain}
+      formatValue={formatValue}
+      hiddenIds={hiddenIds}
+      legendItems={legendItems}
+      minSpan={minSpan}
+      onHiddenIdsChange={onHiddenIdsChange}
+      onValueChange={(transform) => onValueChange(transform.domain)}
+      orientation={orientation}
+      showScale={false}
+      value={{ domain: value, scale: "linear" }}
+    />
   );
 }
 
@@ -1373,6 +1747,7 @@ export function ChartSampleInteractionOverlay<TProperties = Record<string, unkno
   domain,
   formatSampleLabel = formatDefaultSampleLabel,
   isSampleSelectable = isNonEmptyChartSample,
+  orientation = "vertical",
   onSampleContextMenu,
   onSampleHover,
   onSampleSelect,
@@ -1396,7 +1771,14 @@ export function ChartSampleInteractionOverlay<TProperties = Record<string, unkno
     event: MouseEvent<SVGRectElement> | PointerEvent<SVGRectElement>,
   ): ChartSampleInteraction<TProperties> | null => {
     const bounds = event.currentTarget.getBoundingClientRect();
-    const domainValue = getDomainValueFromClientX(event.clientX, bounds, domain);
+    const domainValue =
+      orientation === "horizontal"
+        ? getDomainValueFromClientY(
+            event.clientY,
+            { height: bounds.height, top: bounds.top },
+            domain,
+          )
+        : getDomainValueFromClientX(event.clientX, bounds, domain);
     const sample = getNearestChartSample(samples, domainValue, { isSampleSelectable });
 
     if (!sample) {
@@ -1441,57 +1823,109 @@ export function ChartSampleInteractionOverlay<TProperties = Record<string, unkno
   };
   const selectedBand =
     selectedSample && domain[1] > domain[0]
-      ? {
-          left:
-            plotArea.x +
-            clamp(
-              ((selectedSample.x0 - domain[0]) / domainSpan) * plotArea.width,
-              0,
-              plotArea.width,
-            ),
-          right:
-            plotArea.x +
-            clamp(
-              ((selectedSample.x1 - domain[0]) / domainSpan) * plotArea.width,
-              0,
-              plotArea.width,
-            ),
-          x:
-            plotArea.x +
-            clamp(
-              ((selectedSample.x - domain[0]) / domainSpan) * plotArea.width,
-              0,
-              plotArea.width,
-            ),
-        }
+      ? orientation === "horizontal"
+        ? {
+            bottom:
+              plotArea.y +
+              clamp(
+                ((selectedSample.x1 - domain[0]) / domainSpan) * plotArea.height,
+                0,
+                plotArea.height,
+              ),
+            kind: "horizontal" as const,
+            middle:
+              plotArea.y +
+              clamp(
+                ((selectedSample.x - domain[0]) / domainSpan) * plotArea.height,
+                0,
+                plotArea.height,
+              ),
+            top:
+              plotArea.y +
+              clamp(
+                ((selectedSample.x0 - domain[0]) / domainSpan) * plotArea.height,
+                0,
+                plotArea.height,
+              ),
+          }
+        : {
+            kind: "vertical" as const,
+            left:
+              plotArea.x +
+              clamp(
+                ((selectedSample.x0 - domain[0]) / domainSpan) * plotArea.width,
+                0,
+                plotArea.width,
+              ),
+            right:
+              plotArea.x +
+              clamp(
+                ((selectedSample.x1 - domain[0]) / domainSpan) * plotArea.width,
+                0,
+                plotArea.width,
+              ),
+            x:
+              plotArea.x +
+              clamp(
+                ((selectedSample.x - domain[0]) / domainSpan) * plotArea.width,
+                0,
+                plotArea.width,
+              ),
+          }
       : null;
 
   return (
     <g className={className} data-chart-sample-interaction-layer="">
       {selectedBand ? (
-        <>
-          <rect
-            data-chart-sample-selected-band={selectedSample?.index}
-            x={Math.min(selectedBand.left, selectedBand.right)}
-            y={plotArea.y}
-            width={Math.abs(selectedBand.right - selectedBand.left)}
-            height={plotArea.height}
-            fill="var(--primary)"
-            fillOpacity="0.1"
-            pointerEvents="none"
-          />
-          <line
-            data-chart-sample-selected-line={selectedSample?.index}
-            x1={selectedBand.x}
-            x2={selectedBand.x}
-            y1={plotArea.y}
-            y2={plotArea.y + plotArea.height}
-            stroke="var(--primary)"
-            strokeOpacity="0.8"
-            strokeWidth="1.2"
-            pointerEvents="none"
-          />
-        </>
+        selectedBand.kind === "horizontal" ? (
+          <>
+            <rect
+              data-chart-sample-selected-band={selectedSample?.index}
+              x={plotArea.x}
+              y={Math.min(selectedBand.top, selectedBand.bottom)}
+              width={plotArea.width}
+              height={Math.abs(selectedBand.bottom - selectedBand.top)}
+              fill="var(--primary)"
+              fillOpacity="0.1"
+              pointerEvents="none"
+            />
+            <line
+              data-chart-sample-selected-line={selectedSample?.index}
+              x1={plotArea.x}
+              x2={plotArea.x + plotArea.width}
+              y1={selectedBand.middle}
+              y2={selectedBand.middle}
+              stroke="var(--primary)"
+              strokeOpacity="0.8"
+              strokeWidth="1.2"
+              pointerEvents="none"
+            />
+          </>
+        ) : (
+          <>
+            <rect
+              data-chart-sample-selected-band={selectedSample?.index}
+              x={Math.min(selectedBand.left, selectedBand.right)}
+              y={plotArea.y}
+              width={Math.abs(selectedBand.right - selectedBand.left)}
+              height={plotArea.height}
+              fill="var(--primary)"
+              fillOpacity="0.1"
+              pointerEvents="none"
+            />
+            <line
+              data-chart-sample-selected-line={selectedSample?.index}
+              x1={selectedBand.x}
+              x2={selectedBand.x}
+              y1={plotArea.y}
+              y2={plotArea.y + plotArea.height}
+              stroke="var(--primary)"
+              strokeOpacity="0.8"
+              strokeWidth="1.2"
+              pointerEvents="none"
+            />
+          </>
+        )
       ) : null}
       <rect
         data-chart-sample-interaction-overlay=""
@@ -2885,6 +3319,10 @@ function areDomainsEqual(left: [number, number], right: [number, number]) {
   return left[0] === right[0] && left[1] === right[1];
 }
 
+function interpolateNumber(start: number, end: number, progress: number) {
+  return start + (end - start) * progress;
+}
+
 function getMinimapYBounds<TProperties>(samples: Array<ChartDensitySample<TProperties>>) {
   if (samples.length === 0) {
     return {
@@ -2926,6 +3364,69 @@ function getDomainValueFromClientX(
   const ratio = clamp((clientX - bounds.left) / Math.max(1, bounds.width), 0, 1);
 
   return fullDomain[0] + ratio * (fullDomain[1] - fullDomain[0]);
+}
+
+function getDomainValueFromClientY(
+  clientY: number,
+  bounds: { height: number; top: number },
+  fullDomain: [number, number],
+) {
+  const ratio = clamp((clientY - bounds.top) / Math.max(1, bounds.height), 0, 1);
+
+  return fullDomain[0] + ratio * (fullDomain[1] - fullDomain[0]);
+}
+
+function getChartAxisTriggerRect(
+  plotArea: ReturnType<typeof usePlotArea>,
+  orientation: "left" | "right" | "top" | "bottom",
+  axisWidth: number,
+) {
+  if (!plotArea) {
+    return {
+      height: 0,
+      width: 0,
+      x: 0,
+      y: 0,
+    };
+  }
+
+  if (orientation === "right") {
+    return {
+      height: plotArea.height,
+      width: axisWidth,
+      x: plotArea.x + plotArea.width,
+      y: plotArea.y,
+    };
+  }
+
+  if (orientation === "top") {
+    return {
+      height: axisWidth,
+      width: plotArea.width,
+      x: plotArea.x,
+      y: Math.max(0, plotArea.y - axisWidth),
+    };
+  }
+
+  if (orientation === "bottom") {
+    return {
+      height: axisWidth,
+      width: plotArea.width,
+      x: plotArea.x,
+      y: plotArea.y + plotArea.height,
+    };
+  }
+
+  return {
+    height: plotArea.height,
+    width: axisWidth,
+    x: Math.max(0, plotArea.x - axisWidth),
+    y: plotArea.y,
+  };
+}
+
+function isChartAxisScale(value: string): value is ChartAxisScale {
+  return CHART_AXIS_SCALE_DEFINITIONS.some((definition) => definition.id === value);
 }
 
 function getDomainHandleThresholdFromBounds(

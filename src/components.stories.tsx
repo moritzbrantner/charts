@@ -14,6 +14,7 @@ import {
 
 import {
   BinnedChart,
+  ChartAxisTransformMenu,
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
@@ -30,9 +31,11 @@ import {
   createChartDensityIndex,
   createChartRenderData,
   createGroupedChartRenderData,
+  getRechartsAnimationProps,
   getChartAnomalyAnnotations,
   getChartThresholdAnnotations,
   useChartSeriesVisibility,
+  type ChartAxisTransform,
   type ChartAxisRange,
   type ChartGapBehavior,
   type ChartRange,
@@ -142,6 +145,21 @@ export const SeriesLegend: Story = {
 export const YAxisRangeMenu: Story = {
   name: "Controls/YAxisRangeMenu",
   render: () => <YAxisRangeMenuStory />,
+};
+
+export const AxisTransformMenu: Story = {
+  name: "Controls/AxisTransformMenu",
+  render: () => <AxisTransformMenuStory />,
+};
+
+export const AxisTransforms: Story = {
+  name: "Charts/AxisTransforms",
+  render: () => <AxisTransformsStory />,
+};
+
+export const AnimatedTrend: Story = {
+  name: "Charts/AnimatedTrend",
+  render: () => <AnimatedTrendStory />,
 };
 
 export const BackendStatus: Story = {
@@ -558,6 +576,153 @@ function YAxisRangeMenuStory() {
   );
 }
 
+function AxisTransformMenuStory() {
+  const [transform, setTransform] = useState<ChartAxisTransform>({
+    domain: null,
+    scale: "linear",
+  });
+
+  return (
+    <StoryFrame title="Axis transform menu">
+      <ChartPanel title="Transform controls" description="Right-click the y-axis region.">
+        <ChartContainer className="h-80 w-full" config={chartConfig}>
+          <LineChart
+            data={[
+              { average: 12, label: "A" },
+              { average: 24, label: "B" },
+              { average: 96, label: "C" },
+              { average: 320, label: "D" },
+            ]}
+            margin={{ bottom: 8, left: 20, right: 16, top: 16 }}
+          >
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="label" />
+            <YAxis
+              domain={transform.domain ?? ["auto", "auto"]}
+              scale={transform.scale}
+              width={58}
+            />
+            <Line
+              dataKey="average"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-average)"
+              strokeWidth={2}
+              type="monotone"
+            />
+            <ChartAxisTransformMenu
+              axis="y"
+              dataDomain={[12, 320]}
+              legendItems={[{ color: "hsl(214 86% 46%)", id: "average", label: "Average" }]}
+              onValueChange={setTransform}
+              value={transform}
+            />
+          </LineChart>
+        </ChartContainer>
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
+function AxisTransformsStory() {
+  const points = useMemo(() => createTelemetryPoints(), []);
+  const index = useMemo(() => createChartDensityIndex(points), [points]);
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 72,
+        valueMode: "average",
+        xDomain: [120, 720],
+      }),
+    [index],
+  );
+  const rows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        modes: ["average"],
+        xLabel: (sample) => String(sample.x),
+      }).rows,
+    [series.samples],
+  );
+
+  return (
+    <StoryFrame title="Axis transforms">
+      <ChartPanel title="Log value scale" description="Numeric x-axis with a logarithmic y-axis.">
+        <ChartContainer className="h-80 w-full" config={chartConfig}>
+          <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="x" domain={[120, 720]} tickFormatter={formatStoryHour} type="number" />
+            <YAxis domain={[1, "auto"]} scale="log" width={58} />
+            <Line
+              dataKey="average"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-average)"
+              strokeWidth={2}
+              type="monotone"
+            />
+          </LineChart>
+        </ChartContainer>
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
+function AnimatedTrendStory() {
+  const points = useMemo(() => createTelemetryPoints(), []);
+  const index = useMemo(() => createChartDensityIndex(points), [points]);
+  const series = useMemo(
+    () =>
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 96,
+        valueMode: "average",
+        xDomain: [0, 720],
+      }),
+    [index],
+  );
+  const rows = useMemo(
+    () =>
+      createChartRenderData(series.samples, {
+        modes: ["average"],
+        xLabel: (sample) => String(sample.x),
+      }).rows,
+    [series.samples],
+  );
+  const animationProps = getRechartsAnimationProps({
+    durationMs: 900,
+    enabled: true,
+    mode: "draw",
+    respectReducedMotion: false,
+  }) as ReturnType<typeof getRechartsAnimationProps> & {
+    animationEasing: "ease";
+  };
+
+  return (
+    <StoryFrame title="Animated trend">
+      <ChartPanel title="Draw animation" description="Deterministic reveal animation settings.">
+        <ChartContainer className="h-80 w-full" config={chartConfig}>
+          <AreaChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="x" domain={[0, 720]} tickFormatter={formatStoryHour} type="number" />
+            <YAxis width={54} />
+            <Area
+              dataKey="average"
+              fill="var(--color-average)"
+              fillOpacity={0.2}
+              stroke="var(--color-average)"
+              strokeWidth={2}
+              type="monotone"
+              {...animationProps}
+            />
+          </AreaChart>
+        </ChartContainer>
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
 function BackendStatusStory() {
   return (
     <StoryFrame title="Backend status">
@@ -666,4 +831,8 @@ function ThresholdsAndAnomaliesStory() {
 
 function rangesEqual(left: [number, number], right: [number, number]) {
   return left[0] === right[0] && left[1] === right[1];
+}
+
+function formatStoryHour(value: number) {
+  return `${Math.round(value)}h`;
 }

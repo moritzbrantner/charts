@@ -6,6 +6,8 @@ const stories = [
   { id: "charts-quality--heatmap", name: "heatmap", responsive: false },
   { id: "charts-quality--box-plot", name: "box-plot", responsive: false },
   { id: "charts-quality--crowded-overlay", name: "crowded-overlay", responsive: false },
+  { id: "charts-quality--axis-transforms", name: "axis-transforms", responsive: false },
+  { id: "charts-quality--animated-trend", name: "animated-trend", responsive: false },
   { id: "charts-quality--interactive-samples", name: "interactive-samples", responsive: true },
 ] as const;
 
@@ -39,4 +41,17 @@ test("y-axis range menu visual snapshot", async ({ page }, testInfo) => {
   await expect(page.getByRole("dialog", { name: "Y-axis range menu" })).toBeVisible();
 
   await expect(page.locator("#storybook-root")).toHaveScreenshot("y-axis-range-menu.png");
+});
+
+test("axis transform menu visual snapshot", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop dialog snapshot");
+
+  await page.goto("/iframe.html?id=charts-quality--axis-transform-menu&viewMode=story");
+  await expect(page.locator("#storybook-root")).toBeVisible();
+
+  const trigger = page.locator("[data-chart-axis-transform-trigger='y']").first();
+  await trigger.click({ button: "right", position: { x: 8, y: 24 } });
+  await expect(page.getByRole("dialog", { name: "Y-axis transform menu" })).toBeVisible();
+
+  await expect(page.locator("#storybook-root")).toHaveScreenshot("axis-transform-menu.png");
 });

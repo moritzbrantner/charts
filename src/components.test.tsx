@@ -4,6 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
   BinnedChart,
+  ChartAxisTransformMenu,
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
@@ -20,13 +21,17 @@ import {
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
   createChartDensityIndex,
+  getChartAxisScaleDefinitions,
   getChartAnomalyAnnotations,
   getChartDataYBounds,
+  getRechartsAnimationProps,
   getNearestChartSample,
   getChartThresholdAnnotations,
   getChartValueModeDefinitions,
   getChartSampleYBounds,
   measureChartSeries,
+  resolveChartAxisTransformStatus,
+  useChartAnimatedDomain,
   useChartBinCount,
   useChartSeriesVisibility,
   useChartWheelDomain,
@@ -35,6 +40,153 @@ import {
 describe("@moritzbrantner/charts", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  test("defines and validates axis scales", () => {
+    expect(getChartAxisScaleDefinitions().map((definition) => definition.id)).toEqual([
+      "linear",
+      "log",
+      "sqrt",
+      "symlog",
+    ]);
+    expect(resolveChartAxisTransformStatus({ dataDomain: [-4, 16], scale: "linear" })).toEqual({
+      message: null,
+      renderScale: "linear",
+      valid: true,
+    });
+    expect(resolveChartAxisTransformStatus({ dataDomain: [-4, 16], scale: "sqrt" }).valid).toBe(
+      true,
+    );
+    expect(resolveChartAxisTransformStatus({ dataDomain: [-4, 16], scale: "symlog" }).valid).toBe(
+      true,
+    );
+    expect(resolveChartAxisTransformStatus({ dataDomain: [1, 16], scale: "log" })).toEqual({
+      message: null,
+      renderScale: "log",
+      valid: true,
+    });
+    expect(resolveChartAxisTransformStatus({ dataDomain: [0, 16], scale: "log" })).toEqual({
+      message: "Log scale needs a strictly positive data domain.",
+      renderScale: "linear",
+      valid: false,
+    });
+  });
+
+  test("resolves recharts animation props", () => {
+    expect(getRechartsAnimationProps({ enabled: false })).toEqual({
+      animationDuration: 0,
+      animationEasing: "ease",
+      isAnimationActive: false,
+    });
+    expect(
+      getRechartsAnimationProps({
+        durationMs: 320,
+        easing: "linear",
+        enabled: true,
+        mode: "draw",
+      }),
+    ).toEqual({
+      animationDuration: 320,
+      animationEasing: "linear",
+      isAnimationActive: true,
+    });
+
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+
+    expect(getRechartsAnimationProps({ enabled: true, mode: "draw" })).toEqual({
+      animationDuration: 0,
+      animationEasing: "ease",
+      isAnimationActive: false,
+    });
+  });
+
+  test("returns target animated domain immediately when disabled", () => {
+    const { result, rerender } = renderHook(
+      ({ domain }) => useChartAnimatedDomain({ domain, enabled: false }),
+      {
+        initialProps: {
+          domain: [0, 10] satisfies [number, number],
+        },
+      },
+    );
+
+    expect(result.current).toEqual([0, 10]);
+
+    rerender({ domain: [10, 20] });
+
+    expect(result.current).toEqual([10, 20]);
+  });
+
+  test("changes axis transform scale and range", () => {
+    const onValueChange = vi.fn();
+    const { container } = render(
+      <LineChart
+        width={400}
+        height={260}
+        data={[
+          { average: 20, label: "A" },
+          { average: 80, label: "B" },
+        ]}
+      >
+        <YAxis width={60} />
+        <Line dataKey="average" dot={false} isAnimationActive={false} />
+        <ChartAxisTransformMenu
+          axis="y"
+          dataDomain={[20, 80]}
+          onValueChange={onValueChange}
+          value={{ domain: null, scale: "linear" }}
+        />
+      </LineChart>,
+    );
+
+    const trigger = container.querySelector("[data-chart-axis-transform-trigger='y']");
+
+    expect(trigger).toBeTruthy();
+    fireChartInteractionEvent(trigger!, "contextmenu", 80, 80);
+    fireEvent.change(screen.getByLabelText("Scale"), { target: { value: "log" } });
+    fireEvent.change(screen.getByLabelText("Min"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("Max"), { target: { value: "100" } });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      domain: [10, 100],
+      scale: "log",
+    });
+  });
+
+  test("falls back invalid log axis transforms to linear", () => {
+    const onValueChange = vi.fn();
+    const { container } = render(
+      <LineChart
+        width={400}
+        height={260}
+        data={[
+          { average: -20, label: "A" },
+          { average: 80, label: "B" },
+        ]}
+      >
+        <YAxis width={60} />
+        <Line dataKey="average" dot={false} isAnimationActive={false} />
+        <ChartAxisTransformMenu
+          axis="y"
+          dataDomain={[-20, 80]}
+          onValueChange={onValueChange}
+          value={{ domain: null, scale: "log" }}
+        />
+      </LineChart>,
+    );
+
+    const trigger = container.querySelector("[data-chart-axis-transform-trigger='y']");
+
+    expect(trigger).toBeTruthy();
+    fireChartInteractionEvent(trigger!, "contextmenu", 80, 80);
+    expect(screen.getByText("Log scale needs a strictly positive data domain.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Auto" }));
+
+    expect(onValueChange).toHaveBeenCalledWith({
+      domain: null,
+      scale: "linear",
+    });
   });
 
   test("renders default value modes and selects a mode", () => {
