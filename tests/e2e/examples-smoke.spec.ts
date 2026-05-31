@@ -247,6 +247,46 @@ test("compose controls support keyboard activation", async ({ page }, testInfo) 
   expectNoBrowserErrors(errors);
 });
 
+test("chart type pages render locked composers from the top navbar", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop chart page coverage");
+
+  const errors = collectBrowserErrors(page);
+  const chartPages = [
+    { label: "Area", path: "/area.html", title: "Area chart", value: "area" },
+    { label: "Line", path: "/line.html", title: "Line chart", value: "line" },
+    { label: "Bar", path: "/bar.html", title: "Bar chart", value: "bar" },
+    { label: "Candle", path: "/candle.html", title: "Candle chart", value: "candle" },
+    {
+      label: "Area + rolling",
+      path: "/combo.html",
+      title: "Area chart with rolling line",
+      value: "combo",
+    },
+    { label: "Histogram", path: "/histogram.html", title: "Histogram", value: "histogram" },
+    { label: "Heatmap", path: "/heatmap.html", title: "Heatmap", value: "heatmap" },
+    { label: "Stacked bars", path: "/stacked.html", title: "Stacked bars", value: "stacked" },
+  ];
+
+  for (const chartPage of chartPages) {
+    await page.goto(chartPage.path);
+
+    const playground = page.getByTestId("chart-playground-example");
+
+    await expect(page.getByRole("link", { exact: true, name: chartPage.label })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    await expect(playground).toContainText(chartPage.title);
+    await expect(playground.locator("select").nth(2)).toHaveValue(chartPage.value);
+    await expect(playground.locator("select").nth(2)).toBeDisabled();
+    await expect(page.getByRole("switch", { name: "Legend" })).toBeVisible();
+    await expect(page.getByRole("switch", { name: "Minimap" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+  }
+
+  expectNoBrowserErrors(errors);
+});
+
 async function expectInteractionFast(page: Page, run: () => Promise<void>) {
   const startedAt = await page.evaluate(() => performance.now());
 

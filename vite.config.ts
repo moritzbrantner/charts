@@ -10,8 +10,16 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
+        area: path.resolve(rootDir, "examples/area.html"),
+        bar: path.resolve(rootDir, "examples/bar.html"),
+        candle: path.resolve(rootDir, "examples/candle.html"),
         compose: path.resolve(rootDir, "examples/compose.html"),
+        combo: path.resolve(rootDir, "examples/combo.html"),
+        heatmap: path.resolve(rootDir, "examples/heatmap.html"),
+        histogram: path.resolve(rootDir, "examples/histogram.html"),
         index: path.resolve(rootDir, "examples/index.html"),
+        line: path.resolve(rootDir, "examples/line.html"),
+        stacked: path.resolve(rootDir, "examples/stacked.html"),
       },
     },
   },

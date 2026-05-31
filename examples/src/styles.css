@@ -1,6 +1,6 @@
 @import "@moritzbrantner/ui/atlas/styles.css";
 
-@source "../index.html";
+@source "../*.html";
 @source "./**/*.{ts,tsx}";
 @source "../../src/**/*.{ts,tsx}";
 

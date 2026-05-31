@@ -110,7 +110,6 @@ type TelemetryProperties = {
 
 type ChartVariantId = "comparison" | "envelope" | "revenue" | "volume";
 type ExampleDataSetId = "telemetry" | "retail" | "operations" | "sparse";
-type ExamplePage = "compose" | "examples";
 type PlaygroundChartType =
   | "area"
   | "bar"
@@ -120,6 +119,8 @@ type PlaygroundChartType =
   | "histogram"
   | "line"
   | "stacked";
+type ChartPageId = `chart-${PlaygroundChartType}`;
+type ExamplePage = "compose" | "examples" | ChartPageId;
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
 type PlaygroundAnimationMode = ChartAnimationMode;
 
@@ -158,6 +159,7 @@ const formatNumber = new Intl.NumberFormat("en", {
 
 function App() {
   const page = getExamplePage();
+  const chartPageType = getChartPageType(page);
   const datasets = useMemo(() => createExampleDataSets(), []);
   const [datasetId, setDatasetId] = useState<ExampleDataSetId>("telemetry");
   const selectedDataset = datasets.find((dataset) => dataset.id === datasetId) ?? datasets[0];
@@ -206,6 +208,14 @@ function App() {
 
   return (
     <main className="min-h-screen bg-background text-foreground">
+      <header className="border-b border-border/70 bg-background/95">
+        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-5 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <a href="./" className="text-sm font-semibold tracking-tight">
+            @moritzbrantner/charts
+          </a>
+          <ExampleNav page={page} />
+        </div>
+      </header>
       <section className="border-b border-border/70 bg-card/50" data-testid="examples-hero">
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-5 py-8 sm:px-6 lg:px-8">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -222,7 +232,6 @@ function App() {
                   datasets and common product analytics views.
                 </p>
               </div>
-              <ExampleNav page={page} />
             </div>
             <div className="grid gap-3 sm:grid-cols-2 lg:w-[42rem] lg:grid-cols-4">
               <ChartMetricStrip label="Points" value={formatCompact(points.length)} />
@@ -241,10 +250,11 @@ function App() {
       </section>
 
       <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-6 lg:px-8">
-        {page === "compose" ? (
+        {page === "compose" || chartPageType ? (
           <ChartPlayground
             activeRange={activeRange}
             datasets={datasets}
+            fixedChartType={chartPageType}
             fullDomain={fullDomain}
             index={index}
             onDataSetChange={handleDataSetChange}
@@ -391,16 +401,32 @@ function DeferredExampleMount({
 
 function getExamplePage(): ExamplePage {
   const pathname = window.location.pathname.replace(/\/$/, "");
+  const filename = pathname.split("/").pop() ?? "";
 
-  return pathname.endsWith("/compose") || pathname.endsWith("/compose.html")
-    ? "compose"
-    : "examples";
+  if (filename === "compose" || filename === "compose.html") {
+    return "compose";
+  }
+
+  const chartPage = chartPageLinks.find(
+    (link) => filename === link.path || filename === link.path.replace(/\.html$/, ""),
+  );
+
+  return chartPage ? chartPage.id : "examples";
+}
+
+function getChartPageType(page: ExamplePage): PlaygroundChartType | null {
+  return page.startsWith("chart-") ? (page.slice("chart-".length) as PlaygroundChartType) : null;
 }
 
 function ExampleNav({ page }: { page: ExamplePage }) {
   const links: Array<{ href: string; id: ExamplePage; label: string }> = [
     { href: "./", id: "examples", label: "Examples" },
     { href: "./compose.html", id: "compose", label: "Compose" },
+    ...chartPageLinks.map((link) => ({
+      href: `./${link.path}`,
+      id: link.id,
+      label: link.label,
+    })),
   ];
 
   return (
@@ -430,6 +456,7 @@ function ExampleNav({ page }: { page: ExamplePage }) {
 function ChartPlayground({
   activeRange,
   datasets,
+  fixedChartType,
   fullDomain,
   index,
   onDataSetChange,
@@ -442,6 +469,7 @@ function ChartPlayground({
 }: {
   activeRange: ChartRange;
   datasets: ExampleDataSet[];
+  fixedChartType?: PlaygroundChartType | null;
   fullDomain: [number, number];
   index: ReturnType<typeof createChartDensityIndex<TelemetryProperties>>;
   onDataSetChange: (id: ExampleDataSetId) => void;
@@ -452,7 +480,8 @@ function ChartPlayground({
   selectedDataset: ExampleDataSet;
   valueMode: ChartValueMode;
 }) {
-  const [chartType, setChartType] = useState<PlaygroundChartType>("area");
+  const [selectedChartType, setSelectedChartType] = useState<PlaygroundChartType>("area");
+  const chartType = fixedChartType ?? selectedChartType;
   const [targetBinCount, setTargetBinCount] = useState(120);
   const [histogramBuckets, setHistogramBuckets] = useState(24);
   const [heatmapYBins, setHeatmapYBins] = useState(12);
@@ -800,9 +829,10 @@ function ChartPlayground({
               <ControlSelect
                 label="Chart"
                 value={chartType}
+                disabled={Boolean(fixedChartType)}
                 onChange={(value) => {
-                  if (isPlaygroundChartType(value)) {
-                    setChartType(value);
+                  if (!fixedChartType && isPlaygroundChartType(value)) {
+                    setSelectedChartType(value);
                   }
                 }}
               >
@@ -1925,11 +1955,13 @@ function getPlaygroundRowValue(row: PlaygroundRenderRow, valueMode: ChartValueMo
 
 function ControlSelect({
   children,
+  disabled = false,
   label,
   onChange,
   value,
 }: {
   children: ReactNode;
+  disabled?: boolean;
   label: string;
   onChange: (value: string) => void;
   value: string;
@@ -1937,7 +1969,11 @@ function ControlSelect({
   return (
     <label className="grid gap-2">
       <span className="text-sm font-medium text-muted-foreground">{label}</span>
-      <NativeSelect value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+      <NativeSelect
+        value={value}
+        disabled={disabled}
+        onChange={(event) => onChange(event.currentTarget.value)}
+      >
         {children}
       </NativeSelect>
     </label>
@@ -2009,6 +2045,16 @@ const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> 
   { id: "heatmap", label: "Heatmap" },
   { id: "stacked", label: "Stacked bars" },
 ];
+
+const chartPageLinks: Array<{
+  id: ChartPageId;
+  label: string;
+  path: string;
+}> = playgroundChartOptions.map((option) => ({
+  id: `chart-${option.id}`,
+  label: option.label,
+  path: `${option.id}.html`,
+}));
 
 const playgroundChartTitles: Record<PlaygroundChartType, string> = {
   area: "Area chart",
