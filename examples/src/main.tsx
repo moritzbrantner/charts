@@ -83,6 +83,7 @@ import {
   resolveChartAxisTransformStatus,
   useChartAnimatedDomain,
   useChartBinCount,
+  useChartDragDomain,
   useChartPlaybackDomain,
   useChartSeriesVisibility,
   useChartWheelDomain,
@@ -173,7 +174,7 @@ function App() {
     }),
     [activeDomain, selectedRange],
   );
-  const index = useMemo(() => createChartDensityIndex(points, { backend: "hybrid-js" }), [points]);
+  const index = useMemo(() => createChartDensityIndex(points, { backend: "auto" }), [points]);
   const bounds = index.getSeriesBounds();
   const fullDomain: [number, number] = bounds ? [bounds.minX, bounds.maxX] : activeDomain;
   const fullSeries = useMemo(
@@ -2133,12 +2134,27 @@ function DenseTrendExample({
     fullDomain,
     onDomainChange,
   });
+  const {
+    containerRef: dragContainerRef,
+    isDragging: isDomainDragging,
+    onDoubleClick: handleDomainDoubleClick,
+    onPointerCancel: handleDomainPointerCancel,
+    onPointerDown: handleDomainPointerDown,
+    onPointerMove: handleDomainPointerMove,
+    onPointerUp: handleDomainPointerUp,
+    selection: domainSelection,
+  } = useChartDragDomain<HTMLDivElement>({
+    domain: activeRange.domain,
+    fullDomain,
+    onDomainChange,
+  });
   const chartContainerRef = useCallback(
     (node: HTMLDivElement | null) => {
       binCountContainerRef(node);
       wheelContainerRef(node);
+      dragContainerRef(node);
     },
-    [binCountContainerRef, wheelContainerRef],
+    [binCountContainerRef, dragContainerRef, wheelContainerRef],
   );
   const measured = useMemo(
     () =>
@@ -2307,7 +2323,17 @@ function DenseTrendExample({
             }
           }}
         >
-          <div ref={chartContainerRef}>
+          <div
+            ref={chartContainerRef}
+            className="relative select-none"
+            data-chart-domain-drag-frame=""
+            data-chart-domain-dragging={isDomainDragging ? "true" : undefined}
+            onDoubleClick={handleDomainDoubleClick}
+            onPointerCancel={handleDomainPointerCancel}
+            onPointerDown={handleDomainPointerDown}
+            onPointerMove={handleDomainPointerMove}
+            onPointerUp={handleDomainPointerUp}
+          >
             <ChartContainer className="h-[24rem] w-full" config={chartConfig(definition.label)}>
               {definition.renderer === "bar" ? (
                 <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
@@ -2337,6 +2363,16 @@ function DenseTrendExample({
                 </AreaChart>
               )}
             </ChartContainer>
+            {domainSelection ? (
+              <div
+                data-chart-domain-selection=""
+                className="pointer-events-none absolute inset-y-0 border-x border-primary bg-primary/15"
+                style={{
+                  left: `${domainSelection.left}px`,
+                  width: `${domainSelection.width}px`,
+                }}
+              />
+            ) : null}
           </div>
         </ContextActionMenu>
         {selectedSample ? (
@@ -3662,7 +3698,7 @@ function BackendExample({ points }: { points: ChartSeriesPoint<TelemetryProperti
 }
 
 function GapBehaviorExample({ points }: { points: ChartSeriesPoint<TelemetryProperties>[] }) {
-  const index = useMemo(() => createChartDensityIndex(points, { backend: "hybrid-js" }), [points]);
+  const index = useMemo(() => createChartDensityIndex(points, { backend: "auto" }), [points]);
   const series = index.getChartSeries({
     includeEmptyBins: true,
     targetBinCount: 120,

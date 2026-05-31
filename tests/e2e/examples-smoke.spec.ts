@@ -51,6 +51,40 @@ test("examples app renders and supports core chart interactions", async ({ page 
 
   const minimap = page.getByRole("img", { name: "Chart domain minimap" }).first();
   await expect(minimap).toBeVisible();
+  const minimapPanel = minimap.locator("xpath=..");
+  const chartFrame = page.locator("[data-chart-domain-drag-frame]").first();
+  const chartBox = await chartFrame.boundingBox();
+
+  expect(chartBox).not.toBeNull();
+  if (chartBox) {
+    const beforeChartDrag = await minimapPanel.textContent();
+
+    await expectInteractionFast(page, async () => {
+      await page.mouse.move(chartBox.x + chartBox.width * 0.42, chartBox.y + chartBox.height * 0.5);
+      await page.mouse.down();
+      await page.mouse.move(
+        chartBox.x + chartBox.width * 0.58,
+        chartBox.y + chartBox.height * 0.5,
+        {
+          steps: 4,
+        },
+      );
+      await page.mouse.up();
+    });
+    await expect.poll(async () => minimapPanel.textContent()).not.toBe(beforeChartDrag);
+
+    const beforeZoom = await minimapPanel.textContent();
+
+    await chartFrame.hover();
+    await page.keyboard.down("Control");
+    try {
+      await page.mouse.wheel(0, -180);
+    } finally {
+      await page.keyboard.up("Control");
+    }
+    await expect.poll(async () => minimapPanel.textContent()).not.toBe(beforeZoom);
+  }
+
   const box = await minimap.boundingBox();
 
   expect(box).not.toBeNull();

@@ -101,6 +101,13 @@ export type ChartDensityQuery = BinnedSeriesQuery & {
 
 export type ChartDensityBackend = BinnedSeriesBackend | "progressive";
 
+export type ChartDensityCacheOptions = {
+  enabled?: boolean;
+  maxEntries?: number;
+};
+
+export type ChartDensityBackendPolicy = ChartDensityBackend | "auto";
+
 export type ChartDensitySample<TProperties = Record<string, unknown>> = {
   averageY: number | null;
   firstPoint: IndexedChartSeriesPoint<TProperties> | null;
@@ -324,7 +331,8 @@ export type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Om
   BinnedSeriesIndexOptions<TProperties>,
   "backend"
 > & {
-  backend?: ChartDensityBackend;
+  backend?: ChartDensityBackendPolicy;
+  cache?: ChartDensityCacheOptions;
   progressive?: ChartDensityProgressiveOptions<TProperties>;
 };
 
@@ -341,6 +349,20 @@ export type ProgressiveChartDensityIndex<TProperties = Record<string, unknown>> 
     getProgressiveStatus(): ChartDensityProgressiveStatus;
     warmWasmIndex(): Promise<ChartDensityIndex<TProperties>>;
     whenWasmReady(): Promise<ChartDensityIndex<TProperties>>;
+  };
+
+export type ChartDensityBackendPolicyInput = {
+  hasPercentiles?: boolean;
+  operationKind?: "chart" | "grouped" | "heatmap" | "histogram" | "construct" | "progressive";
+  pointCount: number;
+  requestedModes?: readonly ChartValueMode[];
+};
+
+type StaticChartDensityIndexOptions<TProperties = Record<string, unknown>> =
+  BinnedSeriesIndexOptions<TProperties> & {
+    backend?: BinnedSeriesBackend;
+    cache?: ChartDensityCacheOptions;
+    rangeAggregate?: boolean;
   };
 
 export const CHART_VALUE_MODE_DEFINITIONS: readonly ChartValueModeDefinition[] = [
@@ -479,13 +501,36 @@ export function getChartValueModeDefinitions(
   return modes.map((mode) => getChartValueModeDefinition(mode));
 }
 
+export function resolveChartDensityBackendPolicy({
+  hasPercentiles = false,
+  operationKind = "chart",
+  pointCount,
+  requestedModes = [],
+}: ChartDensityBackendPolicyInput): BinnedSeriesBackend {
+  const percentileRequested =
+    hasPercentiles || requestedModes.some((mode) => isChartPercentileMode(mode));
+
+  if (operationKind === "chart" && percentileRequested && pointCount >= 200_000) {
+    return "wasm-index";
+  }
+
+  return "hybrid-js";
+}
+
 export function createChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: ChartDensityIndexOptions<TProperties> = {},
 ): ChartDensityIndex<TProperties> {
   const { backend = "progressive", progressive, ...indexOptions } = options;
+  const resolvedBackend =
+    backend === "auto"
+      ? resolveChartDensityBackendPolicy({
+          operationKind: "construct",
+          pointCount: points.length,
+        })
+      : backend;
 
-  if (backend === "progressive") {
+  if (resolvedBackend === "progressive") {
     return createProgressiveChartDensityIndex(points, {
       ...indexOptions,
       progressive,
@@ -494,7 +539,8 @@ export function createChartDensityIndex<TProperties = Record<string, unknown>>(
 
   return createStaticChartDensityIndex(points, {
     ...indexOptions,
-    backend,
+    backend: resolvedBackend,
+    rangeAggregate: backend === "auto",
   });
 }
 
@@ -621,28 +667,34 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
 
 function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
-  options: BinnedSeriesIndexOptions<TProperties> & { backend?: BinnedSeriesBackend },
+  options: StaticChartDensityIndexOptions<TProperties>,
 ): ChartDensityIndex<TProperties> {
-  if (options.backend === "wasm-index") {
-    return createWasmChartDensityIndex(
-      points,
-      options as BinnedSeriesIndexOptions<TProperties>,
-      createHybridChartDensityIndex(points, options),
-    );
-  }
+  const { cache, ...indexOptions } = options;
+  const cacheOptions = normalizeChartDensityCacheOptions(cache);
+  const index =
+    indexOptions.backend === "wasm-index"
+      ? createWasmChartDensityIndex(
+          points,
+          indexOptions as BinnedSeriesIndexOptions<TProperties>,
+          createHybridChartDensityIndex(points, indexOptions),
+        )
+      : createHybridChartDensityIndex(points, indexOptions);
 
-  return createHybridChartDensityIndex(points, options);
+  return cacheOptions.enabled ? createCachedChartDensityIndex(index, cacheOptions.maxEntries) : index;
 }
 
 function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
-  options: BinnedSeriesIndexOptions<TProperties> & { backend?: BinnedSeriesBackend },
+  options: StaticChartDensityIndexOptions<TProperties>,
 ): ChartDensityIndex<TProperties> {
   const binnedIndex = createBinnedSeriesIndex(
     points,
     options as BinnedSeriesIndexOptions<TProperties>,
   );
   const pointStore = createChartPointStore(points, options);
+  const rangeAggregateStore = options.rangeAggregate
+    ? createChartRangeAggregateStore(pointStore)
+    : null;
 
   return {
     getBackendCapabilities() {
@@ -657,6 +709,10 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
     },
 
     getBinnedSeries(query) {
+      if (rangeAggregateStore) {
+        return createRangeAggregateBinnedSeries(rangeAggregateStore, query);
+      }
+
       return binnedIndex.getBinnedSeries(query);
     },
 
@@ -667,7 +723,9 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
         return createPointStoreChartSeries(pointStore, query, valueMode);
       }
 
-      const series = binnedIndex.getBinnedSeries(query);
+      const series = rangeAggregateStore
+        ? createRangeAggregateBinnedSeries(rangeAggregateStore, query)
+        : binnedIndex.getBinnedSeries(query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
 
       return {
@@ -703,12 +761,131 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
   };
 }
 
+function normalizeChartDensityCacheOptions(
+  options: ChartDensityCacheOptions | undefined,
+): Required<ChartDensityCacheOptions> {
+  return {
+    enabled: options?.enabled ?? true,
+    maxEntries: clampInteger(options?.maxEntries ?? 64, 0, 10_000),
+  };
+}
+
+function createCachedChartDensityIndex<TProperties>(
+  index: ChartDensityIndex<TProperties>,
+  maxEntries: number,
+): ChartDensityIndex<TProperties> {
+  if (maxEntries <= 0) {
+    return index;
+  }
+
+  const binnedCache = new ChartLruCache<BinnedSeries<TProperties>>(maxEntries);
+  const chartCache = new ChartLruCache<ChartDensitySeries<TProperties>>(maxEntries);
+
+  return {
+    ...index,
+    getBinnedSeries(query) {
+      const key = createBinnedSeriesCacheKey(query);
+      const cached = binnedCache.get(key);
+
+      if (cached) {
+        return cached;
+      }
+
+      const series = index.getBinnedSeries(query);
+
+      binnedCache.set(key, series);
+
+      return series;
+    },
+    getChartSeries(query) {
+      const key = createChartSeriesCacheKey(query);
+      const cached = chartCache.get(key);
+
+      if (cached) {
+        return cached;
+      }
+
+      const series = index.getChartSeries(query);
+
+      chartCache.set(key, series);
+
+      return series;
+    },
+  };
+}
+
+class ChartLruCache<TValue> {
+  readonly #entries = new Map<string, TValue>();
+  readonly #maxEntries: number;
+
+  constructor(maxEntries: number) {
+    this.#maxEntries = Math.max(0, maxEntries);
+  }
+
+  get(key: string) {
+    if (!this.#entries.has(key)) {
+      return null;
+    }
+
+    const value = this.#entries.get(key) as TValue;
+
+    this.#entries.delete(key);
+    this.#entries.set(key, value);
+
+    return value;
+  }
+
+  set(key: string, value: TValue) {
+    this.#entries.set(key, value);
+
+    while (this.#entries.size > this.#maxEntries) {
+      const oldestKey = this.#entries.keys().next().value;
+
+      if (typeof oldestKey !== "string") {
+        break;
+      }
+
+      this.#entries.delete(oldestKey);
+    }
+  }
+}
+
+function createBinnedSeriesCacheKey(query: BinnedSeriesQuery) {
+  const xDomain = normalizeChartDomain(query.xDomain);
+
+  return JSON.stringify({
+    includeEmptyBins: Boolean(query.includeEmptyBins),
+    targetBinCount: clampInteger(query.targetBinCount, 1, 100_000),
+    xDomain,
+  });
+}
+
+function createChartSeriesCacheKey(query: ChartDensityQuery) {
+  const xDomain = normalizeChartDomain(query.xDomain);
+  const percentiles = [...(query.percentiles ?? [])].sort();
+
+  return JSON.stringify({
+    includeEmptyBins: Boolean(query.includeEmptyBins),
+    percentiles,
+    targetBinCount: clampInteger(query.targetBinCount, 1, 100_000),
+    valueMode: query.valueMode ?? "average",
+    xDomain,
+  });
+}
+
 export const createChartSeriesIndex = createChartDensityIndex;
 
 type ChartPointStore<TProperties = Record<string, unknown>> = {
   metricKeys: string[];
   pointLookup: Map<string, IndexedChartSeriesPoint<TProperties>>;
   points: Array<IndexedChartSeriesPoint<TProperties>>;
+};
+
+type ChartRangeAggregateStore<TProperties = Record<string, unknown>> = ChartPointStore<TProperties> & {
+  maxTable: number[][];
+  metricPrefixSums: Map<string, number[]>;
+  minTable: number[][];
+  prefixSumY: number[];
 };
 
 type MutableChartDensityBin<TProperties = Record<string, unknown>> =
@@ -749,6 +926,123 @@ function createChartPointStore<TProperties>(
     metricKeys: collectDensityMetricKeys(normalizedPoints.map((point) => point.metrics)),
     pointLookup: new Map(normalizedPoints.map((point) => [point.id, point])),
     points: normalizedPoints,
+  };
+}
+
+function createChartRangeAggregateStore<TProperties>(
+  store: ChartPointStore<TProperties>,
+): ChartRangeAggregateStore<TProperties> {
+  const prefixSumY = createPrefixSums(store.points.map((point) => point.y));
+  const metricPrefixSums = new Map<string, number[]>();
+
+  for (const metricKey of store.metricKeys) {
+    metricPrefixSums.set(
+      metricKey,
+      createPrefixSums(store.points.map((point) => point.metrics[metricKey] ?? 0)),
+    );
+  }
+
+  return {
+    ...store,
+    maxTable: createSparseTable(
+      store.points.map((point) => point.y),
+      Math.max,
+    ),
+    metricPrefixSums,
+    minTable: createSparseTable(
+      store.points.map((point) => point.y),
+      Math.min,
+    ),
+    prefixSumY,
+  };
+}
+
+function createRangeAggregateBinnedSeries<TProperties>(
+  store: ChartRangeAggregateStore<TProperties>,
+  query: BinnedSeriesQuery,
+): BinnedSeries<TProperties> {
+  const xDomain = normalizeChartDomain(query.xDomain);
+  const targetBinCount = clampInteger(query.targetBinCount, 1, 100_000);
+  const binWidth = getChartBinWidth(xDomain, targetBinCount);
+  const bins = Array.from({ length: targetBinCount }, (_, index) =>
+    createRangeAggregateBin(store, index, xDomain, targetBinCount, binWidth),
+  );
+  const visibleBins = query.includeEmptyBins ? bins : bins.filter((bin) => bin.pointCount > 0);
+
+  return {
+    bins: visibleBins,
+    summary: {
+      binCount: visibleBins.length,
+      metrics: sumDensityMetrics(
+        visibleBins.map((bin) => bin.metrics),
+        store.metricKeys,
+      ),
+      pointCount: visibleBins.reduce((total, bin) => total + bin.pointCount, 0),
+      xDomain,
+    },
+  };
+}
+
+function createRangeAggregateBin<TProperties>(
+  store: ChartRangeAggregateStore<TProperties>,
+  index: number,
+  xDomain: [number, number],
+  binCount: number,
+  binWidth: number,
+): ChartDensityBin<TProperties> {
+  const x0 = xDomain[0] + index * binWidth;
+  const x1 = index === binCount - 1 ? xDomain[1] : xDomain[0] + (index + 1) * binWidth;
+  const startIndex =
+    xDomain[1] <= xDomain[0] && index > 0
+      ? 0
+      : lowerBoundChartPointByX(store.points, xDomain[1] <= xDomain[0] ? xDomain[0] : x0);
+  const endIndex =
+    xDomain[1] <= xDomain[0]
+      ? index === 0
+        ? upperBoundChartPointByX(store.points, xDomain[0])
+        : 0
+      : index === binCount - 1
+        ? upperBoundChartPointByX(store.points, x1)
+        : lowerBoundChartPointByX(store.points, x1);
+  const pointCount = Math.max(0, endIndex - startIndex);
+  const metrics = createZeroMetricRecord(store.metricKeys);
+
+  for (const metricKey of store.metricKeys) {
+    const prefix = store.metricPrefixSums.get(metricKey);
+
+    metrics[metricKey] = prefix ? prefix[endIndex] - prefix[startIndex] : 0;
+  }
+
+  if (pointCount === 0) {
+    return {
+      averageY: null,
+      firstPoint: null,
+      index,
+      lastPoint: null,
+      maxY: null,
+      metrics,
+      minY: null,
+      pointCount: 0,
+      sumY: 0,
+      x0,
+      x1,
+    };
+  }
+
+  const sumY = store.prefixSumY[endIndex] - store.prefixSumY[startIndex];
+
+  return {
+    averageY: sumY / pointCount,
+    firstPoint: store.points[startIndex] ?? null,
+    index,
+    lastPoint: store.points[endIndex - 1] ?? null,
+    maxY: querySparseTable(store.maxTable, startIndex, endIndex, Math.max),
+    metrics,
+    minY: querySparseTable(store.minTable, startIndex, endIndex, Math.min),
+    pointCount,
+    sumY,
+    x0,
+    x1,
   };
 }
 
@@ -1310,7 +1604,10 @@ function getPointsInXDomain<TProperties>(
   points: Array<IndexedChartSeriesPoint<TProperties>>,
   xDomain: [number, number],
 ) {
-  return points.filter((point) => point.x >= xDomain[0] && point.x <= xDomain[1]);
+  const startIndex = lowerBoundChartPointByX(points, xDomain[0]);
+  const endIndex = upperBoundChartPointByX(points, xDomain[1]);
+
+  return points.slice(startIndex, endIndex);
 }
 
 function getValueDomain(values: number[]): [number, number] | null {
@@ -1318,7 +1615,105 @@ function getValueDomain(values: number[]): [number, number] | null {
     return null;
   }
 
-  return [Math.min(...values), Math.max(...values)];
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+
+  for (const value of values) {
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+
+  return [min, max];
+}
+
+function lowerBoundChartPointByX<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  x: number,
+) {
+  let low = 0;
+  let high = points.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+
+    if (points[middle].x < x) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+}
+
+function upperBoundChartPointByX<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  x: number,
+) {
+  let low = 0;
+  let high = points.length;
+
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+
+    if (points[middle].x <= x) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  return low;
+}
+
+function createPrefixSums(values: number[]) {
+  const prefixSums = [0];
+
+  for (const value of values) {
+    prefixSums.push(prefixSums[prefixSums.length - 1] + value);
+  }
+
+  return prefixSums;
+}
+
+function createSparseTable(values: number[], reducer: (left: number, right: number) => number) {
+  if (values.length === 0) {
+    return [];
+  }
+
+  const table = [values.slice()];
+
+  for (let level = 1; 2 ** level <= values.length; level += 1) {
+    const span = 2 ** level;
+    const halfSpan = span / 2;
+    const previous = table[level - 1];
+    const row = Array.from({ length: values.length - span + 1 }, (_, index) =>
+      reducer(previous[index], previous[index + halfSpan]),
+    );
+
+    table.push(row);
+  }
+
+  return table;
+}
+
+function querySparseTable(
+  table: number[][],
+  startIndex: number,
+  endIndex: number,
+  reducer: (left: number, right: number) => number,
+) {
+  const length = endIndex - startIndex;
+
+  if (length <= 0) {
+    return null;
+  }
+
+  const level = Math.floor(Math.log2(length));
+  const span = 2 ** level;
+  const row = table[level];
+
+  return reducer(row[startIndex], row[endIndex - span]);
 }
 
 function getBucketIndex(value: number, domain: [number, number], bucketCount: number) {

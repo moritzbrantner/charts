@@ -109,7 +109,11 @@ const rows = createChartRenderData(series.samples, {
 ## Composable binned chart
 
 Use `BinnedChart` when a chart should share the same composition model for
-styling, responsive binning, render rows, wheel-domain changes, and a minimap.
+styling, responsive binning, render rows, direct domain navigation, wheel-domain
+changes, and a minimap. When `onDomainChange` is provided, users can drag the
+main chart to pan, Shift-drag or Alt-drag to zoom to a selected range,
+double-click to reset to `fullDomain`, scroll horizontally or Shift-scroll to
+pan, and Ctrl-scroll or Meta-scroll to zoom around the pointer.
 
 ```tsx
 import { Line, LineChart } from "recharts";
@@ -136,6 +140,9 @@ export function TrendWithMinimap({ activeDomain, fullDomain, index, setActiveDom
   );
 }
 ```
+
+Set `drag={false}` or `dragOptions={{ disabled: true }}` when a chart needs to
+reserve pointer drags for custom overlays or renderer-specific interactions.
 
 ## Interactive side legend
 

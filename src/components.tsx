@@ -30,7 +30,9 @@ import {
   type ComponentProps,
   type JSX,
   type MouseEvent,
+  type MouseEventHandler,
   type PointerEvent,
+  type PointerEventHandler,
   type ReactNode,
   type WheelEvent,
   type WheelEventHandler,
@@ -229,6 +231,13 @@ export type BinnedChartProps<TProperties = Record<string, unknown>> = {
   ) => ComponentProps<typeof ChartContainer>["children"];
   className?: string;
   config: ChartConfig;
+  drag?: boolean;
+  dragOptions?: Omit<
+    UseChartDragDomainOptions,
+    "disabled" | "domain" | "fullDomain" | "minSpan" | "onDomainChange"
+  > & {
+    disabled?: boolean;
+  };
   domain: [number, number];
   formatDomainValue?: (value: number) => string;
   fullDomain?: [number, number];
@@ -434,6 +443,43 @@ export type UseChartWheelDomainResult<TElement extends Element = HTMLElement> = 
   onWheel: WheelEventHandler<TElement>;
 };
 
+export type ChartDomainDragSelection = {
+  left: number;
+  width: number;
+};
+
+export type ChartDomainDragUpdateMode = "preview" | "live";
+
+export type ChartDomainDragPreview = {
+  domain: [number, number];
+  offsetPx: number;
+};
+
+export type UseChartDragDomainOptions = {
+  disabled?: boolean;
+  domain: [number, number];
+  fullDomain: [number, number];
+  minDragPixels?: number;
+  minSpan?: number;
+  onDomainChange: (domain: [number, number]) => void;
+  onDomainPreviewChange?: (preview: ChartDomainDragPreview | null) => void;
+  panScale?: number;
+  resetOnDoubleClick?: boolean;
+  selectModifier?: "shift" | "alt" | "shift-or-alt";
+  updateMode?: ChartDomainDragUpdateMode;
+};
+
+export type UseChartDragDomainResult<TElement extends Element = HTMLElement> = {
+  containerRef: (node: TElement | null) => void;
+  isDragging: boolean;
+  onDoubleClick: MouseEventHandler<TElement>;
+  onPointerCancel: PointerEventHandler<TElement>;
+  onPointerDown: PointerEventHandler<TElement>;
+  onPointerMove: PointerEventHandler<TElement>;
+  onPointerUp: PointerEventHandler<TElement>;
+  selection: ChartDomainDragSelection | null;
+};
+
 export type UseChartSeriesVisibilityOptions = {
   defaultHiddenIds?: readonly string[];
   hiddenIds?: readonly string[];
@@ -484,6 +530,15 @@ type ChartDomainMinimapDragState =
 type ChartDomainPointerBounds = {
   left: number;
   width: number;
+};
+
+type ChartDomainDragState = {
+  bounds: ChartDomainPointerBounds;
+  dragged: boolean;
+  mode: "pan" | "select";
+  pointerId: number;
+  startClientX: number;
+  startDomain: [number, number];
 };
 
 const CHART_AXIS_SCALE_DEFINITIONS: Array<{
@@ -924,6 +979,8 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   children,
   className,
   config,
+  drag = true,
+  dragOptions,
   domain,
   formatDomainValue = formatCompactNumber,
   fullDomain,
@@ -939,6 +996,16 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
   wheel = true,
   wheelOptions,
 }: BinnedChartProps<TProperties>): JSX.Element {
+  const { onDomainPreviewChange, updateMode = "preview", ...resolvedDragOptions } =
+    dragOptions ?? {};
+  const [dragPreview, setDragPreview] = useState<ChartDomainDragPreview | null>(null);
+  const handleDomainPreviewChange = useCallback(
+    (preview: ChartDomainDragPreview | null) => {
+      setDragPreview(preview);
+      onDomainPreviewChange?.(preview);
+    },
+    [onDomainPreviewChange],
+  );
   const {
     containerRef: binCountContainerRef,
     isAuto,
@@ -954,6 +1021,25 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
     fullDomain: resolvedFullDomain,
     minSpan,
     onDomainChange: handleDomainChange,
+  });
+  const {
+    containerRef: dragContainerRef,
+    isDragging: isDomainDragging,
+    onDoubleClick: handleDomainDoubleClick,
+    onPointerCancel: handleDomainPointerCancel,
+    onPointerDown: handleDomainPointerDown,
+    onPointerMove: handleDomainPointerMove,
+    onPointerUp: handleDomainPointerUp,
+    selection: domainSelection,
+  } = useChartDragDomain<HTMLDivElement>({
+    ...resolvedDragOptions,
+    disabled: !onDomainChange || !drag || resolvedDragOptions.disabled,
+    domain,
+    fullDomain: resolvedFullDomain,
+    minSpan,
+    onDomainChange: handleDomainChange,
+    onDomainPreviewChange: handleDomainPreviewChange,
+    updateMode,
   });
   const containerRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -1003,13 +1089,43 @@ export function BinnedChart<TProperties = Record<string, unknown>>({
 
   return (
     <div ref={containerRef} className={joinClassNames("grid gap-3", className)} onWheel={onWheel}>
-      <ChartContainer className={chartClassName} config={config}>
-        {children(context)}
-      </ChartContainer>
+      <div
+        ref={dragContainerRef}
+        className="relative select-none"
+        data-chart-domain-drag-frame=""
+        data-chart-domain-dragging={isDomainDragging ? "true" : undefined}
+        onDoubleClick={handleDomainDoubleClick}
+        onPointerCancel={handleDomainPointerCancel}
+        onPointerDown={handleDomainPointerDown}
+        onPointerMove={handleDomainPointerMove}
+        onPointerUp={handleDomainPointerUp}
+      >
+        <div
+          data-chart-domain-preview=""
+          style={{
+            transform: dragPreview ? `translateX(${dragPreview.offsetPx}px)` : undefined,
+            willChange: dragPreview ? "transform" : undefined,
+          }}
+        >
+          <ChartContainer className={chartClassName} config={config}>
+            {children(context)}
+          </ChartContainer>
+        </div>
+        {domainSelection ? (
+          <div
+            data-chart-domain-selection=""
+            className="pointer-events-none absolute inset-y-0 border-x border-primary bg-primary/15"
+            style={{
+              left: `${domainSelection.left}px`,
+              width: `${domainSelection.width}px`,
+            }}
+          />
+        ) : null}
+      </div>
       {showMinimap ? (
         <ChartDomainMinimap
           className={minimapClassName}
-          domain={domain}
+          domain={dragPreview?.domain ?? domain}
           fullDomain={resolvedFullDomain}
           samples={minimapSeries.samples}
           formatDomainValue={formatDomainValue}
@@ -2750,6 +2866,343 @@ export function useChartBinCount<TElement extends Element = HTMLDivElement>(
   };
 }
 
+export function useChartDragDomain<TElement extends Element = HTMLElement>({
+  disabled = false,
+  domain,
+  fullDomain,
+  minDragPixels = 4,
+  minSpan,
+  onDomainChange,
+  onDomainPreviewChange,
+  panScale = 1,
+  resetOnDoubleClick = true,
+  selectModifier = "shift-or-alt",
+  updateMode = "live",
+}: UseChartDragDomainOptions): UseChartDragDomainResult<TElement> {
+  const elementRef = useRef<TElement | null>(null);
+  const dragStateRef = useRef<ChartDomainDragState | null>(null);
+  const domainRef = useRef(domain);
+  const fullDomainRef = useRef(fullDomain);
+  const onDomainChangeRef = useRef(onDomainChange);
+  const onDomainPreviewChangeRef = useRef(onDomainPreviewChange);
+  const previewDomainRef = useRef<[number, number] | null>(null);
+  const pendingDomainRef = useRef<[number, number] | null>(null);
+  const frameIdRef = useRef<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [selection, setSelection] = useState<ChartDomainDragSelection | null>(null);
+
+  useEffect(() => {
+    domainRef.current = domain;
+    fullDomainRef.current = fullDomain;
+    onDomainChangeRef.current = onDomainChange;
+    onDomainPreviewChangeRef.current = onDomainPreviewChange;
+  }, [domain, fullDomain, onDomainChange, onDomainPreviewChange]);
+
+  const flushPendingDomain = useCallback(() => {
+    if (frameIdRef.current !== null) {
+      cancelFrame(frameIdRef.current);
+      frameIdRef.current = null;
+    }
+
+    const pendingDomain = pendingDomainRef.current;
+
+    if (!pendingDomain) {
+      return;
+    }
+
+    pendingDomainRef.current = null;
+
+    if (!areDomainsEqual(pendingDomain, domainRef.current)) {
+      domainRef.current = pendingDomain;
+      onDomainChangeRef.current(pendingDomain);
+    }
+  }, []);
+  const stageDomainChange = useCallback(
+    (nextDomain: [number, number]) => {
+      const resolvedFullDomain = fullDomainRef.current;
+      const fullSpan = resolvedFullDomain[1] - resolvedFullDomain[0];
+      const resolvedMinSpan = Math.min(
+        fullSpan,
+        Math.max(minSpan ?? fullSpan / 1000, Number.EPSILON),
+      );
+      const normalized = normalizeDomain(nextDomain, resolvedFullDomain, resolvedMinSpan);
+      const currentDomain = pendingDomainRef.current ?? domainRef.current;
+
+      if (areDomainsEqual(normalized, currentDomain)) {
+        return;
+      }
+
+      pendingDomainRef.current = normalized;
+
+      if (frameIdRef.current !== null) {
+        return;
+      }
+
+      frameIdRef.current = requestFrame(() => {
+        frameIdRef.current = null;
+
+        const pendingDomain = pendingDomainRef.current;
+
+        if (!pendingDomain) {
+          return;
+        }
+
+        pendingDomainRef.current = null;
+
+        if (!areDomainsEqual(pendingDomain, domainRef.current)) {
+          domainRef.current = pendingDomain;
+          onDomainChangeRef.current(pendingDomain);
+        }
+      });
+    },
+    [minSpan],
+  );
+  const previewDomainChange = useCallback(
+    (nextDomain: [number, number], startDomain: [number, number], width: number) => {
+      const resolvedFullDomain = fullDomainRef.current;
+      const fullSpan = resolvedFullDomain[1] - resolvedFullDomain[0];
+      const resolvedMinSpan = Math.min(
+        fullSpan,
+        Math.max(minSpan ?? fullSpan / 1000, Number.EPSILON),
+      );
+      const normalized = normalizeDomain(nextDomain, resolvedFullDomain, resolvedMinSpan);
+      const span = Math.max(Number.EPSILON, startDomain[1] - startDomain[0]);
+      const offsetPx = -((normalized[0] - startDomain[0]) / span) * width;
+      const previousPreview = previewDomainRef.current;
+
+      previewDomainRef.current = normalized;
+
+      if (
+        previousPreview &&
+        areDomainsEqual(previousPreview, normalized) &&
+        onDomainPreviewChangeRef.current
+      ) {
+        return;
+      }
+
+      onDomainPreviewChangeRef.current?.({
+        domain: normalized,
+        offsetPx,
+      });
+    },
+    [minSpan],
+  );
+  const containerRef = useCallback((node: TElement | null) => {
+    elementRef.current = node;
+  }, []);
+  const shouldSelect = useCallback(
+    (event: PointerEvent<TElement>) => {
+      if (selectModifier === "shift") {
+        return event.shiftKey;
+      }
+
+      if (selectModifier === "alt") {
+        return event.altKey;
+      }
+
+      return event.shiftKey || event.altKey;
+    },
+    [selectModifier],
+  );
+  const stopDragging = useCallback(
+    (event: PointerEvent<TElement>) => {
+      const dragState = dragStateRef.current;
+
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+
+      if (dragState.mode === "pan") {
+        if (updateMode === "preview") {
+          const nextDomain = previewDomainRef.current;
+
+          if (nextDomain && !areDomainsEqual(nextDomain, domainRef.current)) {
+            domainRef.current = nextDomain;
+            onDomainChangeRef.current(nextDomain);
+          }
+        } else {
+          flushPendingDomain();
+        }
+      } else {
+        flushPendingDomain();
+      }
+
+      if (dragState.mode === "select" && dragState.dragged) {
+        const startValue = getDomainValueFromClientX(
+          dragState.startClientX,
+          dragState.bounds,
+          dragState.startDomain,
+        );
+        const endValue = getDomainValueFromClientX(
+          event.clientX,
+          dragState.bounds,
+          dragState.startDomain,
+        );
+        const fullSpan = fullDomainRef.current[1] - fullDomainRef.current[0];
+        const resolvedMinSpan = Math.min(
+          fullSpan,
+          Math.max(minSpan ?? fullSpan / 1000, Number.EPSILON),
+        );
+        const nextDomain = normalizeDomain(
+          [startValue, endValue],
+          fullDomainRef.current,
+          resolvedMinSpan,
+        );
+
+        if (!areDomainsEqual(nextDomain, domainRef.current)) {
+          domainRef.current = nextDomain;
+          onDomainChangeRef.current(nextDomain);
+        }
+      }
+
+      dragStateRef.current = null;
+      previewDomainRef.current = null;
+      onDomainPreviewChangeRef.current?.(null);
+      setIsDragging(false);
+      setSelection(null);
+    },
+    [flushPendingDomain, minSpan, updateMode],
+  );
+  const onPointerDown = useCallback(
+    (event: PointerEvent<TElement>) => {
+      if (disabled || event.button !== 0 || event.isPrimary === false) {
+        return;
+      }
+
+      const span = domain[1] - domain[0];
+      const fullSpan = fullDomain[1] - fullDomain[0];
+
+      if (span <= 0 || fullSpan <= 0) {
+        return;
+      }
+
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      dragStateRef.current = {
+        bounds: getDomainPointerBounds(event.currentTarget),
+        dragged: false,
+        mode: shouldSelect(event) ? "select" : "pan",
+        pointerId: event.pointerId,
+        startClientX: event.clientX,
+        startDomain: domain,
+      };
+    },
+    [disabled, domain, fullDomain, shouldSelect],
+  );
+  const onPointerMove = useCallback(
+    (event: PointerEvent<TElement>) => {
+      const dragState = dragStateRef.current;
+
+      if (!dragState || dragState.pointerId !== event.pointerId) {
+        return;
+      }
+
+      const deltaX = event.clientX - dragState.startClientX;
+
+      if (!dragState.dragged && Math.abs(deltaX) < Math.max(0, minDragPixels)) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (!dragState.dragged) {
+        dragState.dragged = true;
+        setIsDragging(true);
+      }
+
+      if (dragState.mode === "select") {
+        const left = clamp(
+          Math.min(dragState.startClientX, event.clientX) - dragState.bounds.left,
+          0,
+          dragState.bounds.width,
+        );
+        const right = clamp(
+          Math.max(dragState.startClientX, event.clientX) - dragState.bounds.left,
+          0,
+          dragState.bounds.width,
+        );
+
+        setSelection({
+          left,
+          width: Math.max(0, right - left),
+        });
+
+        return;
+      }
+
+      const width = Math.max(1, dragState.bounds.width);
+      const span = dragState.startDomain[1] - dragState.startDomain[0];
+      const shift = (-deltaX / width) * span * panScale;
+      const nextDomain: [number, number] = [
+        dragState.startDomain[0] + shift,
+        dragState.startDomain[1] + shift,
+      ];
+
+      if (updateMode === "preview") {
+        previewDomainChange(nextDomain, dragState.startDomain, width);
+
+        return;
+      }
+
+      stageDomainChange(nextDomain);
+    },
+    [minDragPixels, panScale, previewDomainChange, stageDomainChange, updateMode],
+  );
+  const onPointerUp = useCallback(
+    (event: PointerEvent<TElement>) => {
+      stopDragging(event);
+    },
+    [stopDragging],
+  );
+  const onPointerCancel = useCallback(
+    (event: PointerEvent<TElement>) => {
+      stopDragging(event);
+    },
+    [stopDragging],
+  );
+  const onDoubleClick = useCallback(
+    (event: MouseEvent<TElement>) => {
+      if (
+        disabled ||
+        !resetOnDoubleClick ||
+        areDomainsEqual(domainRef.current, fullDomainRef.current)
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      onDomainChangeRef.current(fullDomainRef.current);
+      domainRef.current = fullDomainRef.current;
+    },
+    [disabled, resetOnDoubleClick],
+  );
+
+  useEffect(
+    () => () => {
+      if (frameIdRef.current !== null) {
+        cancelFrame(frameIdRef.current);
+      }
+
+      frameIdRef.current = null;
+      previewDomainRef.current = null;
+      onDomainPreviewChangeRef.current?.(null);
+    },
+    [],
+  );
+
+  return {
+    containerRef,
+    isDragging,
+    onDoubleClick,
+    onPointerCancel,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    selection,
+  };
+}
+
 export function useChartWheelDomain<TElement extends Element = HTMLElement>({
   disabled = false,
   domain,
@@ -3347,7 +3800,7 @@ function getMinimapYBounds<TProperties>(samples: Array<ChartDensitySample<TPrope
   };
 }
 
-function getDomainPointerBounds(element: SVGSVGElement): ChartDomainPointerBounds {
+function getDomainPointerBounds(element: Element): ChartDomainPointerBounds {
   const bounds = element.getBoundingClientRect();
 
   return {

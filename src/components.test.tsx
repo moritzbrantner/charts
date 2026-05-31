@@ -33,6 +33,7 @@ import {
   resolveChartAxisTransformStatus,
   useChartAnimatedDomain,
   useChartBinCount,
+  useChartDragDomain,
   useChartSeriesVisibility,
   useChartWheelDomain,
 } from "@moritzbrantner/charts";
@@ -731,7 +732,7 @@ describe("@moritzbrantner/charts", () => {
     const { container } = render(
       <ChartSampleSparkline
         samples={series.samples}
-        domain={[0, 10]}
+        domain={[5, 15]}
         selectedSampleIndex={series.samples[0]?.index}
         onSampleHover={onSampleHover}
         onSampleSelect={onSampleSelect}
@@ -1163,6 +1164,332 @@ describe("@moritzbrantner/charts", () => {
     expect(result.current.isAuto).toBe(true);
   });
 
+  test("pans chart domains with direct drag gestures", () => {
+    const onDomainChange = vi.fn();
+
+    stubImmediateAnimationFrame();
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointermove", 600, 1);
+
+    expect(onDomainChange).toHaveBeenCalledWith([18, 38]);
+  });
+
+  test("clamps direct chart drag panning at the full domain", () => {
+    const onDomainChange = vi.fn();
+
+    stubImmediateAnimationFrame();
+    render(
+      <DomainDragChart domain={[85, 95]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointermove", 0, 1);
+
+    expect(onDomainChange).toHaveBeenCalledWith([90, 100]);
+  });
+
+  test("ignores direct chart drags below the movement threshold", () => {
+    const onDomainChange = vi.fn();
+
+    stubImmediateAnimationFrame();
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointermove", 503, 1);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+  });
+
+  test("keeps plain chart clicks available for sample interactions", () => {
+    const onDomainChange = vi.fn();
+
+    stubImmediateAnimationFrame();
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointerup", 500, 1);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+  });
+
+  test("resets chart domains on double click", () => {
+    const onDomainChange = vi.fn();
+
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+
+    fireEvent.doubleClick(screen.getByTestId("domain-drag-chart"));
+
+    expect(onDomainChange).toHaveBeenCalledWith([0, 100]);
+  });
+
+  test("selects a chart domain with shift drag and commits on release", () => {
+    const onDomainChange = vi.fn();
+
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 250, 1, { shiftKey: true });
+    firePointerEvent(target, "pointermove", 750, 1, { shiftKey: true });
+
+    const selection = screen.getByTestId("domain-drag-selection");
+
+    expect(selection.style.left).toBe("250px");
+    expect(selection.style.width).toBe("500px");
+    expect(onDomainChange).not.toHaveBeenCalled();
+
+    firePointerEvent(target, "pointerup", 750, 1, { shiftKey: true });
+
+    expect(onDomainChange).toHaveBeenCalledWith([25, 35]);
+  });
+
+  test("selects a chart domain with alt drag", () => {
+    const onDomainChange = vi.fn();
+
+    render(
+      <DomainDragChart domain={[20, 40]} fullDomain={[0, 100]} onDomainChange={onDomainChange} />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 250, 1, { altKey: true });
+    firePointerEvent(target, "pointermove", 750, 1, { altKey: true });
+    firePointerEvent(target, "pointerup", 750, 1, { altKey: true });
+
+    expect(onDomainChange).toHaveBeenCalledWith([25, 35]);
+  });
+
+  test("disables direct chart drag domain changes", () => {
+    const onDomainChange = vi.fn();
+
+    stubImmediateAnimationFrame();
+    render(
+      <DomainDragChart
+        disabled
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        onDomainChange={onDomainChange}
+      />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointermove", 600, 1);
+    fireEvent.doubleClick(target);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+  });
+
+  test("previews pan drag domains and commits once on release", () => {
+    const onDomainChange = vi.fn();
+    const onDomainPreviewChange = vi.fn();
+
+    render(
+      <DomainDragChart
+        domain={[20, 40]}
+        fullDomain={[0, 100]}
+        onDomainChange={onDomainChange}
+        onDomainPreviewChange={onDomainPreviewChange}
+        updateMode="preview"
+      />,
+    );
+    const target = screen.getByTestId("domain-drag-chart");
+
+    stubMinimapBounds(target);
+    firePointerEvent(target, "pointerdown", 500, 1);
+    firePointerEvent(target, "pointermove", 600, 1);
+    firePointerEvent(target, "pointermove", 700, 1);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+    expect(onDomainPreviewChange).toHaveBeenCalledWith({
+      domain: [16, 36],
+      offsetPx: 200,
+    });
+
+    firePointerEvent(target, "pointerup", 700, 1);
+
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+    expect(onDomainChange).toHaveBeenCalledWith([16, 36]);
+    expect(onDomainPreviewChange).toHaveBeenLastCalledWith(null);
+  });
+
+  test("renders a binned chart drag frame and selection overlay", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 10, y: 4 },
+    ]);
+    const { container } = render(
+      <BinnedChart
+        chartClassName="h-40 w-full"
+        config={{ average: { color: "var(--chart-1)", label: "Average" } }}
+        domain={[0, 10]}
+        fullDomain={[0, 20]}
+        index={index}
+        onDomainChange={onDomainChange}
+        renderDataOptions={{ modes: ["average"] }}
+      >
+        {({ rows }) => (
+          <LineChart data={rows}>
+            <Line dataKey="average" dot={false} isAnimationActive={false} />
+          </LineChart>
+        )}
+      </BinnedChart>,
+    );
+    const frame = container.querySelector("[data-chart-domain-drag-frame]") as HTMLElement;
+
+    expect(frame).toBeTruthy();
+    stubMinimapBounds(frame);
+    firePointerEvent(frame, "pointerdown", 100, 1, { shiftKey: true });
+    firePointerEvent(frame, "pointermove", 600, 1, { shiftKey: true });
+
+    expect(container.querySelector("[data-chart-domain-selection]")).toBeTruthy();
+    expect(onDomainChange).not.toHaveBeenCalled();
+  });
+
+  test("previews binned chart pan without querying series on every pointer move", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex(
+      Array.from({ length: 20 }, (_, pointIndex) => ({
+        id: `point-${pointIndex}`,
+        x: pointIndex,
+        y: pointIndex % 5,
+      })),
+    );
+    const getChartSeries = vi.spyOn(index, "getChartSeries");
+    const { container } = render(
+      <BinnedChart
+        chartClassName="h-40 w-full"
+        config={{ average: { color: "var(--chart-1)", label: "Average" } }}
+        domain={[5, 15]}
+        fullDomain={[0, 20]}
+        index={index}
+        onDomainChange={onDomainChange}
+        renderDataOptions={{ modes: ["average"] }}
+      >
+        {({ rows }) => (
+          <LineChart data={rows}>
+            <Line dataKey="average" dot={false} isAnimationActive={false} />
+          </LineChart>
+        )}
+      </BinnedChart>,
+    );
+    const callsAfterRender = getChartSeries.mock.calls.length;
+    const frame = container.querySelector("[data-chart-domain-drag-frame]") as HTMLElement;
+
+    stubMinimapBounds(frame);
+    firePointerEvent(frame, "pointerdown", 500, 1);
+
+    for (let index = 0; index < 60; index += 1) {
+      firePointerEvent(frame, "pointermove", 505 + index, 1);
+    }
+
+    expect(getChartSeries.mock.calls.length).toBe(callsAfterRender);
+    expect(onDomainChange).not.toHaveBeenCalled();
+
+    firePointerEvent(frame, "pointerup", 565, 1);
+
+    expect(onDomainChange).toHaveBeenCalledTimes(1);
+  });
+
+  test("keeps binned chart live drag updates available", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 10, y: 4 },
+    ]);
+    const { container } = render(
+      <BinnedChart
+        chartClassName="h-40 w-full"
+        config={{ average: { color: "var(--chart-1)", label: "Average" } }}
+        domain={[5, 15]}
+        dragOptions={{ updateMode: "live" }}
+        fullDomain={[0, 20]}
+        index={index}
+        onDomainChange={onDomainChange}
+        renderDataOptions={{ modes: ["average"] }}
+      >
+        {({ rows }) => (
+          <LineChart data={rows}>
+            <Line dataKey="average" dot={false} isAnimationActive={false} />
+          </LineChart>
+        )}
+      </BinnedChart>,
+    );
+    const frame = container.querySelector("[data-chart-domain-drag-frame]") as HTMLElement;
+
+    stubImmediateAnimationFrame();
+    stubMinimapBounds(frame);
+    firePointerEvent(frame, "pointerdown", 500, 1);
+    firePointerEvent(frame, "pointermove", 600, 1);
+
+    expect(onDomainChange).toHaveBeenCalledWith([4, 14]);
+  });
+
+  test("can disable binned chart drag while keeping minimap and wheel navigation", () => {
+    const onDomainChange = vi.fn();
+    const index = createChartDensityIndex([
+      { id: "a", x: 0, y: 2 },
+      { id: "b", x: 5, y: 12 },
+      { id: "c", x: 10, y: 4 },
+    ]);
+    const { container } = render(
+      <BinnedChart
+        drag={false}
+        chartClassName="h-40 w-full"
+        config={{ average: { color: "var(--chart-1)", label: "Average" } }}
+        domain={[0, 10]}
+        fullDomain={[0, 20]}
+        index={index}
+        onDomainChange={onDomainChange}
+        renderDataOptions={{ modes: ["average"] }}
+      >
+        {({ rows }) => (
+          <LineChart data={rows}>
+            <Line dataKey="average" dot={false} isAnimationActive={false} />
+          </LineChart>
+        )}
+      </BinnedChart>,
+    );
+    const frame = container.querySelector("[data-chart-domain-drag-frame]") as HTMLElement;
+    const root = frame.parentElement as HTMLElement;
+
+    expect(screen.getByRole("img", { name: "Chart domain minimap" })).toBeTruthy();
+    stubMinimapBounds(frame);
+    stubMinimapBounds(root);
+    firePointerEvent(frame, "pointerdown", 500, 1);
+    firePointerEvent(frame, "pointermove", 600, 1);
+
+    expect(onDomainChange).not.toHaveBeenCalled();
+
+    fireEvent.wheel(root, { deltaX: 100 });
+
+    expect(onDomainChange).toHaveBeenCalledWith([1, 11]);
+  });
+
   test("scrolls chart domains with horizontal mouse wheel gestures", () => {
     const onDomainChange = vi.fn();
     let wheelDefaultPrevented = false;
@@ -1266,13 +1593,13 @@ describe("@moritzbrantner/charts", () => {
     const onDomainChange = vi.fn();
 
     function WheelChart({ domain }: { domain: [number, number] }) {
-      const wheelDomain = useChartWheelDomain<HTMLDivElement>({
+      const { containerRef } = useChartWheelDomain<HTMLDivElement>({
         domain,
         fullDomain: [0, 100],
         onDomainChange,
       });
 
-      return <div data-testid="wheel-chart" ref={wheelDomain.containerRef} />;
+      return <div data-testid="wheel-chart" ref={containerRef} />;
     }
 
     render(<WheelChart domain={[20, 40]} />);
@@ -1368,6 +1695,61 @@ describe("@moritzbrantner/charts", () => {
   });
 });
 
+function DomainDragChart({
+  disabled,
+  domain,
+  fullDomain,
+  onDomainChange,
+  onDomainPreviewChange,
+  updateMode,
+}: {
+  disabled?: boolean;
+  domain: [number, number];
+  fullDomain: [number, number];
+  onDomainChange: (domain: [number, number]) => void;
+  onDomainPreviewChange?: Parameters<typeof useChartDragDomain>[0]["onDomainPreviewChange"];
+  updateMode?: Parameters<typeof useChartDragDomain>[0]["updateMode"];
+}) {
+  const {
+    containerRef,
+    onDoubleClick,
+    onPointerCancel,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    selection,
+  } = useChartDragDomain<HTMLDivElement>({
+    disabled,
+    domain,
+    fullDomain,
+    onDomainChange,
+    onDomainPreviewChange,
+    updateMode,
+  });
+
+  return (
+    <div
+      data-testid="domain-drag-chart"
+      ref={containerRef}
+      onDoubleClick={onDoubleClick}
+      onPointerCancel={onPointerCancel}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    >
+      {selection ? (
+        <div
+          data-testid="domain-drag-selection"
+          style={{
+            left: `${selection.left}px`,
+            width: `${selection.width}px`,
+          }}
+        />
+      ) : null}
+    </div>
+  );
+}
+
 function renderYAxisRangeMenu({
   onHiddenIdsChange,
   onValueChange = vi.fn(),
@@ -1417,6 +1799,11 @@ function firePointerEvent(
   type: "pointercancel" | "pointerdown" | "pointermove" | "pointerup",
   clientX: number,
   pointerId: number,
+  options: {
+    altKey?: boolean;
+    button?: number;
+    shiftKey?: boolean;
+  } = {},
 ) {
   const event = new Event(type, {
     bubbles: true,
@@ -1427,8 +1814,17 @@ function firePointerEvent(
     clientX: {
       value: clientX,
     },
+    altKey: {
+      value: options.altKey ?? false,
+    },
+    button: {
+      value: options.button ?? 0,
+    },
     pointerId: {
       value: pointerId,
+    },
+    shiftKey: {
+      value: options.shiftKey ?? false,
     },
   });
   fireEvent(element, event);
@@ -1485,4 +1881,16 @@ function stubMinimapBounds(element: Element) {
       y: 0,
       toJSON: () => ({}),
     }) as DOMRect;
+}
+
+function stubImmediateAnimationFrame() {
+  vi.stubGlobal(
+    "requestAnimationFrame",
+    vi.fn((callback: FrameRequestCallback) => {
+      callback(16);
+
+      return 1;
+    }),
+  );
+  vi.stubGlobal("cancelAnimationFrame", vi.fn());
 }

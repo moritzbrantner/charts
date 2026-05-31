@@ -304,18 +304,51 @@ function readValueMode(iteration) {
   return ["average", "count", "max", "min", "sum"][iteration % 5];
 }
 
-function assertChartSeries(series) {
+function assertChartSeries(series, context = {}) {
   if (series.samples.length !== series.summary.sampleCount) {
-    throw new Error("chart sample count did not match summary");
+    throw new Error(`chart sample count did not match summary: ${formatDiagnosticContext(context, series)}`);
   }
 
   if (series.bins.length !== series.summary.binCount) {
-    throw new Error("chart bin count did not match summary");
+    throw new Error(`chart bin count did not match summary: ${formatDiagnosticContext(context, series)}`);
   }
 
   if (series.summary.metrics.count !== series.summary.pointCount) {
-    throw new Error("chart count metric did not match point count");
+    throw new Error(
+      `chart count metric did not match point count: ${formatDiagnosticContext(context, series)}`,
+    );
   }
+}
+
+function formatDiagnosticContext(context, series) {
+  const nonEmptyBins = series.bins.filter((bin) => bin.pointCount > 0);
+  const binPointTotal = series.bins.reduce((total, bin) => total + bin.pointCount, 0);
+  const binMetricTotal = series.bins.reduce((total, bin) => total + (bin.metrics.count ?? 0), 0);
+
+  return JSON.stringify({
+    ...context,
+    binCount: series.summary.binCount,
+    binMetricTotal,
+    binPointTotal,
+    firstBins: series.bins.slice(0, 3).map(readBinDiagnostic),
+    lastBins: series.bins.slice(-3).map(readBinDiagnostic),
+    metricCount: series.summary.metrics.count,
+    nonEmptyBinCount: nonEmptyBins.length,
+    pointCount: series.summary.pointCount,
+    sampleCount: series.summary.sampleCount,
+    valueMode: series.summary.valueMode,
+    xDomain: series.summary.xDomain,
+  });
+}
+
+function readBinDiagnostic(bin) {
+  return {
+    index: bin.index,
+    metricCount: bin.metrics.count ?? null,
+    pointCount: bin.pointCount,
+    x0: bin.x0,
+    x1: bin.x1,
+  };
 }
 
 function assertHistogram(histogram) {

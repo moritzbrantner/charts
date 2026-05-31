@@ -97,7 +97,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
         valueMode,
       });
 
-      return mapChartSeries(result, normalizedPoints);
+      return mapChartSeries(result, normalizedPoints, metricKeys);
     },
 
     getGroupedChartSeries(query) {
@@ -182,13 +182,14 @@ function mapBinnedSeries<TProperties>(
 function mapChartSeries<TProperties>(
   series: ReturnType<VizDensityIndex<TProperties>["getChartSeries"]>,
   normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
+  metricKeys: string[],
 ): ChartDensitySeries<TProperties> {
   return {
     bins: series.bins.map((bin) => mapBin(bin, normalizedPoints)),
     samples: series.samples.map((sample) => mapSample(sample, normalizedPoints)),
     summary: {
       binCount: series.summary.binCount,
-      metrics: normalizeVizMetrics(series.summary.metrics),
+      metrics: withZeroMetricKeys(normalizeVizMetrics(series.summary.metrics), metricKeys),
       pointCount: series.summary.pointCount,
       sampleCount: series.summary.sampleCount,
       valueMode: series.summary.valueMode,
@@ -343,6 +344,13 @@ function normalizeWasmMetrics(metrics: ChartMetricRecord | undefined): ChartMetr
 
 function normalizeVizMetrics(metrics: ChartMetricRecord | Map<string, number>): ChartMetricRecord {
   return metrics instanceof Map ? Object.fromEntries(metrics) : metrics;
+}
+
+function withZeroMetricKeys(metrics: ChartMetricRecord, metricKeys: string[]): ChartMetricRecord {
+  return {
+    ...Object.fromEntries(metricKeys.map((metricKey) => [metricKey, 0])),
+    ...metrics,
+  };
 }
 
 function omitUndefined<T extends Record<string, unknown>>(value: T): T {

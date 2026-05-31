@@ -12,6 +12,7 @@ import {
   getChartGapAnnotations,
   getChartValueModeDefinition,
   getChartValueModeDefinitions,
+  resolveChartDensityBackendPolicy,
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
@@ -309,6 +310,137 @@ describe("@moritzbrantner/charts", () => {
         }
       }
     }
+  });
+
+  test("caches exact binned and chart queries with an LRU cap", () => {
+    const index = createChartDensityIndex(
+      [
+        { id: "a", x: 0, y: 2 },
+        { id: "b", x: 1, y: 4 },
+        { id: "c", x: 2, y: 6 },
+      ],
+      { backend: "hybrid-js", cache: { maxEntries: 1 } },
+    );
+    const firstChart = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 2,
+      valueMode: "average",
+      xDomain: [0, 2],
+    });
+    const firstChartAgain = index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 2,
+      valueMode: "average",
+      xDomain: [2, 0],
+    });
+
+    expect(firstChartAgain).toBe(firstChart);
+
+    index.getChartSeries({
+      includeEmptyBins: true,
+      targetBinCount: 3,
+      valueMode: "average",
+      xDomain: [0, 2],
+    });
+
+    expect(
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 2,
+        valueMode: "average",
+        xDomain: [0, 2],
+      }),
+    ).toEqual(firstChart);
+    expect(
+      index.getChartSeries({
+        includeEmptyBins: true,
+        targetBinCount: 2,
+        valueMode: "average",
+        xDomain: [0, 2],
+      }),
+    ).not.toBe(firstChart);
+
+    const firstBinned = index.getBinnedSeries({
+      includeEmptyBins: true,
+      targetBinCount: 2,
+      xDomain: [0, 2],
+    });
+
+    expect(
+      index.getBinnedSeries({
+        includeEmptyBins: true,
+        targetBinCount: 2,
+        xDomain: [2, 0],
+      }),
+    ).toBe(firstBinned);
+  });
+
+  test("keeps point-store range queries and auto aggregate bins in scan parity", () => {
+    const points = [
+      { id: "a", metrics: { revenue: 2 }, x: 0, y: 2 },
+      { id: "b", metrics: { revenue: 3 }, x: 1, y: 6 },
+      { id: "c", metrics: { revenue: 5 }, x: 1, y: -2 },
+      { id: "d", metrics: { revenue: 7 }, x: 2, y: 10 },
+      { id: "e", metrics: { revenue: 11 }, x: 3, y: 4 },
+      { id: "f", metrics: { revenue: 13 }, x: 4, y: 8 },
+    ];
+    const hybrid = createChartDensityIndex(points, {
+      backend: "hybrid-js",
+      cache: { enabled: false },
+    });
+    const auto = createChartDensityIndex(points, { backend: "auto", cache: { enabled: false } });
+    const queries = [
+      { includeEmptyBins: true, targetBinCount: 4, xDomain: [0, 4] as [number, number] },
+      { includeEmptyBins: true, targetBinCount: 4, xDomain: [4, 0] as [number, number] },
+      { includeEmptyBins: false, targetBinCount: 8, xDomain: [0.5, 2] as [number, number] },
+      { includeEmptyBins: true, targetBinCount: 3, xDomain: [2, 2] as [number, number] },
+    ];
+    const valueModes: ChartValueMode[] = ["average", "count", "min", "max", "sum"];
+
+    for (const query of queries) {
+      expect(auto.getBinnedSeries(query)).toEqual(hybrid.getBinnedSeries(query));
+
+      for (const valueMode of valueModes) {
+        expect(publicChartSeries(auto.getChartSeries({ ...query, valueMode }))).toEqual(
+          publicChartSeries(hybrid.getChartSeries({ ...query, valueMode })),
+        );
+      }
+
+      expect(
+        publicChartSeries(
+          auto.getChartSeries({
+            ...query,
+            percentiles: ["p25", "p50", "p75"],
+            valueMode: "p50",
+          }),
+        ),
+      ).toEqual(
+        publicChartSeries(
+          hybrid.getChartSeries({
+            ...query,
+            percentiles: ["p25", "p50", "p75"],
+            valueMode: "p50",
+          }),
+        ),
+      );
+    }
+  });
+
+  test("resolves auto backend policy conservatively", () => {
+    expect(
+      resolveChartDensityBackendPolicy({
+        operationKind: "chart",
+        pointCount: 200_000,
+        requestedModes: ["average"],
+      }),
+    ).toBe("hybrid-js");
+    expect(
+      resolveChartDensityBackendPolicy({
+        hasPercentiles: true,
+        operationKind: "chart",
+        pointCount: 200_000,
+      }),
+    ).toBe("wasm-index");
   });
 
   test("serves WASM series through the external viz-engine backend", () => {
