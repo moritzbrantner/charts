@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.7",
-    "@moritzbrantner/ui": "https://registry.npmjs.org/@moritzbrantner/ui/-/ui-0.8.0.tgz"
+    "@moritzbrantner/ui": "^0.9.1"
   },
   "peerDependencies": {
     "react": "^19.0.0",
