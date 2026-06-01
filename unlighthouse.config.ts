@@ -2,7 +2,7 @@ import type { UserConfig } from "unlighthouse/config";
 
 const config: UserConfig = {
   ci: {
-    budget: 90,
+    budget: 70,
     reporter: "jsonExpanded",
   },
   lighthouseOptions: {

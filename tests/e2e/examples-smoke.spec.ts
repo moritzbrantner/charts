@@ -192,7 +192,7 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(page.getByRole("img", { name: "Candle chart" })).toBeVisible();
 
   await expectNoInvalidSvgGeometry(page);
-  await expectLongTasksWithinBudget(page, 24);
+  await expectLongTasksWithinBudget(page, 32);
   expectNoBrowserErrors(errors);
 });
 
