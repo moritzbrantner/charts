@@ -7,15 +7,14 @@ const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "
 const distEntry = path.join(packageRoot, "dist", "index.js");
 
 if (!existsSync(distEntry)) {
-  console.error("@moritzbrantner/charts interaction benchmark requires dist/. Run `bun run build` first.");
+  console.error(
+    "@moritzbrantner/charts interaction benchmark requires dist/. Run `bun run build` first.",
+  );
   process.exit(1);
 }
 
-const {
-  createChartDensityIndex,
-  createChartRenderData,
-  createProgressiveChartDensityIndex,
-} = await import(distEntry);
+const { createChartDensityIndex, createChartRenderData, createProgressiveChartDensityIndex } =
+  await import(distEntry);
 
 const runFullMatrix = process.env.CHARTS_BENCH_FULL === "1";
 const sizes = runFullMatrix
@@ -143,7 +142,10 @@ if (process.env.CHARTS_BENCH_JSON !== "0") {
   const tempDir = path.join(packageRoot, "temp");
 
   mkdirSync(tempDir, { recursive: true });
-  writeFileSync(path.join(tempDir, "benchmark-interactions.json"), JSON.stringify(payload, null, 2));
+  writeFileSync(
+    path.join(tempDir, "benchmark-interactions.json"),
+    JSON.stringify(payload, null, 2),
+  );
 }
 
 function createSeriesPoints(size, pattern) {
@@ -179,7 +181,7 @@ function createQuery(size, mode, viewportSpan, binCount, iteration) {
   const fullSpan = Math.max(1, size - 1);
   const span = Math.max(1, fullSpan * viewportSpan);
   const maxStart = Math.max(0, fullSpan - span);
-  const start = viewportSpan >= 1 ? 0 : ((iteration * span * 0.07) % maxStart);
+  const start = viewportSpan >= 1 ? 0 : (iteration * span * 0.07) % maxStart;
   const query = {
     includeEmptyBins: true,
     targetBinCount: binCount,

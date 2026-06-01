@@ -306,11 +306,15 @@ function readValueMode(iteration) {
 
 function assertChartSeries(series, context = {}) {
   if (series.samples.length !== series.summary.sampleCount) {
-    throw new Error(`chart sample count did not match summary: ${formatDiagnosticContext(context, series)}`);
+    throw new Error(
+      `chart sample count did not match summary: ${formatDiagnosticContext(context, series)}`,
+    );
   }
 
   if (series.bins.length !== series.summary.binCount) {
-    throw new Error(`chart bin count did not match summary: ${formatDiagnosticContext(context, series)}`);
+    throw new Error(
+      `chart bin count did not match summary: ${formatDiagnosticContext(context, series)}`,
+    );
   }
 
   if (series.summary.metrics.count !== series.summary.pointCount) {
