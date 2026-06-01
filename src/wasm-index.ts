@@ -100,6 +100,10 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
       return mapChartSeries(result, normalizedPoints, metricKeys);
     },
 
+    getChartPoints(query) {
+      return fallbackIndex.getChartPoints(query);
+    },
+
     getGroupedChartSeries(query) {
       return fallbackIndex.getGroupedChartSeries(query);
     },
@@ -132,6 +136,10 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
 
     getPointById(pointId) {
       return pointLookup.get(pointId) ?? null;
+    },
+
+    getScatter(query) {
+      return fallbackIndex.getScatter(query);
     },
 
     getSeriesBounds() {

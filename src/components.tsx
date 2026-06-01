@@ -59,8 +59,13 @@ import {
   type ChartDensitySample,
   type ChartDensitySeries,
   type ChartBoxPlotDatum,
+  type ChartFunnelRow,
   type ChartHeatmapCell,
+  type ChartScatterSeries,
   type ChartSeriesPoint,
+  type ChartSunburstNode,
+  type ChartTreemapNode,
+  type ChartWaterfallRow,
   type ChartRenderData,
   type ChartRenderDataOptions,
   type ChartValueMode,
@@ -401,6 +406,69 @@ export type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
   data: Array<ChartBoxPlotDatum<TProperties>>;
   formatValue?: (value: number | null) => string;
   onDatumSelect?: (datum: ChartBoxPlotDatum<TProperties>) => void;
+};
+
+export type ChartScatterSvgProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  formatValue?: (value: number) => string;
+  height?: number;
+  onPointSelect?: (point: ChartScatterSeries<TProperties>["points"][number]) => void;
+  series: ChartScatterSeries<TProperties>;
+  width?: number;
+  xDomain?: [number, number];
+  yDomain?: [number, number];
+};
+
+export type ChartWaterfallSvgProps = {
+  ariaLabel?: string;
+  className?: string;
+  data: ChartWaterfallRow[];
+  formatValue?: (value: number) => string;
+  height?: number;
+  onDatumSelect?: (datum: ChartWaterfallRow) => void;
+  width?: number;
+};
+
+export type ChartFunnelSvgProps = {
+  ariaLabel?: string;
+  className?: string;
+  data: ChartFunnelRow[];
+  formatValue?: (value: number) => string;
+  height?: number;
+  onDatumSelect?: (datum: ChartFunnelRow) => void;
+  width?: number;
+};
+
+export type ChartTreemapSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartTreemapNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  onNodeSelect?: (node: ChartTreemapNode<TPayload>) => void;
+};
+
+export type ChartSunburstSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartSunburstNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  height?: number;
+  onNodeSelect?: (node: ChartSunburstNode<TPayload>) => void;
+  width?: number;
+};
+
+export type ChartXAxisNavigationMenuProps = {
+  "aria-label"?: string;
+  axisHeight?: number;
+  className?: string;
+  domain: [number, number];
+  formatValue?: (value: number) => string;
+  fullDomain: [number, number];
+  minSpan?: number;
+  onDomainChange: (domain: [number, number]) => void;
+  orientation?: "top" | "bottom";
+  ranges?: readonly ChartRange[];
 };
 
 export type ChartValueModePreviewProps<TProperties = Record<string, unknown>> = {
@@ -1302,6 +1370,176 @@ export function ChartLabelOverlay<TPayload = unknown>({
 
 export function ChartAxisTransformMenu(props: ChartAxisTransformMenuProps): JSX.Element | null {
   return <ChartAxisTransformMenuContent {...props} />;
+}
+
+export function ChartXAxisNavigationMenu({
+  "aria-label": ariaLabel = "X-axis navigation menu",
+  axisHeight = 36,
+  className,
+  domain,
+  formatValue = formatCompactNumber,
+  fullDomain,
+  minSpan,
+  onDomainChange,
+  orientation = "bottom",
+  ranges = [],
+}: ChartXAxisNavigationMenuProps): JSX.Element | null {
+  const plotArea = usePlotArea();
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [anchorValue, setAnchorValue] = useState<number | null>(null);
+  const open = menuPosition !== null;
+  const triggerRect = getChartAxisTriggerRect(plotArea, orientation, Math.max(1, axisHeight));
+  const normalizedFullDomain = normalizeDomain(fullDomain, fullDomain, minSpan ?? 0);
+  const normalizedDomain = normalizeDomain(domain, normalizedFullDomain, minSpan ?? 0);
+  const span = normalizedDomain[1] - normalizedDomain[0];
+  const resolvedMinSpan =
+    minSpan ?? Math.max(1e-9, (normalizedFullDomain[1] - normalizedFullDomain[0]) / 10_000);
+
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const menu = menuRef.current;
+
+      if (menu && event.target instanceof Node && menu.contains(event.target)) {
+        return;
+      }
+
+      setMenuPosition(null);
+    };
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown, true);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  if (!plotArea) {
+    return null;
+  }
+
+  const closeWithDomain = (nextDomain: [number, number]) => {
+    onDomainChange(normalizeDomain(nextDomain, normalizedFullDomain, resolvedMinSpan));
+    setMenuPosition(null);
+  };
+  const getAnchor = () => anchorValue ?? (normalizedDomain[0] + normalizedDomain[1]) / 2;
+  const zoom = (factor: number) => {
+    const anchor = getAnchor();
+    const nextSpan = clamp(
+      span * factor,
+      resolvedMinSpan,
+      normalizedFullDomain[1] - normalizedFullDomain[0],
+    );
+
+    closeWithDomain([anchor - nextSpan / 2, anchor + nextSpan / 2]);
+  };
+  const pan = (direction: -1 | 1) => {
+    const offset = span * direction;
+
+    closeWithDomain([normalizedDomain[0] + offset, normalizedDomain[1] + offset]);
+  };
+  const handleContextMenu = (event: MouseEvent<SVGRectElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const ratio = clamp((event.clientX - bounds.left) / Math.max(1, bounds.width), 0, 1);
+
+    setAnchorValue(normalizedDomain[0] + ratio * span);
+    setMenuPosition({ x: event.clientX, y: event.clientY });
+  };
+  const openFromKeyboard = (event: {
+    currentTarget: SVGRectElement;
+    preventDefault: () => void;
+  }) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+
+    event.preventDefault();
+    setAnchorValue((normalizedDomain[0] + normalizedDomain[1]) / 2);
+    setMenuPosition({
+      x: bounds.left + bounds.width / 2,
+      y: bounds.top + bounds.height / 2,
+    });
+  };
+  const menu =
+    open && typeof document !== "undefined" && menuPosition
+      ? createPortal(
+          <div
+            ref={menuRef}
+            aria-label={ariaLabel}
+            className={joinClassNames(
+              "fixed z-50 w-64 border border-border bg-popover p-2 text-popover-foreground shadow-lg outline-none",
+              className,
+            )}
+            role="dialog"
+            style={getChartAxisMenuStyle(menuPosition)}
+            tabIndex={-1}
+          >
+            <div className="grid gap-1">
+              <div className="px-2 py-1 text-xs text-muted-foreground">
+                {formatValue(normalizedDomain[0])} to {formatValue(normalizedDomain[1])}
+              </div>
+              <ChartMenuButton onClick={() => zoom(0.5)}>Zoom in</ChartMenuButton>
+              <ChartMenuButton onClick={() => zoom(2)}>Zoom out</ChartMenuButton>
+              <ChartMenuButton onClick={() => pan(-1)}>Pan left</ChartMenuButton>
+              <ChartMenuButton onClick={() => pan(1)}>Pan right</ChartMenuButton>
+              <ChartMenuButton onClick={() => closeWithDomain(normalizedFullDomain)}>
+                Reset range
+              </ChartMenuButton>
+              {ranges.length > 0 ? (
+                <div className="mt-1 border-t border-border/60 pt-1">
+                  {ranges.map((range) => (
+                    <ChartMenuButton key={range.id} onClick={() => closeWithDomain(range.domain)}>
+                      {range.label}
+                    </ChartMenuButton>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <g className={className} data-chart-x-axis-navigation-menu="">
+        <rect
+          aria-label={ariaLabel}
+          data-chart-x-axis-navigation-trigger=""
+          x={triggerRect.x}
+          y={triggerRect.y}
+          width={triggerRect.width}
+          height={triggerRect.height}
+          fill="transparent"
+          role="button"
+          tabIndex={0}
+          onContextMenu={handleContextMenu}
+          onPointerDown={(event) => {
+            event.stopPropagation();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              openFromKeyboard(event);
+            }
+          }}
+        >
+          <title>{ariaLabel}</title>
+        </rect>
+      </g>
+      {menu}
+    </>
+  );
 }
 
 function ChartAxisTransformMenuContent({
@@ -2713,6 +2951,321 @@ export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
   );
 }
 
+export function ChartScatterSvg<TProperties = Record<string, unknown>>({
+  ariaLabel = "Chart scatter plot",
+  className,
+  formatValue = formatCompactNumber,
+  height = 320,
+  onPointSelect,
+  series,
+  width = 640,
+  xDomain,
+  yDomain,
+}: ChartScatterSvgProps<TProperties>): JSX.Element {
+  if (series.points.length === 0) {
+    return (
+      <ChartEmptyState className={className}>No scatter points in this viewport.</ChartEmptyState>
+    );
+  }
+
+  const resolvedXDomain =
+    xDomain ?? series.summary.xDomain ?? getNumericDomain(series.points.map((point) => point.x));
+  const resolvedYDomain =
+    yDomain ?? series.summary.yDomain ?? getNumericDomain(series.points.map((point) => point.y));
+  const padding = 28;
+  const plotWidth = Math.max(1, width - padding * 2);
+  const plotHeight = Math.max(1, height - padding * 2);
+  const xScale = (value: number) => padding + getDomainRatio(value, resolvedXDomain) * plotWidth;
+  const yScale = (value: number) =>
+    padding + (1 - getDomainRatio(value, resolvedYDomain)) * plotHeight;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        <line
+          x1={padding}
+          x2={padding + plotWidth}
+          y1={padding + plotHeight}
+          y2={padding + plotHeight}
+          stroke="var(--border)"
+        />
+        <line
+          x1={padding}
+          x2={padding}
+          y1={padding}
+          y2={padding + plotHeight}
+          stroke="var(--border)"
+        />
+        {series.points.map((point) => {
+          const label = `${point.label || point.id}: x ${formatValue(point.x)}, y ${formatValue(point.y)}`;
+
+          return (
+            <circle
+              key={point.id}
+              cx={xScale(point.x)}
+              cy={yScale(point.y)}
+              r={point.radius}
+              fill="var(--primary)"
+              fillOpacity="0.45"
+              stroke="var(--primary)"
+              strokeWidth="1"
+              aria-label={label}
+              onClick={() => onPointSelect?.(point)}
+            >
+              <title>{label}</title>
+            </circle>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartWaterfallSvg({
+  ariaLabel = "Chart waterfall",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height = 320,
+  onDatumSelect,
+  width = 640,
+}: ChartWaterfallSvgProps): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No waterfall data.</ChartEmptyState>;
+  }
+
+  const values = data.flatMap((datum) => [datum.start, datum.end, 0]);
+  const yDomain = getNumericDomain(values);
+  const padding = 32;
+  const plotWidth = Math.max(1, width - padding * 2);
+  const plotHeight = Math.max(1, height - padding * 2);
+  const step = plotWidth / data.length;
+  const barWidth = Math.max(8, step * 0.58);
+  const yScale = (value: number) => padding + (1 - getDomainRatio(value, yDomain)) * plotHeight;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        <line
+          x1={padding}
+          x2={padding + plotWidth}
+          y1={yScale(0)}
+          y2={yScale(0)}
+          stroke="var(--border)"
+        />
+        {data.map((datum, index) => {
+          const x = padding + index * step + step / 2 - barWidth / 2;
+          const yStart = yScale(datum.start);
+          const yEnd = yScale(datum.end);
+          const y = Math.min(yStart, yEnd);
+          const label = `${datum.label}: ${formatValue(datum.value)}`;
+
+          return (
+            <g key={datum.id} aria-label={label} onClick={() => onDatumSelect?.(datum)}>
+              <title>{label}</title>
+              <rect
+                x={x}
+                y={y}
+                width={barWidth}
+                height={Math.max(1, Math.abs(yEnd - yStart))}
+                fill={datum.color ?? (datum.negative ? "var(--destructive)" : "var(--primary)")}
+                fillOpacity="0.7"
+              />
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartFunnelSvg({
+  ariaLabel = "Chart funnel",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height = 320,
+  onDatumSelect,
+  width = 640,
+}: ChartFunnelSvgProps): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No funnel data.</ChartEmptyState>;
+  }
+
+  const padding = 24;
+  const maxValue = Math.max(1, ...data.map((datum) => datum.value));
+  const stepHeight = (height - padding * 2) / data.length;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        {data.map((datum, index) => {
+          const next = data[index + 1];
+          const topWidth = (datum.value / maxValue) * (width - padding * 2);
+          const bottomWidth = ((next?.value ?? datum.value) / maxValue) * (width - padding * 2);
+          const y = padding + index * stepHeight;
+          const topLeft = (width - topWidth) / 2;
+          const bottomLeft = (width - bottomWidth) / 2;
+          const label = `${datum.label}: ${formatValue(datum.value)}`;
+          const points = [
+            `${topLeft},${y}`,
+            `${topLeft + topWidth},${y}`,
+            `${bottomLeft + bottomWidth},${y + stepHeight - 2}`,
+            `${bottomLeft},${y + stepHeight - 2}`,
+          ].join(" ");
+
+          return (
+            <g key={datum.id} aria-label={label} onClick={() => onDatumSelect?.(datum)}>
+              <title>{label}</title>
+              <polygon
+                points={points}
+                fill={datum.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity="0.78"
+              />
+              {stepHeight > 30 ? (
+                <text
+                  x={width / 2}
+                  y={y + stepHeight / 2 + 4}
+                  textAnchor="middle"
+                  fill="var(--foreground)"
+                  fontSize="12"
+                >
+                  {datum.label}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartTreemapSvg<TPayload = unknown>({
+  ariaLabel = "Chart treemap",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  onNodeSelect,
+}: ChartTreemapSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No treemap data.</ChartEmptyState>;
+  }
+
+  const width = Math.max(...data.map((node) => node.x + node.width));
+  const height = Math.max(...data.map((node) => node.y + node.height));
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        {data
+          .filter((node) => node.depth > 0)
+          .map((node, index) => {
+            const label = `${node.label}: ${formatValue(node.value)}`;
+            const showLabel = node.width >= 52 && node.height >= 24;
+
+            return (
+              <g key={node.id} aria-label={label} onClick={() => onNodeSelect?.(node)}>
+                <title>{label}</title>
+                <rect
+                  x={node.x}
+                  y={node.y}
+                  width={node.width}
+                  height={node.height}
+                  fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                  fillOpacity={0.22 + Math.min(0.5, node.depth * 0.1)}
+                  stroke="var(--background)"
+                  strokeWidth="1"
+                />
+                {showLabel ? (
+                  <text x={node.x + 5} y={node.y + 15} fill="var(--foreground)" fontSize="11">
+                    {node.label}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartSunburstSvg<TPayload = unknown>({
+  ariaLabel = "Chart sunburst",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height = 340,
+  onNodeSelect,
+  width = 340,
+}: ChartSunburstSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No sunburst data.</ChartEmptyState>;
+  }
+
+  const cx = width / 2;
+  const cy = height / 2;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-80 w-full"
+      >
+        {data
+          .filter((node) => node.depth > 0)
+          .map((node, index) => {
+            const label = `${node.label}: ${formatValue(node.value)}`;
+
+            return (
+              <path
+                key={node.id}
+                d={describeArc(
+                  cx,
+                  cy,
+                  node.innerRadius,
+                  node.outerRadius,
+                  node.startAngle,
+                  node.endAngle,
+                )}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity="0.72"
+                stroke="var(--background)"
+                strokeWidth="1"
+                aria-label={label}
+                onClick={() => onNodeSelect?.(node)}
+              >
+                <title>{label}</title>
+              </path>
+            );
+          })}
+      </svg>
+    </div>
+  );
+}
+
 export function ChartValueModePreview<TProperties = Record<string, unknown>>({
   active = false,
   className,
@@ -3553,6 +4106,43 @@ function ChartYAxisRangeLegendList({ items }: { items: readonly ChartLegendItem[
   );
 }
 
+function ChartMenuButton({
+  children,
+  onClick,
+}: {
+  children: ReactNode;
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="w-full px-2 py-1.5 text-left text-sm hover:bg-accent hover:text-accent-foreground"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ChartEmptyState({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}): JSX.Element {
+  return (
+    <div
+      className={joinClassNames(
+        "flex h-56 items-center justify-center border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function getChartAxisMenuStyle(position: { x: number; y: number }) {
   if (typeof window === "undefined") {
     return {
@@ -3654,6 +4244,64 @@ function formatCompactNumber(value: number) {
 
 function formatNullableNumber(value: number | null) {
   return value === null ? "n/a" : formatCompactNumber(value);
+}
+
+function getNumericDomain(values: number[]): [number, number] {
+  const finiteValues = values.filter(isFiniteNumber);
+
+  if (finiteValues.length === 0) {
+    return [0, 1];
+  }
+
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
+
+  return min === max ? [min - 1, max + 1] : [min, max];
+}
+
+function getDomainRatio(value: number, domain: [number, number]) {
+  const span = domain[1] - domain[0];
+
+  return span > 0 ? clamp((value - domain[0]) / span, 0, 1) : 0.5;
+}
+
+function polarToCartesian(cx: number, cy: number, radius: number, angle: number) {
+  return {
+    x: cx + Math.cos(angle - Math.PI / 2) * radius,
+    y: cy + Math.sin(angle - Math.PI / 2) * radius,
+  };
+}
+
+function describeArc(
+  cx: number,
+  cy: number,
+  innerRadius: number,
+  outerRadius: number,
+  startAngle: number,
+  endAngle: number,
+) {
+  const outerStart = polarToCartesian(cx, cy, outerRadius, startAngle);
+  const outerEnd = polarToCartesian(cx, cy, outerRadius, endAngle);
+  const innerStart = polarToCartesian(cx, cy, innerRadius, endAngle);
+  const innerEnd = polarToCartesian(cx, cy, innerRadius, startAngle);
+  const largeArcFlag = endAngle - startAngle > Math.PI ? 1 : 0;
+
+  if (innerRadius <= 0) {
+    return [
+      `M ${cx} ${cy}`,
+      `L ${outerStart.x} ${outerStart.y}`,
+      `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd.x} ${outerEnd.y}`,
+      "Z",
+    ].join(" ");
+  }
+
+  return [
+    `M ${outerStart.x} ${outerStart.y}`,
+    `A ${outerRadius} ${outerRadius} 0 ${largeArcFlag} 1 ${outerEnd.x} ${outerEnd.y}`,
+    `L ${innerStart.x} ${innerStart.y}`,
+    `A ${innerRadius} ${innerRadius} 0 ${largeArcFlag} 0 ${innerEnd.x} ${innerEnd.y}`,
+    "Z",
+  ].join(" ");
 }
 
 function formatDefaultSampleLabel<TProperties>(sample: ChartDensitySample<TProperties>) {

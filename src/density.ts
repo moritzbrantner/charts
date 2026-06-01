@@ -153,12 +153,14 @@ export type ChartDensityIndex<TProperties = Record<string, unknown>> = {
   getBackendCapabilities?: () => ChartBackendCapabilities;
   getBinnedSeries(query: BinnedSeriesQuery): BinnedSeries<TProperties>;
   getChartSeries(query: ChartDensityQuery): ChartDensitySeries<TProperties>;
+  getChartPoints(query?: ChartPointQuery): ChartPointSeries<TProperties>;
   getGroupedChartSeries(
     query: ChartGroupedDensityQuery<TProperties>,
   ): ChartGroupedDensitySeries<TProperties>;
   getHeatmap(query: ChartHeatmapQuery<TProperties>): ChartHeatmap<TProperties>;
   getHistogram(query: ChartHistogramQuery<TProperties>): ChartHistogram<TProperties>;
   getPointById(pointId: string): IndexedChartSeriesPoint<TProperties> | null;
+  getScatter(query?: ChartScatterQuery<TProperties>): ChartScatterSeries<TProperties>;
   getSeriesBounds(): {
     maxX: number;
     maxY: number;
@@ -253,6 +255,126 @@ export type ChartHeatmap<TProperties = Record<string, unknown>> = {
     yBinCount: number;
     yDomain: [number, number];
   };
+};
+
+export type ChartPointSampling = "stride";
+
+export type ChartPointQuery = {
+  maxPoints?: number;
+  sampling?: ChartPointSampling;
+  xDomain?: [number, number];
+};
+
+export type ChartPointSeries<TProperties = Record<string, unknown>> = {
+  points: Array<IndexedChartSeriesPoint<TProperties>>;
+  summary: {
+    metrics: ChartMetricRecord;
+    pointCount: number;
+    sampledPointCount: number;
+    xDomain: [number, number] | null;
+  };
+};
+
+export type ChartScatterQuery<TProperties = Record<string, unknown>> = ChartPointQuery & {
+  sizeAccessor?: ChartPointValueAccessor<TProperties>;
+  yDomain?: [number, number];
+};
+
+export type ChartScatterPoint<TProperties = Record<string, unknown>> = {
+  id: string;
+  label: string;
+  metrics: ChartMetricRecord;
+  point: IndexedChartSeriesPoint<TProperties>;
+  radius: number;
+  sizeValue: number | null;
+  x: number;
+  y: number;
+};
+
+export type ChartScatterSeries<TProperties = Record<string, unknown>> = {
+  points: Array<ChartScatterPoint<TProperties>>;
+  summary: {
+    maxSizeValue: number | null;
+    metrics: ChartMetricRecord;
+    minSizeValue: number | null;
+    pointCount: number;
+    sampledPointCount: number;
+    xDomain: [number, number] | null;
+    yDomain: [number, number] | null;
+  };
+};
+
+export type ChartWaterfallDatum = {
+  color?: string;
+  id?: string;
+  label: string;
+  value: number;
+};
+
+export type ChartWaterfallRow = {
+  color?: string;
+  end: number;
+  id: string;
+  index: number;
+  label: string;
+  negative: boolean;
+  start: number;
+  value: number;
+};
+
+export type ChartFunnelDatum = {
+  color?: string;
+  id?: string;
+  label: string;
+  value: number;
+};
+
+export type ChartFunnelRow = {
+  color?: string;
+  dropOff: number | null;
+  id: string;
+  index: number;
+  label: string;
+  percentOfFirst: number;
+  percentOfPrevious: number | null;
+  value: number;
+};
+
+export type ChartHierarchyNode<TPayload = unknown> = {
+  children?: Array<ChartHierarchyNode<TPayload>>;
+  color?: string;
+  id?: string;
+  label: string;
+  payload?: TPayload;
+  value?: number;
+};
+
+export type ChartTreemapNode<TPayload = unknown> = {
+  color?: string;
+  depth: number;
+  height: number;
+  id: string;
+  label: string;
+  parentId: string | null;
+  payload?: TPayload;
+  value: number;
+  width: number;
+  x: number;
+  y: number;
+};
+
+export type ChartSunburstNode<TPayload = unknown> = {
+  color?: string;
+  depth: number;
+  endAngle: number;
+  id: string;
+  innerRadius: number;
+  label: string;
+  outerRadius: number;
+  parentId: string | null;
+  payload?: TPayload;
+  startAngle: number;
+  value: number;
 };
 
 export type ChartPointGroupAccessor<TProperties = Record<string, unknown>> =
@@ -628,6 +750,10 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
       return activeIndex.getChartSeries(query);
     },
 
+    getChartPoints(query) {
+      return activeIndex.getChartPoints(query);
+    },
+
     getGroupedChartSeries(query) {
       return activeIndex.getGroupedChartSeries(query);
     },
@@ -642,6 +768,10 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
 
     getPointById(pointId) {
       return activeIndex.getPointById(pointId);
+    },
+
+    getScatter(query) {
+      return activeIndex.getScatter(query);
     },
 
     getProgressiveStatus() {
@@ -680,7 +810,9 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
         )
       : createHybridChartDensityIndex(points, indexOptions);
 
-  return cacheOptions.enabled ? createCachedChartDensityIndex(index, cacheOptions.maxEntries) : index;
+  return cacheOptions.enabled
+    ? createCachedChartDensityIndex(index, cacheOptions.maxEntries)
+    : index;
 }
 
 function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
@@ -743,6 +875,10 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
       return createPointStoreGroupedChartSeries(pointStore, query);
     },
 
+    getChartPoints(query = {}) {
+      return createPointStoreChartPoints(pointStore, query);
+    },
+
     getHeatmap(query) {
       return createPointStoreHeatmap(pointStore, query);
     },
@@ -753,6 +889,10 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
 
     getPointById(pointId) {
       return binnedIndex.getPointById(pointId);
+    },
+
+    getScatter(query = {}) {
+      return createPointStoreScatter(pointStore, query);
     },
 
     getSeriesBounds() {
@@ -810,6 +950,12 @@ function createCachedChartDensityIndex<TProperties>(
       chartCache.set(key, series);
 
       return series;
+    },
+    getChartPoints(query = {}) {
+      return index.getChartPoints(query);
+    },
+    getScatter(query = {}) {
+      return index.getScatter(query);
     },
   };
 }
@@ -881,12 +1027,13 @@ type ChartPointStore<TProperties = Record<string, unknown>> = {
   points: Array<IndexedChartSeriesPoint<TProperties>>;
 };
 
-type ChartRangeAggregateStore<TProperties = Record<string, unknown>> = ChartPointStore<TProperties> & {
-  maxTable: number[][];
-  metricPrefixSums: Map<string, number[]>;
-  minTable: number[][];
-  prefixSumY: number[];
-};
+type ChartRangeAggregateStore<TProperties = Record<string, unknown>> =
+  ChartPointStore<TProperties> & {
+    maxTable: number[][];
+    metricPrefixSums: Map<string, number[]>;
+    minTable: number[][];
+    prefixSumY: number[];
+  };
 
 type MutableChartDensityBin<TProperties = Record<string, unknown>> =
   ChartDensityBin<TProperties> & {
@@ -1081,6 +1228,76 @@ function createPointStoreChartSeries<TProperties>(
       sampleCount: samples.length,
       valueMode,
       xDomain,
+    },
+  };
+}
+
+function createPointStoreChartPoints<TProperties>(
+  store: ChartPointStore<TProperties>,
+  query: ChartPointQuery = {},
+): ChartPointSeries<TProperties> {
+  const xDomain = query.xDomain ? normalizeChartDomain(query.xDomain) : getPointStoreXDomain(store);
+  const selectedPoints = xDomain ? getPointsInXDomain(store.points, xDomain) : store.points;
+  const maxPoints = clampInteger(query.maxPoints ?? 2_000, 1, 1_000_000);
+  const sampledPoints = sampleChartPoints(selectedPoints, maxPoints);
+
+  return {
+    points: sampledPoints,
+    summary: {
+      metrics: sumDensityMetrics(
+        selectedPoints.map((point) => point.metrics),
+        store.metricKeys,
+      ),
+      pointCount: selectedPoints.length,
+      sampledPointCount: sampledPoints.length,
+      xDomain,
+    },
+  };
+}
+
+function createPointStoreScatter<TProperties>(
+  store: ChartPointStore<TProperties>,
+  query: ChartScatterQuery<TProperties> = {},
+): ChartScatterSeries<TProperties> {
+  const xDomain = query.xDomain ? normalizeChartDomain(query.xDomain) : getPointStoreXDomain(store);
+  const yDomain = query.yDomain ? normalizeChartDomain(query.yDomain) : null;
+  const selectedPoints = (
+    xDomain ? getPointsInXDomain(store.points, xDomain) : store.points
+  ).filter((point) => !yDomain || (point.y >= yDomain[0] && point.y <= yDomain[1]));
+  const maxPoints = clampInteger(query.maxPoints ?? 2_000, 1, 1_000_000);
+  const sampledPoints = sampleChartPoints(selectedPoints, maxPoints);
+  const sizeValues = sampledPoints.map((point) =>
+    query.sizeAccessor ? getPointAccessorValue(point, query.sizeAccessor) : point.metrics.count,
+  );
+  const sizeDomain = getValueDomain(sizeValues.filter(isFiniteNumber));
+  const scatterPoints = sampledPoints.map((point, index): ChartScatterPoint<TProperties> => {
+    const sizeValue = normalizeNumericValue(sizeValues[index]);
+
+    return {
+      id: point.id,
+      label: point.label,
+      metrics: point.metrics,
+      point,
+      radius: getScatterRadius(sizeValue, sizeDomain),
+      sizeValue,
+      x: point.x,
+      y: point.y,
+    };
+  });
+
+  return {
+    points: scatterPoints,
+    summary: {
+      maxSizeValue: sizeDomain?.[1] ?? null,
+      metrics: sumDensityMetrics(
+        selectedPoints.map((point) => point.metrics),
+        store.metricKeys,
+      ),
+      minSizeValue: sizeDomain?.[0] ?? null,
+      pointCount: selectedPoints.length,
+      sampledPointCount: scatterPoints.length,
+      xDomain,
+      yDomain,
     },
   };
 }
@@ -1610,6 +1827,47 @@ function getPointsInXDomain<TProperties>(
   return points.slice(startIndex, endIndex);
 }
 
+function getPointStoreXDomain<TProperties>(
+  store: ChartPointStore<TProperties>,
+): [number, number] | null {
+  const first = store.points[0];
+  const last = store.points[store.points.length - 1];
+
+  return first && last ? [first.x, last.x] : null;
+}
+
+function sampleChartPoints<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  maxPoints: number,
+) {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  const step = points.length / maxPoints;
+
+  return Array.from({ length: maxPoints }, (_, index) => points[Math.floor(index * step)]).filter(
+    (point): point is IndexedChartSeriesPoint<TProperties> => Boolean(point),
+  );
+}
+
+function getScatterRadius(sizeValue: number | null, sizeDomain: [number, number] | null) {
+  const minRadius = 3;
+  const maxRadius = 12;
+
+  if (sizeValue === null || !sizeDomain) {
+    return minRadius;
+  }
+
+  const span = sizeDomain[1] - sizeDomain[0];
+
+  if (span <= 0) {
+    return (minRadius + maxRadius) / 2;
+  }
+
+  return minRadius + ((sizeValue - sizeDomain[0]) / span) * (maxRadius - minRadius);
+}
+
 function getValueDomain(values: number[]): [number, number] | null {
   if (values.length === 0) {
     return null;
@@ -1779,6 +2037,165 @@ function createNullPercentileRecord(): Record<ChartPercentileMode, number | null
     p95: null,
     p99: null,
   };
+}
+
+function getHierarchyValue<TPayload>(node: ChartHierarchyNode<TPayload>): number {
+  const ownValue = normalizeNumericValue(node.value);
+
+  if (ownValue !== null && ownValue > 0) {
+    return ownValue;
+  }
+
+  return (node.children ?? []).reduce((total, child) => total + getHierarchyValue(child), 0);
+}
+
+function getHierarchyDepth<TPayload>(node: ChartHierarchyNode<TPayload>): number {
+  const childDepths = (node.children ?? []).map((child) => getHierarchyDepth(child));
+
+  return childDepths.length === 0 ? 0 : 1 + Math.max(...childDepths);
+}
+
+function layoutTreemapNode<TPayload>(
+  node: ChartHierarchyNode<TPayload>,
+  context: {
+    depth: number;
+    height: number;
+    nodes: Array<ChartTreemapNode<TPayload>>;
+    padding: number;
+    parentId: string | null;
+    value: number;
+    width: number;
+    x: number;
+    y: number;
+  },
+) {
+  const id = node.id ?? createHierarchyNodeId(node.label, context.parentId, context.depth);
+
+  context.nodes.push({
+    color: node.color,
+    depth: context.depth,
+    height: context.height,
+    id,
+    label: node.label,
+    parentId: context.parentId,
+    payload: node.payload,
+    value: context.value,
+    width: context.width,
+    x: context.x,
+    y: context.y,
+  });
+
+  const children = (node.children ?? [])
+    .map((child) => ({ node: child, value: getHierarchyValue(child) }))
+    .filter((child) => child.value > 0);
+
+  if (children.length === 0 || context.width <= 0 || context.height <= 0) {
+    return;
+  }
+
+  const inner = {
+    height: Math.max(0, context.height - context.padding * 2),
+    width: Math.max(0, context.width - context.padding * 2),
+    x: context.x + context.padding,
+    y: context.y + context.padding,
+  };
+  const total = children.reduce((sum, child) => sum + child.value, 0);
+  let offset = 0;
+  const splitHorizontal = inner.width >= inner.height;
+
+  for (const child of children) {
+    const ratio = total > 0 ? child.value / total : 0;
+    const childRect = splitHorizontal
+      ? {
+          height: inner.height,
+          width: inner.width * ratio,
+          x: inner.x + offset,
+          y: inner.y,
+        }
+      : {
+          height: inner.height * ratio,
+          width: inner.width,
+          x: inner.x,
+          y: inner.y + offset,
+        };
+
+    offset += splitHorizontal ? childRect.width : childRect.height;
+    layoutTreemapNode(child.node, {
+      ...childRect,
+      depth: context.depth + 1,
+      nodes: context.nodes,
+      padding: context.padding,
+      parentId: id,
+      value: child.value,
+    });
+  }
+}
+
+function layoutSunburstNode<TPayload>(
+  node: ChartHierarchyNode<TPayload>,
+  context: {
+    depth: number;
+    endAngle: number;
+    innerRadius: number;
+    nodes: Array<ChartSunburstNode<TPayload>>;
+    paddingAngle: number;
+    parentId: string | null;
+    radiusStep: number;
+    startAngle: number;
+    value: number;
+  },
+) {
+  const id = node.id ?? createHierarchyNodeId(node.label, context.parentId, context.depth);
+  const innerRadius = context.innerRadius + context.depth * context.radiusStep;
+  const outerRadius = innerRadius + context.radiusStep;
+
+  context.nodes.push({
+    color: node.color,
+    depth: context.depth,
+    endAngle: context.endAngle,
+    id,
+    innerRadius,
+    label: node.label,
+    outerRadius,
+    parentId: context.parentId,
+    payload: node.payload,
+    startAngle: context.startAngle,
+    value: context.value,
+  });
+
+  const children = (node.children ?? [])
+    .map((child) => ({ node: child, value: getHierarchyValue(child) }))
+    .filter((child) => child.value > 0);
+  const total = children.reduce((sum, child) => sum + child.value, 0);
+  let cursor = context.startAngle;
+
+  for (const child of children) {
+    const span = total > 0 ? ((context.endAngle - context.startAngle) * child.value) / total : 0;
+    const startAngle = cursor + context.paddingAngle / 2;
+    const endAngle = cursor + span - context.paddingAngle / 2;
+
+    cursor += span;
+
+    if (endAngle <= startAngle) {
+      continue;
+    }
+
+    layoutSunburstNode(child.node, {
+      depth: context.depth + 1,
+      endAngle,
+      innerRadius: context.innerRadius,
+      nodes: context.nodes,
+      paddingAngle: context.paddingAngle,
+      parentId: id,
+      radiusStep: context.radiusStep,
+      startAngle,
+      value: child.value,
+    });
+  }
+}
+
+function createHierarchyNodeId(label: string, parentId: string | null, depth: number) {
+  return `${parentId ?? "root"}-${depth}-${normalizeGroupKey(label)}`;
 }
 
 function normalizeGroupKey(label: string) {
@@ -2062,6 +2479,113 @@ export function createChartBoxPlotData<TProperties>(
     x0: sample.x0,
     x1: sample.x1,
   }));
+}
+
+export function createChartWaterfallData(
+  data: readonly ChartWaterfallDatum[],
+  options: {
+    initialValue?: number;
+  } = {},
+): ChartWaterfallRow[] {
+  let runningTotal = options.initialValue ?? 0;
+
+  return data.map((datum, index) => {
+    const value = normalizeNumericValue(datum.value) ?? 0;
+    const start = runningTotal;
+    const end = start + value;
+
+    runningTotal = end;
+
+    return {
+      color: datum.color,
+      end,
+      id: datum.id ?? normalizeGroupKey(datum.label || `step-${index}`),
+      index,
+      label: datum.label,
+      negative: value < 0,
+      start,
+      value,
+    };
+  });
+}
+
+export function createChartFunnelData(data: readonly ChartFunnelDatum[]): ChartFunnelRow[] {
+  const firstValue = normalizeNumericValue(data[0]?.value) ?? 0;
+
+  return data.map((datum, index) => {
+    const value = Math.max(0, normalizeNumericValue(datum.value) ?? 0);
+    const previousValue =
+      index > 0 ? Math.max(0, normalizeNumericValue(data[index - 1]?.value) ?? 0) : null;
+
+    return {
+      color: datum.color,
+      dropOff: previousValue === null ? null : Math.max(0, previousValue - value),
+      id: datum.id ?? normalizeGroupKey(datum.label || `step-${index}`),
+      index,
+      label: datum.label,
+      percentOfFirst: firstValue > 0 ? value / firstValue : 0,
+      percentOfPrevious: previousValue && previousValue > 0 ? value / previousValue : null,
+      value,
+    };
+  });
+}
+
+export function createChartTreemapLayout<TPayload = unknown>(
+  root: ChartHierarchyNode<TPayload>,
+  options: {
+    height: number;
+    padding?: number;
+    width: number;
+    x?: number;
+    y?: number;
+  },
+): Array<ChartTreemapNode<TPayload>> {
+  const padding = Math.max(0, options.padding ?? 2);
+  const rootValue = getHierarchyValue(root);
+  const nodes: Array<ChartTreemapNode<TPayload>> = [];
+
+  layoutTreemapNode(root, {
+    depth: 0,
+    height: Math.max(0, options.height),
+    nodes,
+    padding,
+    parentId: null,
+    value: rootValue,
+    width: Math.max(0, options.width),
+    x: options.x ?? 0,
+    y: options.y ?? 0,
+  });
+
+  return nodes;
+}
+
+export function createChartSunburstLayout<TPayload = unknown>(
+  root: ChartHierarchyNode<TPayload>,
+  options: {
+    innerRadius?: number;
+    outerRadius: number;
+    paddingAngle?: number;
+  },
+): Array<ChartSunburstNode<TPayload>> {
+  const maxDepth = getHierarchyDepth(root);
+  const innerRadius = Math.max(0, options.innerRadius ?? 0);
+  const outerRadius = Math.max(innerRadius, options.outerRadius);
+  const radiusStep = maxDepth > 0 ? (outerRadius - innerRadius) / (maxDepth + 1) : outerRadius;
+  const nodes: Array<ChartSunburstNode<TPayload>> = [];
+
+  layoutSunburstNode(root, {
+    depth: 0,
+    endAngle: Math.PI * 2,
+    innerRadius,
+    nodes,
+    paddingAngle: Math.max(0, options.paddingAngle ?? 0.004),
+    parentId: null,
+    radiusStep,
+    startAngle: 0,
+    value: getHierarchyValue(root),
+  });
+
+  return nodes;
 }
 
 function applyDerivedRenderValues<TProperties>(

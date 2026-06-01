@@ -95,15 +95,20 @@ const rows = createChartRenderData(series.samples, {
 - `createChartDensitySample(bin, valueMode)` / `createChartDensityViewportSummary(series)`
 - `createChartRenderData(samples, options)` / `getChartGapAnnotations(samples)`
 - `index.getHistogram(query)` / `index.getHeatmap(query)` /
-  `index.getGroupedChartSeries(query)`
+  `index.getGroupedChartSeries(query)` / `index.getChartPoints(query)` /
+  `index.getScatter(query)`
 - `createGroupedChartRenderData(grouped, options)`
 - `createChartBandRenderData(samples, options)` / `createChartBoxPlotData(samples, options)`
+- `createChartWaterfallData(data, options)` / `createChartFunnelData(data)`
+- `createChartTreemapLayout(root, options)` / `createChartSunburstLayout(root, options)`
 - `CHART_VALUE_MODE_DEFINITIONS`, `getChartValueModeDefinition(mode)`,
   `getChartValueModeDefinitions(modes)`
 - `useProgressiveChartDensity(points, options)` / `useChartBinCount(options)`
 - `BinnedChart`, `ChartMetricCard`, `ChartMetricStrip`, `ChartRangeSelector`,
   `ChartValueModeSelector`
 - `ChartBackendStatus`, `ChartSampleSparkline`, `ChartHotBinRow`, `ChartValueModePreview`
+- `ChartScatterSvg`, `ChartWaterfallSvg`, `ChartFunnelSvg`, `ChartTreemapSvg`,
+  `ChartSunburstSvg`, `ChartXAxisNavigationMenu`
 - `layoutChartLabels`, `doChartLabelRectsIntersect`, `ChartLabelOverlay`
 
 ## Composable binned chart
@@ -296,6 +301,25 @@ export function TransformableChart({ rows }) {
 For switched axes, render Recharts with `layout="vertical"`, place numeric values
 on `XAxis type="number"`, and place binned labels on `YAxis type="category"`.
 
+Use `ChartXAxisNavigationMenu` when right-clicking the x-axis should navigate the
+visible domain. The menu can zoom around the clicked x value, pan by one visible
+window, reset to the full domain, or apply preset ranges.
+
+```tsx
+<LineChart data={rows}>
+  <XAxis dataKey="x" domain={domain} type="number" />
+  <YAxis />
+  <Line dataKey="average" dot={false} />
+  <ChartXAxisNavigationMenu
+    domain={domain}
+    fullDomain={fullDomain}
+    formatValue={(value) => `${value}m`}
+    onDomainChange={setDomain}
+    ranges={ranges}
+  />
+</LineChart>
+```
+
 ## Animation
 
 `getRechartsAnimationProps` provides consistent Recharts mark animation props and
@@ -424,8 +448,8 @@ const definitions = getChartValueModeDefinitions(["average", "count", "max"]);
 
 ## Distribution and grouped charts
 
-Use the advanced index methods when a viewport needs distribution, heatmap, or
-grouped data derived from the indexed source points:
+Use the advanced index methods when a viewport needs distribution, heatmap,
+scatter/bubble, or grouped data derived from the indexed source points:
 
 ```ts
 const histogram = index.getHistogram({
@@ -449,9 +473,17 @@ const grouped = index.getGroupedChartSeries({
 const stackedRows = createGroupedChartRenderData(grouped, {
   xLabel: (sample) => `${Math.round(sample.x)}m`,
 }).rows;
+
+const scatter = index.getScatter({
+  maxPoints: 2_000,
+  sizeAccessor: { metric: "revenue" },
+  xDomain: [360, 720],
+});
 ```
 
-Percentile-enriched series power median lines, interquartile bands, and box plots:
+Percentile-enriched series power median lines, interquartile bands, and box
+plots. Separate layout helpers cover waterfall, funnel, treemap, and sunburst
+views:
 
 ```ts
 const percentileSeries = index.getChartSeries({
@@ -467,6 +499,18 @@ const bandRows = createChartBandRenderData(percentileSeries.samples, {
   upper: "p75",
 }).rows;
 const boxPlotData = createChartBoxPlotData(percentileSeries.samples);
+const waterfallRows = createChartWaterfallData([
+  { label: "Baseline", value: 120 },
+  { label: "Expansion", value: 42 },
+  { label: "Credits", value: -18 },
+]);
+const funnelRows = createChartFunnelData([
+  { label: "Visits", value: 1_000 },
+  { label: "Trials", value: 620 },
+  { label: "Paid", value: 180 },
+]);
+const treemapNodes = createChartTreemapLayout(hierarchy, { width: 640, height: 320 });
+const sunburstNodes = createChartSunburstLayout(hierarchy, { outerRadius: 160 });
 ```
 
 ## Gap behavior
@@ -586,6 +630,7 @@ The local examples app covers:
 - grouped and stacked charts
 - histogram and heatmap views
 - percentile bands and box plots
+- scatter, bubble, waterfall, funnel, treemap, and sunburst views
 - collision-safe label overlays
 - progressive backend status
 - gap behavior and source-point lookup

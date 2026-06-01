@@ -18,18 +18,28 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartFunnelSvg,
   ChartHeatmapGrid,
   ChartLabelOverlay,
   ChartPanel,
   ChartRangeSelector,
   ChartSampleSparkline,
+  ChartScatterSvg,
   ChartSeriesLegend,
+  ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartTreemapSvg,
+  ChartWaterfallSvg,
+  ChartXAxisNavigationMenu,
   ChartValueModeSelector,
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
   createChartDensityIndex,
+  createChartFunnelData,
   createChartRenderData,
+  createChartSunburstLayout,
+  createChartTreemapLayout,
+  createChartWaterfallData,
   createGroupedChartRenderData,
   getRechartsAnimationProps,
   getChartAnomalyAnnotations,
@@ -122,6 +132,21 @@ export const BoxPlot: Story = {
   render: () => <BoxPlotStory />,
 };
 
+export const ScatterBubble: Story = {
+  name: "Distribution/ScatterBubble",
+  render: () => <ScatterBubbleStory />,
+};
+
+export const WaterfallFunnel: Story = {
+  name: "Business/WaterfallFunnel",
+  render: () => <WaterfallFunnelStory />,
+};
+
+export const HierarchyCharts: Story = {
+  name: "Hierarchy/TreemapSunburst",
+  render: () => <HierarchyChartsStory />,
+};
+
 export const CrowdedOverlay: Story = {
   name: "Labels/CrowdedOverlay",
   render: () => <CrowdedOverlayStory />,
@@ -150,6 +175,11 @@ export const YAxisRangeMenu: Story = {
 export const AxisTransformMenu: Story = {
   name: "Controls/AxisTransformMenu",
   render: () => <AxisTransformMenuStory />,
+};
+
+export const XAxisNavigationMenu: Story = {
+  name: "Controls/XAxisNavigationMenu",
+  render: () => <XAxisNavigationMenuStory />,
 };
 
 export const AxisTransforms: Story = {
@@ -431,6 +461,101 @@ function BoxPlotStory() {
   );
 }
 
+function ScatterBubbleStory() {
+  const index = useMemo(() => createChartDensityIndex(createTelemetryPoints()), []);
+  const scatter = useMemo(() => index.getScatter({ maxPoints: 420, xDomain: [0, 720] }), [index]);
+  const bubble = useMemo(
+    () =>
+      index.getScatter({ maxPoints: 420, sizeAccessor: { metric: "revenue" }, xDomain: [0, 720] }),
+    [index],
+  );
+
+  return (
+    <StoryFrame title="Scatter and bubble">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartPanel title="Scatter" description="Sampled source points in the active x domain.">
+          <ChartScatterSvg series={scatter} />
+        </ChartPanel>
+        <ChartPanel title="Bubble" description="Bubble radius uses revenue metrics.">
+          <ChartScatterSvg ariaLabel="Bubble chart" series={bubble} />
+        </ChartPanel>
+      </div>
+    </StoryFrame>
+  );
+}
+
+function WaterfallFunnelStory() {
+  const waterfall = createChartWaterfallData([
+    { label: "Baseline", value: 120 },
+    { label: "Expansion", value: 42 },
+    { label: "Credits", value: -18 },
+    { label: "Net", value: 27 },
+  ]);
+  const funnel = createChartFunnelData([
+    { label: "Visits", value: 1000 },
+    { label: "Trials", value: 620 },
+    { label: "Active", value: 340 },
+    { label: "Paid", value: 180 },
+  ]);
+
+  return (
+    <StoryFrame title="Waterfall and funnel">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartPanel title="Waterfall" description="Cumulative contribution steps.">
+          <ChartWaterfallSvg data={waterfall} />
+        </ChartPanel>
+        <ChartPanel title="Funnel" description="Stage retention and drop-off.">
+          <ChartFunnelSvg data={funnel} />
+        </ChartPanel>
+      </div>
+    </StoryFrame>
+  );
+}
+
+function HierarchyChartsStory() {
+  const hierarchy = {
+    label: "Accounts",
+    children: [
+      {
+        label: "Starter",
+        children: [
+          { label: "Direct", value: 24 },
+          { label: "Partner", value: 18 },
+        ],
+      },
+      {
+        label: "Scale",
+        children: [
+          { label: "Direct", value: 16 },
+          { label: "Marketplace", value: 11 },
+        ],
+      },
+      {
+        label: "Enterprise",
+        children: [
+          { label: "Partner", value: 9 },
+          { label: "Marketplace", value: 7 },
+        ],
+      },
+    ],
+  };
+
+  return (
+    <StoryFrame title="Hierarchy charts">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <ChartPanel title="Treemap" description="Rectangular hierarchy layout.">
+          <ChartTreemapSvg
+            data={createChartTreemapLayout(hierarchy, { height: 320, width: 640 })}
+          />
+        </ChartPanel>
+        <ChartPanel title="Sunburst" description="Radial hierarchy layout.">
+          <ChartSunburstSvg data={createChartSunburstLayout(hierarchy, { outerRadius: 150 })} />
+        </ChartPanel>
+      </div>
+    </StoryFrame>
+  );
+}
+
 function CrowdedOverlayStory() {
   const rows = [
     { label: "A", value: 42 },
@@ -616,6 +741,46 @@ function AxisTransformMenuStory() {
               legendItems={[{ color: "hsl(214 86% 46%)", id: "average", label: "Average" }]}
               onValueChange={setTransform}
               value={transform}
+            />
+          </LineChart>
+        </ChartContainer>
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
+function XAxisNavigationMenuStory() {
+  const [domain, setDomain] = useState<[number, number]>([120, 520]);
+  const rows = [
+    { x: 0, value: 24 },
+    { x: 120, value: 42 },
+    { x: 240, value: 68 },
+    { x: 360, value: 54 },
+    { x: 480, value: 90 },
+    { x: 720, value: 72 },
+  ];
+
+  return (
+    <StoryFrame title="X-axis navigation menu">
+      <ChartPanel title="Range navigation" description="Right-click the x-axis region.">
+        <ChartContainer className="h-80 w-full" config={chartConfig}>
+          <LineChart data={rows} margin={{ bottom: 28, left: 20, right: 16, top: 16 }}>
+            <CartesianGrid vertical={false} />
+            <XAxis dataKey="x" domain={domain} tickFormatter={formatStoryHour} type="number" />
+            <YAxis width={58} />
+            <Line
+              dataKey="value"
+              dot={false}
+              isAnimationActive={false}
+              stroke="var(--color-value)"
+              strokeWidth={2}
+              type="monotone"
+            />
+            <ChartXAxisNavigationMenu
+              domain={domain}
+              fullDomain={[0, 720]}
+              formatValue={formatStoryHour}
+              onDomainChange={setDomain}
             />
           </LineChart>
         </ChartContainer>

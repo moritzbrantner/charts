@@ -5,6 +5,9 @@ const stories = [
   { id: "charts-quality--gap-behaviors", name: "gap-behaviors", responsive: false },
   { id: "charts-quality--heatmap", name: "heatmap", responsive: false },
   { id: "charts-quality--box-plot", name: "box-plot", responsive: false },
+  { id: "charts-quality--scatter-bubble", name: "scatter-bubble", responsive: false },
+  { id: "charts-quality--waterfall-funnel", name: "waterfall-funnel", responsive: false },
+  { id: "charts-quality--hierarchy-charts", name: "hierarchy-charts", responsive: false },
   { id: "charts-quality--crowded-overlay", name: "crowded-overlay", responsive: false },
   { id: "charts-quality--axis-transforms", name: "axis-transforms", responsive: false },
   { id: "charts-quality--animated-trend", name: "animated-trend", responsive: false },
@@ -54,4 +57,17 @@ test("axis transform menu visual snapshot", async ({ page }, testInfo) => {
   await expect(page.getByRole("dialog", { name: "Y-axis transform menu" })).toBeVisible();
 
   await expect(page.locator("#storybook-root")).toHaveScreenshot("axis-transform-menu.png");
+});
+
+test("x-axis navigation menu visual snapshot", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop dialog snapshot");
+
+  await page.goto("/iframe.html?id=charts-quality--x-axis-navigation-menu&viewMode=story");
+  await expect(page.locator("#storybook-root")).toBeVisible();
+
+  const trigger = page.locator("[data-chart-x-axis-navigation-trigger]").first();
+  await trigger.click({ button: "right", position: { x: 120, y: 12 } });
+  await expect(page.getByRole("dialog", { name: "X-axis navigation menu" })).toBeVisible();
+
+  await expect(page.locator("#storybook-root")).toHaveScreenshot("x-axis-navigation-menu.png");
 });

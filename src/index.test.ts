@@ -6,8 +6,12 @@ import {
   createChartDensityViewportSummary,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartFunnelData,
   createGroupedChartRenderData,
   createChartRenderData,
+  createChartSunburstLayout,
+  createChartTreemapLayout,
+  createChartWaterfallData,
   createProgressiveChartDensityIndex,
   getChartGapAnnotations,
   getChartValueModeDefinition,
@@ -63,6 +67,101 @@ describe("@moritzbrantner/charts", () => {
     expect(sample.y).toBe(4);
     expect(sample.minY).toBe(2);
     expect(sample.maxY).toBe(6);
+  });
+
+  test("queries visible chart points with stride sampling", () => {
+    const index = createChartDensityIndex(
+      Array.from({ length: 10 }, (_, pointIndex) => ({
+        id: `point-${pointIndex}`,
+        metrics: { count: 1 },
+        x: pointIndex,
+        y: pointIndex * 2,
+      })),
+      { backend: "hybrid-js" },
+    );
+    const series = index.getChartPoints({ maxPoints: 3, xDomain: [2, 8] });
+
+    expect(series.summary.pointCount).toBe(7);
+    expect(series.summary.sampledPointCount).toBe(3);
+    expect(series.summary.metrics.count).toBe(7);
+    expect(series.points.map((point) => point.id)).toEqual(["point-2", "point-4", "point-6"]);
+  });
+
+  test("creates scatter points with y filtering and bubble sizing", () => {
+    const index = createChartDensityIndex(
+      [
+        { id: "a", metrics: { revenue: 0 }, x: 0, y: 1 },
+        { id: "b", metrics: { revenue: 50 }, x: 1, y: 5 },
+        { id: "c", metrics: { revenue: 100 }, x: 2, y: 9 },
+      ],
+      { backend: "hybrid-js" },
+    );
+    const scatter = index.getScatter({
+      sizeAccessor: { metric: "revenue" },
+      xDomain: [0, 2],
+      yDomain: [2, 10],
+    });
+
+    expect(scatter.points.map((point) => point.id)).toEqual(["b", "c"]);
+    expect(scatter.summary.pointCount).toBe(2);
+    expect(scatter.summary.minSizeValue).toBe(50);
+    expect(scatter.summary.maxSizeValue).toBe(100);
+    expect(scatter.points[1]!.radius).toBeGreaterThan(scatter.points[0]!.radius);
+  });
+
+  test("creates waterfall and funnel rows", () => {
+    expect(
+      createChartWaterfallData([
+        { label: "Start", value: 100 },
+        { label: "Loss", value: -25 },
+        { label: "Gain", value: 10 },
+      ]).map((row) => [row.start, row.end, row.negative]),
+    ).toEqual([
+      [0, 100, false],
+      [100, 75, true],
+      [75, 85, false],
+    ]);
+
+    expect(
+      createChartFunnelData([
+        { label: "Visitors", value: 100 },
+        { label: "Trials", value: 50 },
+        { label: "Paid", value: 25 },
+      ]).map((row) => [row.percentOfFirst, row.percentOfPrevious, row.dropOff]),
+    ).toEqual([
+      [1, null, null],
+      [0.5, 0.5, 50],
+      [0.25, 0.5, 25],
+    ]);
+  });
+
+  test("creates finite treemap and sunburst layouts inside bounds", () => {
+    const hierarchy = {
+      label: "Root",
+      children: [
+        { label: "A", value: 3 },
+        { label: "B", value: 1 },
+      ],
+    };
+    const treemap = createChartTreemapLayout(hierarchy, { height: 100, padding: 2, width: 200 });
+    const sunburst = createChartSunburstLayout(hierarchy, { outerRadius: 80 });
+
+    expect(treemap).toHaveLength(3);
+    for (const node of treemap) {
+      expect(Number.isFinite(node.x + node.y + node.width + node.height)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(200);
+      expect(node.y + node.height).toBeLessThanOrEqual(100);
+    }
+
+    expect(sunburst).toHaveLength(3);
+    for (const node of sunburst) {
+      expect(
+        Number.isFinite(node.startAngle + node.endAngle + node.innerRadius + node.outerRadius),
+      ).toBe(true);
+      expect(node.outerRadius).toBeLessThanOrEqual(80);
+    }
   });
 
   test("keeps chart samples in parity across density backends", () => {

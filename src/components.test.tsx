@@ -1,5 +1,5 @@
 import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
-import { Line, LineChart, YAxis } from "recharts";
+import { Line, LineChart, XAxis, YAxis } from "recharts";
 import { afterEach, describe, expect, test, vi } from "vitest";
 
 import {
@@ -10,17 +10,27 @@ import {
   ChartBoxPlotSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartFunnelSvg,
   ChartHeatmapGrid,
   ChartRangeSelector,
   ChartSampleInteractionOverlay,
   ChartSampleSparkline,
+  ChartScatterSvg,
   ChartSeriesLegend,
+  ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartTreemapSvg,
+  ChartWaterfallSvg,
+  ChartXAxisNavigationMenu,
   ChartValueModeSelector,
   ChartWithLegend,
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
   createChartDensityIndex,
+  createChartFunnelData,
+  createChartSunburstLayout,
+  createChartTreemapLayout,
+  createChartWaterfallData,
   getChartAxisScaleDefinitions,
   getChartAnomalyAnnotations,
   getChartDataYBounds,
@@ -586,6 +596,105 @@ describe("@moritzbrantner/charts", () => {
     fireEvent.click(document.querySelector("[data-chart-box-index='0']")!);
 
     expect(onDatumSelect).toHaveBeenCalledWith(data[0]);
+  });
+
+  test("renders new SVG chart families", () => {
+    const index = createChartDensityIndex([
+      { id: "a", metrics: { revenue: 1 }, x: 0, y: 1 },
+      { id: "b", metrics: { revenue: 4 }, x: 1, y: 4 },
+    ]);
+    const hierarchy = {
+      label: "Root",
+      children: [
+        { label: "A", value: 2 },
+        { label: "B", value: 1 },
+      ],
+    };
+
+    render(
+      <>
+        <ChartScatterSvg series={index.getScatter({ sizeAccessor: { metric: "revenue" } })} />
+        <ChartWaterfallSvg
+          data={createChartWaterfallData([
+            { label: "Start", value: 10 },
+            { label: "Loss", value: -2 },
+          ])}
+        />
+        <ChartFunnelSvg
+          data={createChartFunnelData([
+            { label: "Visitors", value: 10 },
+            { label: "Paid", value: 4 },
+          ])}
+        />
+        <ChartTreemapSvg data={createChartTreemapLayout(hierarchy, { height: 100, width: 100 })} />
+        <ChartSunburstSvg data={createChartSunburstLayout(hierarchy, { outerRadius: 40 })} />
+      </>,
+    );
+
+    expect(screen.getByRole("img", { name: "Chart scatter plot" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart waterfall" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart funnel" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart treemap" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart sunburst" })).toBeTruthy();
+  });
+
+  test("opens x-axis navigation menu and changes domains", () => {
+    const onDomainChange = vi.fn();
+    const { container } = render(
+      <LineChart
+        width={400}
+        height={260}
+        data={[
+          { x: 0, value: 20 },
+          { x: 100, value: 80 },
+        ]}
+      >
+        <XAxis dataKey="x" type="number" domain={[0, 100]} />
+        <YAxis width={60} />
+        <Line dataKey="value" dot={false} isAnimationActive={false} />
+        <ChartXAxisNavigationMenu
+          domain={[20, 60]}
+          fullDomain={[0, 100]}
+          onDomainChange={onDomainChange}
+        />
+      </LineChart>,
+    );
+    const trigger = container.querySelector("[data-chart-x-axis-navigation-trigger]");
+
+    expect(trigger).toBeTruthy();
+    trigger!.getBoundingClientRect = () =>
+      ({
+        bottom: 240,
+        height: 40,
+        left: 0,
+        right: 400,
+        top: 200,
+        width: 400,
+        x: 0,
+        y: 200,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    fireChartInteractionEvent(trigger!, "contextmenu", 200, 220);
+    expect(screen.getByRole("dialog", { name: "X-axis navigation menu" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    expect(onDomainChange).toHaveBeenLastCalledWith([30, 50]);
+
+    fireChartInteractionEvent(trigger!, "contextmenu", 200, 220);
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(onDomainChange).toHaveBeenLastCalledWith([0, 80]);
+
+    fireChartInteractionEvent(trigger!, "contextmenu", 200, 220);
+    fireEvent.click(screen.getByRole("button", { name: "Pan left" }));
+    expect(onDomainChange).toHaveBeenLastCalledWith([0, 40]);
+
+    fireChartInteractionEvent(trigger!, "contextmenu", 200, 220);
+    fireEvent.click(screen.getByRole("button", { name: "Pan right" }));
+    expect(onDomainChange).toHaveBeenLastCalledWith([60, 100]);
+
+    fireChartInteractionEvent(trigger!, "contextmenu", 200, 220);
+    fireEvent.click(screen.getByRole("button", { name: "Reset range" }));
+    expect(onDomainChange).toHaveBeenLastCalledWith([0, 100]);
   });
 
   test("renders backend status states and handles warmup", () => {

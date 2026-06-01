@@ -48,6 +48,7 @@ import {
   ChartBoxPlotSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartFunnelSvg,
   ChartHeatmapGrid,
   ChartHotBinRow,
   ChartLabelOverlay,
@@ -58,8 +59,13 @@ import {
   ChartRangeSelector,
   ChartSampleInteractionOverlay,
   ChartSampleSparkline,
+  ChartScatterSvg,
   ChartSeriesLegend,
+  ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartTreemapSvg,
+  ChartWaterfallSvg,
+  ChartXAxisNavigationMenu,
   ChartYAxisRangeMenu,
   ChartValueModePreview,
   ChartValueModeSelector,
@@ -70,9 +76,13 @@ import {
   createChartBoxPlotData,
   createChartDensityIndex,
   createChartDensityViewportSummary,
+  createChartFunnelData,
+  createChartTreemapLayout,
+  createChartWaterfallData,
   createGroupedChartRenderData,
   createChartRenderData,
   createRollingChartSeries,
+  createChartSunburstLayout,
   getChartAnomalyAnnotations,
   getChartAxisScaleDefinitions,
   getChartDataYBounds,
@@ -95,6 +105,7 @@ import {
   type ChartDensitySample,
   type ChartGapBehavior,
   type ChartAxisOrientation,
+  type IndexedChartSeriesPoint,
   type ChartRange,
   type ChartSampleInteraction,
   type ChartSeriesPoint,
@@ -113,12 +124,18 @@ type ExampleDataSetId = "telemetry" | "retail" | "operations" | "sparse";
 type PlaygroundChartType =
   | "area"
   | "bar"
+  | "bubble"
   | "candle"
   | "combo"
+  | "funnel"
   | "heatmap"
   | "histogram"
   | "line"
-  | "stacked";
+  | "scatter"
+  | "stacked"
+  | "sunburst"
+  | "treemap"
+  | "waterfall";
 type ChartPageId = `chart-${PlaygroundChartType}`;
 type ExamplePage = "compose" | "examples" | ChartPageId;
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
@@ -539,7 +556,15 @@ function ChartPlayground({
     fullDomain,
     onDomainChange: handleInteractiveDomainChange,
   });
-  const supportsAxisOrientation = chartType !== "candle" && chartType !== "heatmap";
+  const supportsAxisOrientation =
+    chartType !== "bubble" &&
+    chartType !== "candle" &&
+    chartType !== "funnel" &&
+    chartType !== "heatmap" &&
+    chartType !== "scatter" &&
+    chartType !== "sunburst" &&
+    chartType !== "treemap" &&
+    chartType !== "waterfall";
   const axisOrientation: ChartAxisOrientation = supportsAxisOrientation
     ? axesTransform.orientation
     : "vertical";
@@ -640,6 +665,49 @@ function ChartPlayground({
     [series.samples, threshold, valueMode],
   );
   const summary = createChartDensityViewportSummary(series);
+  const scatter = useMemo(
+    () =>
+      index.getScatter({
+        maxPoints: Math.max(120, targetBinCount * 8),
+        sizeAccessor: chartType === "bubble" ? { metric: "revenue" } : undefined,
+        xDomain: effectiveDomain,
+      }),
+    [chartType, effectiveDomain, index, targetBinCount],
+  );
+  const waterfallData = useMemo(
+    () =>
+      createChartWaterfallData([
+        { label: "Baseline", value: (summary.metrics.revenue ?? 0) * 0.44 },
+        { label: "Expansion", value: (summary.metrics.revenue ?? 0) * 0.22 },
+        { label: "Partner lift", value: (summary.metrics.revenue ?? 0) * 0.12 },
+        { label: "Credits", value: -(summary.metrics.revenue ?? 0) * 0.08 },
+        { label: "Net change", value: (summary.metrics.revenue ?? 0) * 0.1 },
+      ]),
+    [summary.metrics.revenue],
+  );
+  const funnelData = useMemo(
+    () =>
+      createChartFunnelData([
+        { label: "Events", value: summary.itemCount },
+        { label: "Qualified", value: summary.itemCount * 0.72 },
+        { label: "Activated", value: summary.itemCount * 0.48 },
+        { label: "Retained", value: summary.itemCount * 0.31 },
+      ]),
+    [summary.itemCount],
+  );
+  const hierarchyPoints = useMemo(
+    () => index.getChartPoints({ maxPoints: 5_000, xDomain: effectiveDomain }).points,
+    [effectiveDomain, index],
+  );
+  const hierarchy = useMemo(() => createPlaygroundHierarchy(hierarchyPoints), [hierarchyPoints]);
+  const treemapData = useMemo(
+    () => createChartTreemapLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
+    [hierarchy],
+  );
+  const sunburstData = useMemo(
+    () => createChartSunburstLayout(hierarchy, { outerRadius: 160 }),
+    [hierarchy],
+  );
   const labels = showLabels ? createPlaygroundLabels(renderRows, valueMode, axisOrientation) : [];
   const config = playgroundChartConfig(valueMode, definition.label);
   const groupedConfig = Object.fromEntries(
@@ -720,7 +788,22 @@ function ChartPlayground({
         onPointerMove={handlePreviewDomainPointerMove}
         onPointerUp={handlePreviewDomainPointerUp}
       >
-        {chartType === "heatmap" ? (
+        {chartType === "scatter" || chartType === "bubble" ? (
+          <ChartScatterSvg
+            series={scatter}
+            xDomain={effectiveDomain}
+            formatValue={formatCompact}
+            ariaLabel={chartType === "bubble" ? "Bubble chart" : "Scatter plot"}
+          />
+        ) : chartType === "waterfall" ? (
+          <ChartWaterfallSvg data={waterfallData} formatValue={formatCurrency} />
+        ) : chartType === "funnel" ? (
+          <ChartFunnelSvg data={funnelData} formatValue={formatCompact} />
+        ) : chartType === "treemap" ? (
+          <ChartTreemapSvg data={treemapData} formatValue={formatCompact} />
+        ) : chartType === "sunburst" ? (
+          <ChartSunburstSvg data={sunburstData} formatValue={formatCompact} />
+        ) : chartType === "heatmap" ? (
           <ChartHeatmapGrid
             cells={heatmap.cells}
             formatX={formatHour}
@@ -753,6 +836,7 @@ function ChartPlayground({
               curve,
               domain: effectiveDomain,
               fillOpacity,
+              fullDomain,
               gapBehavior,
               histogramRows,
               labels,
@@ -772,6 +856,7 @@ function ChartPlayground({
               legendItems,
               orientation: axisOrientation,
               onAxesTransformChange: setAxesTransform,
+              onDomainChange: handleInteractiveDomainChange,
               onHiddenLegendIdsChange: setHiddenLegendIds,
               timeAxisStatus,
               valueAxisDomain,
@@ -1135,6 +1220,7 @@ function renderPlaygroundChart({
   curve,
   domain,
   fillOpacity,
+  fullDomain,
   gapBehavior,
   grouped,
   groupedRows,
@@ -1143,6 +1229,7 @@ function renderPlaygroundChart({
   labels,
   legendItems,
   onAxesTransformChange,
+  onDomainChange,
   onHiddenLegendIdsChange,
   onSampleSelect,
   orientation,
@@ -1168,6 +1255,7 @@ function renderPlaygroundChart({
   curve: PlaygroundCurve;
   domain: [number, number];
   fillOpacity: number;
+  fullDomain: [number, number];
   gapBehavior: ChartGapBehavior;
   grouped: PlaygroundGroupedSeries;
   groupedRows: Array<Record<string, unknown>>;
@@ -1183,6 +1271,7 @@ function renderPlaygroundChart({
   }>;
   legendItems: readonly ChartLegendItem[];
   onAxesTransformChange: (transform: ChartAxesTransform) => void;
+  onDomainChange: (domain: [number, number]) => void;
   onHiddenLegendIdsChange: (hiddenIds: string[]) => void;
   onSampleSelect: (interaction: ChartSampleInteraction<TelemetryProperties>) => void;
   orientation: ChartAxisOrientation;
@@ -1243,6 +1332,15 @@ function renderPlaygroundChart({
       value={orientation === "vertical" ? axesTransform.y : axesTransform.x}
     />
   );
+  const xAxisNavigationMenu =
+    orientation === "vertical" ? (
+      <ChartXAxisNavigationMenu
+        domain={domain}
+        fullDomain={fullDomain}
+        formatValue={formatHour}
+        onDomainChange={onDomainChange}
+      />
+    ) : null;
 
   const verticalXAxis = (
     <XAxis
@@ -1373,13 +1471,25 @@ function renderPlaygroundChart({
           </LineChart>
         );
       case "candle":
+      case "bubble":
+      case "funnel":
       case "heatmap":
+      case "scatter":
+      case "sunburst":
+      case "treemap":
+      case "waterfall":
         return null;
     }
   }
 
   switch (chartType) {
     case "candle":
+    case "bubble":
+    case "funnel":
+    case "scatter":
+    case "sunburst":
+    case "treemap":
+    case "waterfall":
       return null;
     case "bar":
       return (
@@ -1399,6 +1509,7 @@ function renderPlaygroundChart({
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {axisTransformMenu}
+          {xAxisNavigationMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -1435,6 +1546,7 @@ function renderPlaygroundChart({
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {axisTransformMenu}
+          {xAxisNavigationMenu}
           {sampleOverlay}
         </AreaChart>
       );
@@ -1489,6 +1601,7 @@ function renderPlaygroundChart({
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {axisTransformMenu}
+          {xAxisNavigationMenu}
           {sampleOverlay}
         </LineChart>
       );
@@ -1512,6 +1625,7 @@ function renderPlaygroundChart({
             ) : null,
           )}
           {axisTransformMenu}
+          {xAxisNavigationMenu}
           {sampleOverlay}
         </BarChart>
       );
@@ -1538,6 +1652,7 @@ function renderPlaygroundChart({
           ) : null}
           <ChartLabelOverlay labels={labels} maxWidth={96} />
           {axisTransformMenu}
+          {xAxisNavigationMenu}
           {sampleOverlay}
         </AreaChart>
       );
@@ -1587,8 +1702,14 @@ function getPlaygroundYAxisDataKeys({
     case "bar":
     case "area":
       return visibleSeriesIds.has(valueMode) ? [valueMode] : [];
+    case "bubble":
     case "candle":
+    case "funnel":
     case "heatmap":
+    case "scatter":
+    case "sunburst":
+    case "treemap":
+    case "waterfall":
       return [];
   }
 }
@@ -1665,6 +1786,37 @@ function createPlaygroundLegendItems({
           label: "Density",
         },
       ];
+    case "scatter":
+      return [
+        {
+          color: "var(--chart-1)",
+          id: "scatter",
+          label: "Points",
+        },
+      ];
+    case "bubble":
+      return [
+        {
+          color: "var(--chart-1)",
+          id: "bubble",
+          label: "Revenue size",
+        },
+      ];
+    case "waterfall":
+      return [
+        { color: "var(--chart-1)", id: "positive", label: "Positive" },
+        { color: "var(--destructive)", id: "negative", label: "Negative" },
+      ];
+    case "funnel":
+    case "treemap":
+    case "sunburst":
+      return [
+        {
+          color: "var(--chart-1)",
+          id: chartType,
+          label: playgroundChartTitles[chartType],
+        },
+      ];
     case "candle":
       return [
         {
@@ -1688,6 +1840,38 @@ function createPlaygroundLegendItems({
         },
       ];
   }
+}
+
+function createPlaygroundHierarchy(points: Array<IndexedChartSeriesPoint<TelemetryProperties>>) {
+  const planGroups = new Map<
+    TelemetryProperties["plan"],
+    Map<TelemetryProperties["channel"], number>
+  >();
+
+  for (const point of points) {
+    const plan = point.properties.plan;
+    const channel = point.properties.channel;
+    const channels = planGroups.get(plan) ?? new Map<TelemetryProperties["channel"], number>();
+
+    channels.set(channel, (channels.get(channel) ?? 0) + 1);
+    planGroups.set(plan, channels);
+  }
+
+  return {
+    id: "accounts",
+    label: "Accounts",
+    children: Array.from(planGroups.entries()).map(([plan, channels], planIndex) => ({
+      color: `var(--chart-${(planIndex % 5) + 1})`,
+      id: plan,
+      label: titleCase(plan),
+      children: Array.from(channels.entries()).map(([channel, value], channelIndex) => ({
+        color: `var(--chart-${((planIndex + channelIndex) % 5) + 1})`,
+        id: `${plan}-${channel}`,
+        label: titleCase(channel),
+        value,
+      })),
+    })),
+  };
 }
 
 type PlaygroundLabel = ReturnType<typeof createPlaygroundLabels>[number];
@@ -2110,11 +2294,17 @@ const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> 
   { id: "area", label: "Area" },
   { id: "line", label: "Line" },
   { id: "bar", label: "Bar" },
+  { id: "scatter", label: "Scatter" },
+  { id: "bubble", label: "Bubble" },
   { id: "candle", label: "Candle" },
   { id: "combo", label: "Area + rolling" },
   { id: "histogram", label: "Histogram" },
   { id: "heatmap", label: "Heatmap" },
   { id: "stacked", label: "Stacked bars" },
+  { id: "waterfall", label: "Waterfall" },
+  { id: "funnel", label: "Funnel" },
+  { id: "treemap", label: "Treemap" },
+  { id: "sunburst", label: "Sunburst" },
 ];
 
 const chartPageLinks: Array<{
@@ -2130,12 +2320,18 @@ const chartPageLinks: Array<{
 const playgroundChartTitles: Record<PlaygroundChartType, string> = {
   area: "Area chart",
   bar: "Bar chart",
+  bubble: "Bubble chart",
   candle: "Candle chart",
   combo: "Area chart with rolling line",
+  funnel: "Funnel chart",
   heatmap: "Heatmap",
   histogram: "Histogram",
   line: "Line chart",
+  scatter: "Scatter plot",
   stacked: "Stacked bars",
+  sunburst: "Sunburst chart",
+  treemap: "Treemap",
+  waterfall: "Waterfall chart",
 };
 
 const playgroundCurveOptions: Array<{ id: PlaygroundCurve; label: string }> = [
@@ -4194,6 +4390,10 @@ function formatHour(value: number) {
 
 function formatCompact(value: number) {
   return formatNumber.format(value);
+}
+
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function formatCurrency(value: number) {
