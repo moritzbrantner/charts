@@ -154,6 +154,71 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
 
+  const floatingLegend = playground.locator("[data-chart-floating-legend]").first();
+  const legendHandle = playground.locator("[data-chart-floating-legend-handle]").first();
+  const legendBox = await floatingLegend.boundingBox();
+  const legendHandleBox = await legendHandle.boundingBox();
+
+  expect(legendBox).not.toBeNull();
+  expect(legendHandleBox).not.toBeNull();
+  if (legendBox && legendHandleBox) {
+    await legendHandle.dispatchEvent("mousedown", {
+      bubbles: true,
+      button: 0,
+      clientX: legendHandleBox.x + 20,
+      clientY: legendHandleBox.y + legendHandleBox.height / 2,
+    });
+    await page.evaluate(
+      ({ clientX, clientY }) => {
+        window.dispatchEvent(
+          new MouseEvent("mousemove", {
+            bubbles: true,
+            button: 0,
+            clientX,
+            clientY,
+          }),
+        );
+        window.dispatchEvent(
+          new MouseEvent("mouseup", {
+            bubbles: true,
+            button: 0,
+            clientX,
+            clientY,
+          }),
+        );
+      },
+      { clientX: legendHandleBox.x + 180, clientY: legendHandleBox.y + 80 },
+    );
+    await expect.poll(async () => (await floatingLegend.boundingBox())?.x).not.toBe(legendBox.x);
+  }
+
+  await legendHandle.getByRole("button", { name: "Minimize legend" }).click();
+  await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
+  await legendHandle.getByRole("button", { name: "Expand legend" }).click();
+  await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+  await legendHandle.getByRole("button", { name: "Hide legend" }).click();
+  await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Show legend" })).toHaveCount(0);
+  await expect(page.getByRole("switch", { name: "Legend" })).toHaveAttribute(
+    "aria-checked",
+    "false",
+  );
+  await page.getByRole("switch", { name: "Legend" }).click();
+  await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+
+  const chartOverlay = playground.locator("[data-chart-sample-interaction-overlay]").first();
+
+  await chartOverlay.click({ button: "right", position: { x: 120, y: 120 } });
+  const chartOptionsMenu = page.getByRole("menu", { name: "Chart options menu" });
+
+  await expect(chartOptionsMenu).toBeVisible();
+  await expect(chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" })).toBeVisible();
+  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click();
+  await expect(page.getByLabel("Active chart labels")).toHaveCount(0);
+  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click();
+  await expect(page.getByLabel("Active chart labels")).toBeVisible();
+  await page.keyboard.press("Escape");
+
   await playground.locator("select").nth(2).selectOption("line");
   await expect(playground).toContainText("Line chart");
 
@@ -282,8 +347,20 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
     { label: "Histogram", path: "/histogram.html", title: "Histogram", value: "histogram" },
     { label: "Heatmap", path: "/heatmap.html", title: "Heatmap", value: "heatmap" },
     { label: "Stacked bars", path: "/stacked.html", title: "Stacked bars", value: "stacked" },
-    { label: "Waterfall", path: "/waterfall.html", title: "Waterfall chart", value: "waterfall" },
-    { label: "Funnel", path: "/funnel.html", title: "Funnel chart", value: "funnel" },
+    {
+      label: "Waterfall",
+      legend: false,
+      path: "/waterfall.html",
+      title: "Waterfall chart",
+      value: "waterfall",
+    },
+    {
+      label: "Funnel",
+      legend: false,
+      path: "/funnel.html",
+      title: "Funnel chart",
+      value: "funnel",
+    },
     { label: "Treemap", path: "/treemap.html", title: "Treemap", value: "treemap" },
     { label: "Sunburst", path: "/sunburst.html", title: "Sunburst chart", value: "sunburst" },
   ];
@@ -300,13 +377,89 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
     await expect(playground).toContainText(chartPage.title);
     await expect(playground.locator("select").nth(2)).toHaveValue(chartPage.value);
     await expect(playground.locator("select").nth(2)).toBeDisabled();
-    await expect(page.getByRole("switch", { name: "Legend" })).toBeVisible();
+    if (chartPage.legend === false) {
+      await expect(page.getByRole("switch", { name: "Legend" })).toHaveCount(0);
+      await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
+    } else {
+      await expect(page.getByRole("switch", { name: "Legend" })).toBeVisible();
+      await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+    }
     await expect(page.getByRole("switch", { name: "Minimap" })).toBeVisible();
-    await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
 
     await expect(page.getByRole("img", { name: "Chart domain minimap" }).first()).toBeVisible();
   }
 
+  expectNoBrowserErrors(errors);
+});
+
+test("business and hierarchy chart pages expose relevant interactions", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop-chromium", "desktop business chart coverage");
+
+  const errors = collectBrowserErrors(page);
+
+  await page.goto("/waterfall.html");
+  let playground = page.getByTestId("chart-playground-example");
+
+  await expect(playground.getByText("Curve", { exact: true })).toHaveCount(0);
+  await expect(playground.getByText("Stroke", { exact: true })).toHaveCount(0);
+  await expect(playground.getByText("Threshold", { exact: true })).toHaveCount(0);
+  await page.locator("svg[aria-label='Chart waterfall'] g").nth(1).click();
+  await expect(page.getByLabel("Selected chart item")).toContainText("Running total");
+
+  await playground.locator("select").first().selectOption("operations");
+  await expect(playground).toContainText("measured by load");
+
+  await page.goto("/funnel.html");
+  playground = page.getByTestId("chart-playground-example");
+
+  await expect(playground).toContainText("Observed");
+  await expect(playground).toContainText("Above median");
+  await page.locator("svg[aria-label='Chart funnel'] g").nth(1).click();
+  await expect(page.getByLabel("Selected chart item")).toContainText("Of previous");
+
+  const funnelBox = await page.locator("svg[aria-label='Chart funnel']").boundingBox();
+
+  expect(funnelBox).not.toBeNull();
+  if (funnelBox) {
+    await page.mouse.move(funnelBox.x + funnelBox.width * 0.35, funnelBox.y + funnelBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      funnelBox.x + funnelBox.width * 0.65,
+      funnelBox.y + funnelBox.height / 2,
+      {
+        steps: 4,
+      },
+    );
+    await page.mouse.up();
+  }
+  await expect(playground.locator("[data-chart-domain-selection]")).toHaveCount(0);
+
+  for (const chart of [
+    { label: "Chart treemap", path: "/treemap.html", selector: "g[aria-label^='Starter']" },
+    { label: "Chart sunburst", path: "/sunburst.html", selector: "path[aria-label^='Starter']" },
+  ]) {
+    await page.goto(chart.path);
+    playground = page.getByTestId("chart-playground-example");
+
+    await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+    await expect(
+      page.locator(`svg[aria-label='${chart.label}'] ${chart.selector}`).first(),
+    ).toBeVisible();
+    await page.getByRole("checkbox", { name: "Starter" }).click();
+    await expect(page.getByRole("checkbox", { name: "Starter" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    await expect(page.locator(`svg[aria-label='${chart.label}'] ${chart.selector}`)).toHaveCount(0);
+    await page.locator(`svg[aria-label='${chart.label}'] [aria-label]`).first().click({
+      force: true,
+    });
+    await expect(page.getByLabel("Selected chart item")).toContainText("Of total");
+  }
+
+  await expectNoInvalidSvgGeometry(page);
   expectNoBrowserErrors(errors);
 });
 

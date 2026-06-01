@@ -443,6 +443,67 @@ describe("@moritzbrantner/charts", () => {
     expect(container.firstElementChild?.firstElementChild?.textContent).toBe("Legend");
   });
 
+  test("renders a draggable floating legend with minimize and hide controls", () => {
+    const onLegendHide = vi.fn();
+    const { container } = render(
+      <ChartWithLegend
+        legend={<ChartSeriesLegend items={[{ id: "average", label: "Average" }]} />}
+        legendMode="floating"
+        onLegendHide={onLegendHide}
+      >
+        <div>Chart</div>
+      </ChartWithLegend>,
+    );
+
+    const root = container.firstElementChild as HTMLElement;
+    const legend = root.querySelector("[data-chart-floating-legend]") as HTMLElement;
+    const handle = root.querySelector("[data-chart-floating-legend-handle]") as HTMLElement;
+
+    root.getBoundingClientRect = () =>
+      ({
+        bottom: 300,
+        height: 300,
+        left: 0,
+        right: 500,
+        top: 0,
+        width: 500,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    legend.getBoundingClientRect = () =>
+      ({
+        bottom: 132,
+        height: 120,
+        left: 12,
+        right: 172,
+        top: 12,
+        width: 160,
+        x: 12,
+        y: 12,
+        toJSON: () => ({}),
+      }) as DOMRect;
+
+    expect(screen.getByRole("group", { name: "Chart series legend" })).toBeTruthy();
+
+    firePointerEvent(handle, "pointerdown", 20, 1, { clientY: 20 });
+    firePointerEvent(handle, "pointermove", 450, 1, { clientY: 280 });
+    firePointerEvent(handle, "pointerup", 450, 1, { clientY: 280 });
+
+    expect(legend.style.left).toBe("332px");
+    expect(legend.style.top).toBe("172px");
+
+    fireEvent.click(screen.getByRole("button", { name: "Minimize legend" }));
+    expect(screen.queryByRole("group", { name: "Chart series legend" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand legend" }));
+    expect(screen.getByRole("group", { name: "Chart series legend" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide legend" }));
+    expect(screen.queryByRole("group", { name: "Chart series legend" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Show legend" })).toBeNull();
+    expect(onLegendHide).toHaveBeenCalledTimes(1);
+  });
+
   test("opens a y-axis range menu and applies manual ranges", () => {
     const onValueChange = vi.fn();
     const { container } = renderYAxisRangeMenu({ onValueChange });
@@ -1911,6 +1972,7 @@ function firePointerEvent(
   options: {
     altKey?: boolean;
     button?: number;
+    clientY?: number;
     shiftKey?: boolean;
   } = {},
 ) {
@@ -1922,6 +1984,9 @@ function firePointerEvent(
   Object.defineProperties(event, {
     clientX: {
       value: clientX,
+    },
+    clientY: {
+      value: options.clientY ?? 0,
     },
     altKey: {
       value: options.altKey ?? false,

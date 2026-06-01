@@ -103,13 +103,18 @@ import {
   type ChartAxisRange,
   type ChartAxisScale,
   type ChartDensitySample,
+  type ChartFunnelRow,
   type ChartGapBehavior,
   type ChartAxisOrientation,
+  type ChartHierarchyNode,
   type IndexedChartSeriesPoint,
   type ChartRange,
   type ChartSampleInteraction,
   type ChartSeriesPoint,
+  type ChartSunburstNode,
+  type ChartTreemapNode,
   type ChartValueMode,
+  type ChartWaterfallRow,
 } from "@moritzbrantner/charts";
 import "./styles.css";
 
@@ -140,6 +145,19 @@ type ChartPageId = `chart-${PlaygroundChartType}`;
 type ExamplePage = "compose" | "examples" | ChartPageId;
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
 type PlaygroundAnimationMode = ChartAnimationMode;
+type PlaygroundBusinessChartType = "funnel" | "sunburst" | "treemap" | "waterfall";
+type PlaygroundPlan = TelemetryProperties["plan"];
+type PlaygroundChannel = TelemetryProperties["channel"];
+type PlaygroundHierarchyPayload = {
+  channel?: PlaygroundChannel;
+  kind: "channel" | "plan" | "root";
+  plan?: PlaygroundPlan;
+};
+type PlaygroundHierarchy = ChartHierarchyNode<PlaygroundHierarchyPayload>;
+type PlaygroundHierarchySelection =
+  | ChartSunburstNode<PlaygroundHierarchyPayload>
+  | ChartTreemapNode<PlaygroundHierarchyPayload>;
+type PlaygroundMetricAccessor = (point: IndexedChartSeriesPoint<TelemetryProperties>) => number;
 
 type ExampleDataSet = {
   description: string;
@@ -147,6 +165,9 @@ type ExampleDataSet = {
   label: string;
   points: ChartSeriesPoint<TelemetryProperties>[];
 };
+
+const playgroundPlans: PlaygroundPlan[] = ["starter", "scale", "enterprise"];
+const playgroundChannels: PlaygroundChannel[] = ["direct", "partner", "marketplace"];
 
 const ranges: ChartRange[] = [
   {
@@ -499,6 +520,7 @@ function ChartPlayground({
 }) {
   const [selectedChartType, setSelectedChartType] = useState<PlaygroundChartType>("area");
   const chartType = fixedChartType ?? selectedChartType;
+  const chartCapabilities = getPlaygroundChartCapabilities(chartType);
   const [targetBinCount, setTargetBinCount] = useState(120);
   const [histogramBuckets, setHistogramBuckets] = useState(24);
   const [heatmapYBins, setHeatmapYBins] = useState(12);
@@ -523,18 +545,29 @@ function ChartPlayground({
   });
   const [hiddenLegendIds, setHiddenLegendIds] = useState<string[]>([]);
   const [selectedSampleIndex, setSelectedSampleIndex] = useState<number | null>(null);
+  const [selectedWaterfallRow, setSelectedWaterfallRow] = useState<ChartWaterfallRow | null>(null);
+  const [selectedFunnelRow, setSelectedFunnelRow] = useState<ChartFunnelRow | null>(null);
+  const [selectedHierarchyNode, setSelectedHierarchyNode] =
+    useState<PlaygroundHierarchySelection | null>(null);
+  const clearBusinessSelections = useCallback(() => {
+    setSelectedWaterfallRow(null);
+    setSelectedFunnelRow(null);
+    setSelectedHierarchyNode(null);
+  }, []);
   const playback = useChartPlaybackDomain({
-    enabled: playbackEnabled,
+    enabled: playbackEnabled && chartCapabilities.playback,
     fullDomain,
     playing: false,
   });
-  const effectiveDomain = playbackEnabled ? playback.domain : activeRange.domain;
+  const effectiveDomain =
+    playbackEnabled && chartCapabilities.playback ? playback.domain : activeRange.domain;
   const handleInteractiveDomainChange = useCallback(
     (domain: [number, number]) => {
       setPlaybackEnabled(false);
+      clearBusinessSelections();
       onDomainChange(domain);
     },
-    [onDomainChange],
+    [clearBusinessSelections, onDomainChange],
   );
   const { containerRef: wheelContainerRef, onWheel: handlePreviewWheel } =
     useChartWheelDomain<HTMLDivElement>({
@@ -674,32 +707,42 @@ function ChartPlayground({
       }),
     [chartType, effectiveDomain, index, targetBinCount],
   );
-  const waterfallData = useMemo(
-    () =>
-      createChartWaterfallData([
-        { label: "Baseline", value: (summary.metrics.revenue ?? 0) * 0.44 },
-        { label: "Expansion", value: (summary.metrics.revenue ?? 0) * 0.22 },
-        { label: "Partner lift", value: (summary.metrics.revenue ?? 0) * 0.12 },
-        { label: "Credits", value: -(summary.metrics.revenue ?? 0) * 0.08 },
-        { label: "Net change", value: (summary.metrics.revenue ?? 0) * 0.1 },
-      ]),
-    [summary.metrics.revenue],
+  const businessMetric = useMemo(
+    () => getExampleBusinessMetric(selectedDataset.id),
+    [selectedDataset.id],
   );
-  const funnelData = useMemo(
-    () =>
-      createChartFunnelData([
-        { label: "Events", value: summary.itemCount },
-        { label: "Qualified", value: summary.itemCount * 0.72 },
-        { label: "Activated", value: summary.itemCount * 0.48 },
-        { label: "Retained", value: summary.itemCount * 0.31 },
-      ]),
-    [summary.itemCount],
-  );
-  const hierarchyPoints = useMemo(
+  const currentPoints = useMemo(
     () => index.getChartPoints({ maxPoints: 5_000, xDomain: effectiveDomain }).points,
     [effectiveDomain, index],
   );
-  const hierarchy = useMemo(() => createPlaygroundHierarchy(hierarchyPoints), [hierarchyPoints]);
+  const previousDomain = useMemo(
+    () => createPreviousDomain(effectiveDomain, fullDomain),
+    [effectiveDomain, fullDomain],
+  );
+  const previousPoints = useMemo(
+    () =>
+      previousDomain
+        ? index.getChartPoints({ maxPoints: 5_000, xDomain: previousDomain }).points
+        : [],
+    [index, previousDomain],
+  );
+  const waterfallData = useMemo(
+    () =>
+      createBusinessWaterfallData(currentPoints, previousPoints, businessMetric.accessor, {
+        hasPreviousWindow: previousDomain !== null,
+      }),
+    [businessMetric.accessor, currentPoints, previousDomain, previousPoints],
+  );
+  const funnelData = useMemo(
+    () => createBusinessFunnelData(currentPoints, selectedDataset.id, businessMetric.accessor),
+    [businessMetric.accessor, currentPoints, selectedDataset.id],
+  );
+  const hierarchy = useMemo(
+    () =>
+      createBusinessHierarchy(currentPoints, selectedDataset.id, businessMetric, hiddenLegendIds),
+    [businessMetric, currentPoints, hiddenLegendIds, selectedDataset.id],
+  );
+  const hierarchyTotal = getHierarchyValue(hierarchy);
   const treemapData = useMemo(
     () => createChartTreemapLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
     [hierarchy],
@@ -708,7 +751,12 @@ function ChartPlayground({
     () => createChartSunburstLayout(hierarchy, { outerRadius: 160 }),
     [hierarchy],
   );
-  const labels = showLabels ? createPlaygroundLabels(renderRows, valueMode, axisOrientation) : [];
+  const activeShowLabels = showLabels && chartCapabilities.labels;
+  const activeShowThreshold = showThreshold && chartCapabilities.threshold;
+  const activeShowMinimap = showMinimap && chartCapabilities.minimap;
+  const labels = activeShowLabels
+    ? createPlaygroundLabels(renderRows, valueMode, axisOrientation)
+    : [];
   const config = playgroundChartConfig(valueMode, definition.label);
   const groupedConfig = Object.fromEntries(
     grouped.groups.map((group, index) => [
@@ -725,6 +773,7 @@ function ChartPlayground({
     grouped,
     valueMode,
   });
+  const activeShowLegend = showLegend && chartCapabilities.legend && legendItems.length > 0;
   const visibleSeriesIds = new Set(
     legendItems.filter((item) => !hiddenLegendIds.includes(item.id)).map((item) => item.id),
   );
@@ -769,24 +818,233 @@ function ChartPlayground({
     domain: valueAxisTransform.domain ?? yAxisDataDomain ?? [0, 1],
     enabled: shouldAnimateRescale && yAxisDataDomain !== null,
   });
-  const chartPreview = (
-    <div ref={wheelContainerRef} className="grid gap-4" onWheel={handlePreviewWheel}>
+  const chartContextMenuHeader = (
+    <div className="grid gap-1 px-2 py-1.5 text-sm">
+      <span className="font-medium">Chart options</span>
+      <span className="text-xs text-muted-foreground">{playgroundChartTitles[chartType]}</span>
+    </div>
+  );
+  const chartContextMenuItems = useMemo<MenuActionItem[]>(() => {
+    const items: MenuActionItem[] = [];
+    const valueModeOptions = CHART_VALUE_MODE_DEFINITIONS.filter((mode) =>
+      ["average", "count", "max", "sum"].includes(mode.id),
+    );
+
+    if (!fixedChartType) {
+      items.push({
+        id: "chart-type",
+        label: "Chart",
+        options: playgroundChartOptions.map((option) => ({
+          id: `chart-type-${option.id}`,
+          label: option.label,
+          value: option.id,
+        })),
+        type: "radio-group",
+        value: chartType,
+        onValueChange: (value) => {
+          if (isPlaygroundChartType(value)) {
+            clearBusinessSelections();
+            setSelectedChartType(value);
+          }
+        },
+      });
+    }
+
+    if (chartCapabilities.valueMode) {
+      items.push({
+        id: "value-mode",
+        label: "Value",
+        options: valueModeOptions.map((mode) => ({
+          id: `value-mode-${mode.id}`,
+          label: mode.label,
+          value: mode.id,
+        })),
+        type: "radio-group",
+        value: valueMode,
+        onValueChange: (value) => {
+          if (isChartValueMode(value)) {
+            onValueModeChange(value);
+          }
+        },
+      });
+    }
+
+    if (supportsAxisOrientation) {
+      items.push({
+        id: "axis-orientation",
+        label: "Axes",
+        options: chartAxisOrientationOptions.map((option) => ({
+          id: `axis-orientation-${option.id}`,
+          label: option.label,
+          value: option.id,
+        })),
+        type: "radio-group",
+        value: axesTransform.orientation,
+        onValueChange: (value) => {
+          if (isChartAxisOrientation(value)) {
+            setAxesTransform((current) => ({ ...current, orientation: value }));
+          }
+        },
+      });
+    }
+
+    if (chartCapabilities.advancedControls) {
+      items.push({
+        id: "y-scale",
+        label: "Y scale",
+        options: getChartAxisScaleDefinitions().map((definition) => ({
+          id: `y-scale-${definition.id}`,
+          label: definition.label,
+          value: definition.id,
+        })),
+        type: "radio-group",
+        value: axesTransform.y.scale,
+        onValueChange: (value) => {
+          if (isChartAxisScale(value)) {
+            setAxesTransform((current) => ({
+              ...current,
+              y: { ...current.y, scale: value },
+            }));
+          }
+        },
+      });
+    }
+
+    items.push({ id: "display-separator", type: "separator" });
+
+    if (chartCapabilities.grid) {
+      items.push({
+        checked: showGrid,
+        id: "toggle-grid",
+        label: "Grid",
+        onCheckedChange: setShowGrid,
+        type: "checkbox",
+      });
+    }
+
+    if (chartCapabilities.labels) {
+      items.push({
+        checked: showLabels,
+        id: "toggle-labels",
+        label: "Labels",
+        onCheckedChange: setShowLabels,
+        type: "checkbox",
+      });
+    }
+
+    if (chartCapabilities.legend && legendItems.length > 0) {
+      items.push({
+        checked: showLegend,
+        id: "toggle-legend",
+        label: "Legend",
+        onCheckedChange: setShowLegend,
+        type: "checkbox",
+      });
+    }
+
+    if (chartCapabilities.threshold) {
+      items.push({
+        checked: showThreshold,
+        id: "toggle-threshold",
+        label: "Threshold",
+        onCheckedChange: setShowThreshold,
+        type: "checkbox",
+      });
+    }
+
+    if (chartCapabilities.minimap) {
+      items.push({
+        checked: showMinimap,
+        id: "toggle-minimap",
+        label: "Minimap",
+        onCheckedChange: setShowMinimap,
+        type: "checkbox",
+      });
+    }
+
+    items.push(
+      { id: "viewport-separator", type: "separator" },
+      {
+        disabled: effectiveDomain[0] === fullDomain[0] && effectiveDomain[1] === fullDomain[1],
+        id: "reset-viewport",
+        label: "Reset viewport",
+        onSelect: () => handleInteractiveDomainChange(fullDomain),
+      },
+    );
+
+    return items;
+  }, [
+    axesTransform.orientation,
+    axesTransform.y,
+    chartCapabilities.advancedControls,
+    chartCapabilities.grid,
+    chartCapabilities.labels,
+    chartCapabilities.legend,
+    chartCapabilities.minimap,
+    chartCapabilities.threshold,
+    chartCapabilities.valueMode,
+    chartType,
+    clearBusinessSelections,
+    effectiveDomain,
+    fixedChartType,
+    fullDomain,
+    handleInteractiveDomainChange,
+    legendItems.length,
+    onValueModeChange,
+    showGrid,
+    showLabels,
+    showLegend,
+    showMinimap,
+    showThreshold,
+    supportsAxisOrientation,
+    valueMode,
+  ]);
+  const selectionDetails = renderPlaygroundSelectionDetails({
+    businessMetric,
+    chartType,
+    hierarchy,
+    hierarchyTotal,
+    selectedFunnelRow,
+    selectedHierarchyNode,
+    selectedWaterfallRow,
+  });
+  const chartCanvas = (
+    <ContextActionMenu
+      contentProps={{ "aria-label": "Chart options menu" }}
+      header={chartContextMenuHeader}
+      items={chartContextMenuItems}
+      label="Chart options"
+    >
       <div
-        ref={dragContainerRef}
+        ref={chartCapabilities.directDomainInteraction ? dragContainerRef : undefined}
         className="relative select-none"
-        data-chart-domain-drag-frame=""
-        data-chart-domain-dragging={isPreviewDomainDragging ? "true" : undefined}
-        onDoubleClick={handlePreviewDomainDoubleClick}
-        onPointerCancel={handlePreviewDomainPointerCancel}
+        data-chart-domain-drag-frame={chartCapabilities.directDomainInteraction ? "" : undefined}
+        data-chart-domain-dragging={
+          chartCapabilities.directDomainInteraction && isPreviewDomainDragging ? "true" : undefined
+        }
+        onDoubleClick={
+          chartCapabilities.directDomainInteraction ? handlePreviewDomainDoubleClick : undefined
+        }
+        onPointerCancel={
+          chartCapabilities.directDomainInteraction ? handlePreviewDomainPointerCancel : undefined
+        }
         onPointerDown={(event) => {
+          if (!chartCapabilities.directDomainInteraction) {
+            return;
+          }
+
           if (isChartInteractionControl(event.target)) {
             return;
           }
 
           handlePreviewDomainPointerDown(event);
         }}
-        onPointerMove={handlePreviewDomainPointerMove}
-        onPointerUp={handlePreviewDomainPointerUp}
+        onPointerMove={
+          chartCapabilities.directDomainInteraction ? handlePreviewDomainPointerMove : undefined
+        }
+        onPointerUp={
+          chartCapabilities.directDomainInteraction ? handlePreviewDomainPointerUp : undefined
+        }
       >
         {chartType === "scatter" || chartType === "bubble" ? (
           <ChartScatterSvg
@@ -796,13 +1054,29 @@ function ChartPlayground({
             ariaLabel={chartType === "bubble" ? "Bubble chart" : "Scatter plot"}
           />
         ) : chartType === "waterfall" ? (
-          <ChartWaterfallSvg data={waterfallData} formatValue={formatCurrency} />
+          <ChartWaterfallSvg
+            data={waterfallData}
+            formatValue={businessMetric.formatValue}
+            onDatumSelect={setSelectedWaterfallRow}
+          />
         ) : chartType === "funnel" ? (
-          <ChartFunnelSvg data={funnelData} formatValue={formatCompact} />
+          <ChartFunnelSvg
+            data={funnelData}
+            formatValue={formatCompact}
+            onDatumSelect={setSelectedFunnelRow}
+          />
         ) : chartType === "treemap" ? (
-          <ChartTreemapSvg data={treemapData} formatValue={formatCompact} />
+          <ChartTreemapSvg
+            data={treemapData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
         ) : chartType === "sunburst" ? (
-          <ChartSunburstSvg data={sunburstData} formatValue={formatCompact} />
+          <ChartSunburstSvg
+            data={sunburstData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
         ) : chartType === "heatmap" ? (
           <ChartHeatmapGrid
             cells={heatmap.cells}
@@ -817,8 +1091,8 @@ function ChartPlayground({
             samples={series.samples}
             selectedSampleIndex={selectedSampleIndex}
             showGrid={showGrid}
-            showLabels={showLabels}
-            showThreshold={showThreshold}
+            showLabels={activeShowLabels}
+            showThreshold={activeShowThreshold}
             threshold={threshold}
             visibleSeriesIds={visibleSeriesIds}
             onSampleSelect={(interaction) => setSelectedSampleIndex(interaction.sample.index)}
@@ -845,7 +1119,7 @@ function ChartPlayground({
               samples: series.samples,
               selectedSampleIndex,
               showGrid,
-              showThreshold,
+              showThreshold: activeShowThreshold,
               strokeWidth,
               threshold,
               valueMode,
@@ -866,7 +1140,7 @@ function ChartPlayground({
             })}
           </ChartContainer>
         )}
-        {previewDomainSelection ? (
+        {chartCapabilities.directDomainInteraction && previewDomainSelection ? (
           <div
             data-chart-domain-selection=""
             className="pointer-events-none absolute inset-y-0 border-x border-primary bg-primary/15"
@@ -877,10 +1151,21 @@ function ChartPlayground({
           />
         ) : null}
       </div>
+    </ContextActionMenu>
+  );
+  const chartPreview = (
+    <div
+      ref={chartCapabilities.directDomainInteraction ? wheelContainerRef : undefined}
+      className="grid gap-4"
+      onWheel={chartCapabilities.directDomainInteraction ? handlePreviewWheel : undefined}
+    >
+      {chartCanvas}
 
-      {showLabels ? <PlaygroundActiveLabels labels={labels} /> : null}
+      {selectionDetails}
 
-      {showThreshold && thresholdAnnotations.length > 0 ? (
+      {activeShowLabels ? <PlaygroundActiveLabels labels={labels} /> : null}
+
+      {activeShowThreshold && thresholdAnnotations.length > 0 ? (
         <ChartThresholdMarker
           annotations={thresholdAnnotations}
           formatLabel={(annotation) =>
@@ -889,7 +1174,7 @@ function ChartPlayground({
         />
       ) : null}
 
-      {showMinimap ? (
+      {activeShowMinimap ? (
         <ChartDomainMinimap
           domain={effectiveDomain}
           fullDomain={fullDomain}
@@ -919,10 +1204,13 @@ function ChartPlayground({
         <ChartPanel
           badge={selectedDataset.label}
           title={playgroundChartTitles[chartType]}
-          description={selectedDataset.description}
+          description={getPlaygroundChartDescription(chartType, selectedDataset, businessMetric)}
         >
-          {showLegend ? (
+          {activeShowLegend ? (
             <ChartWithLegend
+              legendMode="floating"
+              legendTitle="Series"
+              onLegendHide={() => setShowLegend(false)}
               legend={
                 <ChartSeriesLegend
                   items={legendItems}
@@ -938,7 +1226,7 @@ function ChartPlayground({
           )}
         </ChartPanel>
 
-        <ChartPanel title="Knobs" description="Configuration controls for the active preview.">
+        <ChartPanel title="Knobs" description="Controls for the active chart.">
           <div className="grid gap-5">
             <div className="grid gap-3">
               <ControlSelect
@@ -946,6 +1234,7 @@ function ChartPlayground({
                 value={selectedDataset.id}
                 onChange={(value) => {
                   if (isExampleDataSetId(value)) {
+                    clearBusinessSelections();
                     onDataSetChange(value);
                   }
                 }}
@@ -956,7 +1245,14 @@ function ChartPlayground({
                   </NativeSelectOption>
                 ))}
               </ControlSelect>
-              <ControlSelect label="Viewport" value={rangeId} onChange={onRangeChange}>
+              <ControlSelect
+                label="Viewport"
+                value={rangeId}
+                onChange={(value) => {
+                  clearBusinessSelections();
+                  onRangeChange(value);
+                }}
+              >
                 {ranges.map((range) => (
                   <NativeSelectOption key={range.id} value={range.id}>
                     {range.label}
@@ -969,6 +1265,7 @@ function ChartPlayground({
                 disabled={Boolean(fixedChartType)}
                 onChange={(value) => {
                   if (!fixedChartType && isPlaygroundChartType(value)) {
+                    clearBusinessSelections();
                     setSelectedChartType(value);
                   }
                 }}
@@ -979,212 +1276,234 @@ function ChartPlayground({
                   </NativeSelectOption>
                 ))}
               </ControlSelect>
-              <ControlSelect
-                label="Value"
-                value={valueMode}
-                onChange={(value) => {
-                  if (isChartValueMode(value)) {
-                    onValueModeChange(value);
-                  }
-                }}
-              >
-                {CHART_VALUE_MODE_DEFINITIONS.map((mode) => (
-                  <NativeSelectOption key={mode.id} value={mode.id}>
-                    {mode.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
+              {chartCapabilities.valueMode ? (
+                <ControlSelect
+                  label="Value"
+                  value={valueMode}
+                  onChange={(value) => {
+                    if (isChartValueMode(value)) {
+                      onValueModeChange(value);
+                    }
+                  }}
+                >
+                  {CHART_VALUE_MODE_DEFINITIONS.map((mode) => (
+                    <NativeSelectOption key={mode.id} value={mode.id}>
+                      {mode.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+              ) : null}
             </div>
 
-            <div className="grid gap-4">
-              <KnobSlider
-                label="Bins"
-                max={240}
-                min={12}
-                onValueChange={setTargetBinCount}
-                step={6}
-                value={targetBinCount}
-              />
-              <KnobSlider
-                label="Histogram buckets"
-                max={60}
-                min={6}
-                onValueChange={setHistogramBuckets}
-                step={3}
-                value={histogramBuckets}
-              />
-              <KnobSlider
-                label="Heatmap y bins"
-                max={24}
-                min={4}
-                onValueChange={setHeatmapYBins}
-                step={1}
-                value={heatmapYBins}
-              />
-              <KnobSlider
-                label="Rolling window"
-                max={31}
-                min={1}
-                onValueChange={setRollingWindow}
-                step={2}
-                value={rollingWindow}
-              />
-              <KnobSlider
-                label="Threshold"
-                max={320}
-                min={20}
-                onValueChange={setThreshold}
-                step={5}
-                value={threshold}
-              />
-              <KnobSlider
-                label="Stroke"
-                max={5}
-                min={1}
-                onValueChange={setStrokeWidth}
-                step={0.2}
-                suffix="px"
-                value={strokeWidth}
-              />
-              <KnobSlider
-                label="Fill"
-                max={60}
-                min={0}
-                onValueChange={setFillOpacity}
-                step={2}
-                suffix="%"
-                value={fillOpacity}
-              />
-              <KnobSlider
-                label="Bar radius"
-                max={12}
-                min={0}
-                onValueChange={setBarRadius}
-                step={1}
-                suffix="px"
-                value={barRadius}
-              />
-            </div>
+            {chartCapabilities.styleControls ? (
+              <div className="grid gap-4">
+                <KnobSlider
+                  label="Bins"
+                  max={240}
+                  min={12}
+                  onValueChange={setTargetBinCount}
+                  step={6}
+                  value={targetBinCount}
+                />
+                <KnobSlider
+                  label="Histogram buckets"
+                  max={60}
+                  min={6}
+                  onValueChange={setHistogramBuckets}
+                  step={3}
+                  value={histogramBuckets}
+                />
+                <KnobSlider
+                  label="Heatmap y bins"
+                  max={24}
+                  min={4}
+                  onValueChange={setHeatmapYBins}
+                  step={1}
+                  value={heatmapYBins}
+                />
+                <KnobSlider
+                  label="Rolling window"
+                  max={31}
+                  min={1}
+                  onValueChange={setRollingWindow}
+                  step={2}
+                  value={rollingWindow}
+                />
+                <KnobSlider
+                  label="Threshold"
+                  max={320}
+                  min={20}
+                  onValueChange={setThreshold}
+                  step={5}
+                  value={threshold}
+                />
+                <KnobSlider
+                  label="Stroke"
+                  max={5}
+                  min={1}
+                  onValueChange={setStrokeWidth}
+                  step={0.2}
+                  suffix="px"
+                  value={strokeWidth}
+                />
+                <KnobSlider
+                  label="Fill"
+                  max={60}
+                  min={0}
+                  onValueChange={setFillOpacity}
+                  step={2}
+                  suffix="%"
+                  value={fillOpacity}
+                />
+                <KnobSlider
+                  label="Bar radius"
+                  max={12}
+                  min={0}
+                  onValueChange={setBarRadius}
+                  step={1}
+                  suffix="px"
+                  value={barRadius}
+                />
+              </div>
+            ) : null}
+
+            {chartCapabilities.advancedControls ? (
+              <div className="grid gap-3">
+                <ControlSelect
+                  label="Curve"
+                  value={curve}
+                  onChange={(value) => {
+                    if (isPlaygroundCurve(value)) {
+                      setCurve(value);
+                    }
+                  }}
+                >
+                  {playgroundCurveOptions.map((option) => (
+                    <NativeSelectOption key={option.id} value={option.id}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+                <ControlSelect
+                  label="Gaps"
+                  value={gapBehavior}
+                  onChange={(value) => {
+                    if (isChartGapBehavior(value)) {
+                      setGapBehavior(value);
+                    }
+                  }}
+                >
+                  {chartGapBehaviorOptions.map((option) => (
+                    <NativeSelectOption key={option.id} value={option.id}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+                <ControlSelect
+                  label="Axes"
+                  value={axesTransform.orientation}
+                  onChange={(value) => {
+                    if (isChartAxisOrientation(value)) {
+                      setAxesTransform((current) => ({ ...current, orientation: value }));
+                    }
+                  }}
+                >
+                  {chartAxisOrientationOptions.map((option) => (
+                    <NativeSelectOption
+                      key={option.id}
+                      value={option.id}
+                      disabled={!supportsAxisOrientation && option.id === "horizontal"}
+                    >
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+                <ControlSelect
+                  label="X scale"
+                  value={axesTransform.x.scale}
+                  onChange={(value) => {
+                    if (isChartAxisScale(value)) {
+                      setAxesTransform((current) => ({
+                        ...current,
+                        x: { ...current.x, scale: value },
+                      }));
+                    }
+                  }}
+                >
+                  {getChartAxisScaleDefinitions().map((option) => (
+                    <NativeSelectOption key={option.id} value={option.id}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+                <ControlSelect
+                  label="Y scale"
+                  value={axesTransform.y.scale}
+                  onChange={(value) => {
+                    if (isChartAxisScale(value)) {
+                      setAxesTransform((current) => ({
+                        ...current,
+                        y: { ...current.y, scale: value },
+                      }));
+                    }
+                  }}
+                >
+                  {getChartAxisScaleDefinitions().map((option) => (
+                    <NativeSelectOption key={option.id} value={option.id}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+                <ControlSelect
+                  label="Animation"
+                  value={animationMode}
+                  onChange={(value) => {
+                    if (isPlaygroundAnimationMode(value)) {
+                      setAnimationMode(value);
+                    }
+                  }}
+                >
+                  {playgroundAnimationOptions.map((option) => (
+                    <NativeSelectOption key={option.id} value={option.id}>
+                      {option.label}
+                    </NativeSelectOption>
+                  ))}
+                </ControlSelect>
+              </div>
+            ) : null}
 
             <div className="grid gap-3">
-              <ControlSelect
-                label="Curve"
-                value={curve}
-                onChange={(value) => {
-                  if (isPlaygroundCurve(value)) {
-                    setCurve(value);
-                  }
-                }}
-              >
-                {playgroundCurveOptions.map((option) => (
-                  <NativeSelectOption key={option.id} value={option.id}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-              <ControlSelect
-                label="Gaps"
-                value={gapBehavior}
-                onChange={(value) => {
-                  if (isChartGapBehavior(value)) {
-                    setGapBehavior(value);
-                  }
-                }}
-              >
-                {chartGapBehaviorOptions.map((option) => (
-                  <NativeSelectOption key={option.id} value={option.id}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-              <ControlSelect
-                label="Axes"
-                value={axesTransform.orientation}
-                onChange={(value) => {
-                  if (isChartAxisOrientation(value)) {
-                    setAxesTransform((current) => ({ ...current, orientation: value }));
-                  }
-                }}
-              >
-                {chartAxisOrientationOptions.map((option) => (
-                  <NativeSelectOption
-                    key={option.id}
-                    value={option.id}
-                    disabled={!supportsAxisOrientation && option.id === "horizontal"}
-                  >
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-              <ControlSelect
-                label="X scale"
-                value={axesTransform.x.scale}
-                onChange={(value) => {
-                  if (isChartAxisScale(value)) {
-                    setAxesTransform((current) => ({
-                      ...current,
-                      x: { ...current.x, scale: value },
-                    }));
-                  }
-                }}
-              >
-                {getChartAxisScaleDefinitions().map((option) => (
-                  <NativeSelectOption key={option.id} value={option.id}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-              <ControlSelect
-                label="Y scale"
-                value={axesTransform.y.scale}
-                onChange={(value) => {
-                  if (isChartAxisScale(value)) {
-                    setAxesTransform((current) => ({
-                      ...current,
-                      y: { ...current.y, scale: value },
-                    }));
-                  }
-                }}
-              >
-                {getChartAxisScaleDefinitions().map((option) => (
-                  <NativeSelectOption key={option.id} value={option.id}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-              <ControlSelect
-                label="Animation"
-                value={animationMode}
-                onChange={(value) => {
-                  if (isPlaygroundAnimationMode(value)) {
-                    setAnimationMode(value);
-                  }
-                }}
-              >
-                {playgroundAnimationOptions.map((option) => (
-                  <NativeSelectOption key={option.id} value={option.id}>
-                    {option.label}
-                  </NativeSelectOption>
-                ))}
-              </ControlSelect>
-            </div>
-
-            <div className="grid gap-3">
-              <SwitchKnob label="Grid" checked={showGrid} onCheckedChange={setShowGrid} />
-              <SwitchKnob label="Labels" checked={showLabels} onCheckedChange={setShowLabels} />
-              <SwitchKnob label="Legend" checked={showLegend} onCheckedChange={setShowLegend} />
-              <SwitchKnob
-                label="Threshold"
-                checked={showThreshold}
-                onCheckedChange={setShowThreshold}
-              />
-              <SwitchKnob label="Minimap" checked={showMinimap} onCheckedChange={setShowMinimap} />
-              <SwitchKnob
-                label="Playback"
-                checked={playbackEnabled}
-                onCheckedChange={setPlaybackEnabled}
-              />
-              {playbackEnabled ? (
+              {chartCapabilities.grid ? (
+                <SwitchKnob label="Grid" checked={showGrid} onCheckedChange={setShowGrid} />
+              ) : null}
+              {chartCapabilities.labels ? (
+                <SwitchKnob label="Labels" checked={showLabels} onCheckedChange={setShowLabels} />
+              ) : null}
+              {chartCapabilities.legend ? (
+                <SwitchKnob label="Legend" checked={showLegend} onCheckedChange={setShowLegend} />
+              ) : null}
+              {chartCapabilities.threshold ? (
+                <SwitchKnob
+                  label="Threshold"
+                  checked={showThreshold}
+                  onCheckedChange={setShowThreshold}
+                />
+              ) : null}
+              {chartCapabilities.minimap ? (
+                <SwitchKnob
+                  label="Minimap"
+                  checked={showMinimap}
+                  onCheckedChange={setShowMinimap}
+                />
+              ) : null}
+              {chartCapabilities.playback ? (
+                <SwitchKnob
+                  label="Playback"
+                  checked={playbackEnabled}
+                  onCheckedChange={setPlaybackEnabled}
+                />
+              ) : null}
+              {playbackEnabled && chartCapabilities.playback ? (
                 <div className="grid grid-cols-3 gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={playback.play}>
                     Play
@@ -1807,16 +2126,15 @@ function createPlaygroundLegendItems({
         { color: "var(--chart-1)", id: "positive", label: "Positive" },
         { color: "var(--destructive)", id: "negative", label: "Negative" },
       ];
-    case "funnel":
     case "treemap":
     case "sunburst":
-      return [
-        {
-          color: "var(--chart-1)",
-          id: chartType,
-          label: playgroundChartTitles[chartType],
-        },
-      ];
+      return playgroundPlans.map((plan, index) => ({
+        color: `var(--chart-${(index % 5) + 1})`,
+        id: plan,
+        label: titleCase(plan),
+      }));
+    case "funnel":
+      return [];
     case "candle":
       return [
         {
@@ -1842,36 +2160,347 @@ function createPlaygroundLegendItems({
   }
 }
 
-function createPlaygroundHierarchy(points: Array<IndexedChartSeriesPoint<TelemetryProperties>>) {
-  const planGroups = new Map<
-    TelemetryProperties["plan"],
-    Map<TelemetryProperties["channel"], number>
-  >();
+function isBusinessHierarchyChart(
+  chartType: PlaygroundChartType,
+): chartType is PlaygroundBusinessChartType {
+  return (
+    chartType === "funnel" ||
+    chartType === "sunburst" ||
+    chartType === "treemap" ||
+    chartType === "waterfall"
+  );
+}
+
+function getPlaygroundChartCapabilities(chartType: PlaygroundChartType) {
+  const isBusinessHierarchy = isBusinessHierarchyChart(chartType);
+  const isHierarchy = chartType === "treemap" || chartType === "sunburst";
+
+  return {
+    advancedControls: !isBusinessHierarchy,
+    directDomainInteraction: !isBusinessHierarchy,
+    grid: !isBusinessHierarchy,
+    labels: !isBusinessHierarchy,
+    legend: isHierarchy || !isBusinessHierarchy,
+    minimap: true,
+    playback: !isBusinessHierarchy,
+    styleControls: !isBusinessHierarchy,
+    threshold: !isBusinessHierarchy,
+    valueMode: !isBusinessHierarchy,
+  };
+}
+
+function getExampleBusinessMetric(datasetId: ExampleDataSetId): {
+  accessor: PlaygroundMetricAccessor;
+  formatValue: (value: number) => string;
+  label: string;
+} {
+  if (datasetId === "operations") {
+    return {
+      accessor: (point) => point.y,
+      formatValue: formatCompact,
+      label: "Load",
+    };
+  }
+
+  return {
+    accessor: (point) => point.metrics.revenue ?? 0,
+    formatValue: formatCurrency,
+    label: "Revenue",
+  };
+}
+
+function getPlaygroundChartDescription(
+  chartType: PlaygroundChartType,
+  selectedDataset: ExampleDataSet,
+  businessMetric: ReturnType<typeof getExampleBusinessMetric>,
+) {
+  switch (chartType) {
+    case "waterfall":
+      return `Current window change by plan, measured by ${businessMetric.label.toLowerCase()}.`;
+    case "funnel":
+      return `Viewport stages based on ${businessMetric.label.toLowerCase()} percentiles.`;
+    case "treemap":
+    case "sunburst":
+      return `${businessMetric.label} by plan and channel.`;
+    case "area":
+    case "bar":
+    case "bubble":
+    case "candle":
+    case "combo":
+    case "heatmap":
+    case "histogram":
+    case "line":
+    case "scatter":
+    case "stacked":
+      return selectedDataset.description;
+  }
+}
+
+function createPreviousDomain(domain: [number, number], fullDomain: [number, number]) {
+  const span = domain[1] - domain[0];
+
+  if (span <= 0 || domain[0] <= fullDomain[0]) {
+    return null;
+  }
+
+  const end = Math.max(fullDomain[0], domain[0]);
+  const start = Math.max(fullDomain[0], end - span);
+
+  return start < end ? ([start, end] satisfies [number, number]) : null;
+}
+
+function createBusinessWaterfallData(
+  currentPoints: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  previousPoints: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  metricAccessor: PlaygroundMetricAccessor,
+  options: { hasPreviousWindow: boolean },
+) {
+  const currentByPlan = sumMetricByPlan(currentPoints, metricAccessor);
+  const previousByPlan = sumMetricByPlan(previousPoints, metricAccessor);
+  const previousTotal = sumMapValues(previousByPlan);
+
+  return createChartWaterfallData([
+    {
+      id: "previous-window",
+      label: options.hasPreviousWindow ? "Previous window" : "Start",
+      value: previousTotal,
+    },
+    ...playgroundPlans.map((plan) => ({
+      id: `${plan}-delta`,
+      label: `${titleCase(plan)} delta`,
+      value: (currentByPlan.get(plan) ?? 0) - (previousByPlan.get(plan) ?? 0),
+    })),
+  ]);
+}
+
+function createBusinessFunnelData(
+  currentPoints: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  datasetId: ExampleDataSetId,
+  metricAccessor: PlaygroundMetricAccessor,
+) {
+  const labels =
+    datasetId === "operations"
+      ? ["Observed", "Elevated", "Incident-level", "Severe"]
+      : ["Observed", "Above median", "High value", "Peak"];
+  const values = currentPoints.map(metricAccessor).filter((value) => Number.isFinite(value));
+  const p50 = getQuantile(values, 0.5);
+  const p75 = getQuantile(values, 0.75);
+  const p90 = getQuantile(values, 0.9);
+
+  return createChartFunnelData([
+    { id: "observed", label: labels[0] ?? "Observed", value: values.length },
+    { id: "p50", label: labels[1] ?? "Above median", value: countAtOrAbove(values, p50) },
+    { id: "p75", label: labels[2] ?? "High value", value: countAtOrAbove(values, p75) },
+    { id: "p90", label: labels[3] ?? "Peak", value: countAtOrAbove(values, p90) },
+  ]);
+}
+
+function createBusinessHierarchy(
+  currentPoints: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  datasetId: ExampleDataSetId,
+  businessMetric: ReturnType<typeof getExampleBusinessMetric>,
+  hiddenPlanIds: readonly string[],
+): PlaygroundHierarchy {
+  const planGroups = summarizeMetricByPlanAndChannel(currentPoints, businessMetric.accessor);
+  const hiddenPlans = new Set(hiddenPlanIds);
+
+  return {
+    id: `${datasetId}-${businessMetric.label.toLowerCase()}-root`,
+    label: `${businessMetric.label} by plan`,
+    payload: { kind: "root" },
+    children: playgroundPlans
+      .filter((plan) => !hiddenPlans.has(plan))
+      .map((plan) => {
+        const planIndex = playgroundPlans.indexOf(plan);
+        const channels = planGroups.get(plan) ?? new Map<PlaygroundChannel, number>();
+
+        return {
+          color: `var(--chart-${(planIndex % 5) + 1})`,
+          id: plan,
+          label: titleCase(plan),
+          payload: { kind: "plan", plan },
+          children: playgroundChannels.map((channel, channelIndex) => ({
+            color: `var(--chart-${((planIndex + channelIndex) % 5) + 1})`,
+            id: `${plan}-${channel}`,
+            label: titleCase(channel),
+            payload: { channel, kind: "channel", plan },
+            value: channels.get(channel) ?? 0,
+          })),
+        };
+      }),
+  };
+}
+
+function summarizeMetricByPlanAndChannel(
+  points: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  metricAccessor: PlaygroundMetricAccessor,
+) {
+  const planGroups = new Map<PlaygroundPlan, Map<PlaygroundChannel, number>>();
 
   for (const point of points) {
     const plan = point.properties.plan;
     const channel = point.properties.channel;
-    const channels = planGroups.get(plan) ?? new Map<TelemetryProperties["channel"], number>();
+    const channels = planGroups.get(plan) ?? new Map<PlaygroundChannel, number>();
 
-    channels.set(channel, (channels.get(channel) ?? 0) + 1);
+    channels.set(channel, (channels.get(channel) ?? 0) + metricAccessor(point));
     planGroups.set(plan, channels);
   }
 
-  return {
-    id: "accounts",
-    label: "Accounts",
-    children: Array.from(planGroups.entries()).map(([plan, channels], planIndex) => ({
-      color: `var(--chart-${(planIndex % 5) + 1})`,
-      id: plan,
-      label: titleCase(plan),
-      children: Array.from(channels.entries()).map(([channel, value], channelIndex) => ({
-        color: `var(--chart-${((planIndex + channelIndex) % 5) + 1})`,
-        id: `${plan}-${channel}`,
-        label: titleCase(channel),
-        value,
-      })),
-    })),
-  };
+  return planGroups;
+}
+
+function sumMetricByPlan(
+  points: Array<IndexedChartSeriesPoint<TelemetryProperties>>,
+  metricAccessor: PlaygroundMetricAccessor,
+) {
+  const sums = new Map<PlaygroundPlan, number>();
+
+  for (const point of points) {
+    const plan = point.properties.plan;
+
+    sums.set(plan, (sums.get(plan) ?? 0) + metricAccessor(point));
+  }
+
+  return sums;
+}
+
+function sumMapValues(values: ReadonlyMap<unknown, number>) {
+  return Array.from(values.values()).reduce((sum, value) => sum + value, 0);
+}
+
+function getQuantile(values: number[], quantile: number) {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((left, right) => left - right);
+  const rank = (sorted.length - 1) * quantile;
+  const lowerIndex = Math.floor(rank);
+  const upperIndex = Math.ceil(rank);
+  const lower = sorted[lowerIndex] ?? 0;
+  const upper = sorted[upperIndex] ?? lower;
+
+  return lower + (upper - lower) * (rank - lowerIndex);
+}
+
+function countAtOrAbove(values: number[], threshold: number) {
+  return values.filter((value) => value >= threshold).length;
+}
+
+function getHierarchyValue(node: PlaygroundHierarchy): number {
+  if (typeof node.value === "number") {
+    return node.value;
+  }
+
+  return (node.children ?? []).reduce((sum, child) => sum + getHierarchyValue(child), 0);
+}
+
+function renderPlaygroundSelectionDetails({
+  businessMetric,
+  chartType,
+  hierarchy,
+  hierarchyTotal,
+  selectedFunnelRow,
+  selectedHierarchyNode,
+  selectedWaterfallRow,
+}: {
+  businessMetric: ReturnType<typeof getExampleBusinessMetric>;
+  chartType: PlaygroundChartType;
+  hierarchy: PlaygroundHierarchy;
+  hierarchyTotal: number;
+  selectedFunnelRow: ChartFunnelRow | null;
+  selectedHierarchyNode: PlaygroundHierarchySelection | null;
+  selectedWaterfallRow: ChartWaterfallRow | null;
+}) {
+  if (chartType === "waterfall" && selectedWaterfallRow) {
+    return (
+      <PlaygroundDetailRow
+        label={selectedWaterfallRow.label}
+        items={[
+          ["Delta", businessMetric.formatValue(selectedWaterfallRow.value)],
+          ["Running total", businessMetric.formatValue(selectedWaterfallRow.end)],
+        ]}
+      />
+    );
+  }
+
+  if (chartType === "funnel" && selectedFunnelRow) {
+    return (
+      <PlaygroundDetailRow
+        label={selectedFunnelRow.label}
+        items={[
+          ["Count", formatCompact(selectedFunnelRow.value)],
+          ["Of first", formatPercent(selectedFunnelRow.percentOfFirst)],
+          ["Of previous", formatNullablePercent(selectedFunnelRow.percentOfPrevious)],
+          ["Drop-off", formatNullableCompact(selectedFunnelRow.dropOff)],
+        ]}
+      />
+    );
+  }
+
+  if ((chartType === "treemap" || chartType === "sunburst") && selectedHierarchyNode) {
+    const parent = findHierarchyNode(hierarchy, selectedHierarchyNode.parentId);
+    const percentOfRoot = hierarchyTotal > 0 ? selectedHierarchyNode.value / hierarchyTotal : 0;
+
+    return (
+      <PlaygroundDetailRow
+        label={selectedHierarchyNode.label}
+        items={[
+          [businessMetric.label, businessMetric.formatValue(selectedHierarchyNode.value)],
+          ["Of total", formatPercent(percentOfRoot)],
+          ["Parent", parent?.label ?? "Root"],
+        ]}
+      />
+    );
+  }
+
+  return null;
+}
+
+function PlaygroundDetailRow({
+  items,
+  label,
+}: {
+  items: Array<[label: string, value: string]>;
+  label: string;
+}) {
+  return (
+    <div
+      aria-label="Selected chart item"
+      className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-muted/25 px-3 py-2 text-sm"
+      data-testid="playground-selection-details"
+    >
+      <span className="font-medium text-foreground">{label}</span>
+      {items.map(([itemLabel, value]) => (
+        <span key={itemLabel} className="text-muted-foreground">
+          {itemLabel}: <span className="font-medium text-foreground">{value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function findHierarchyNode(
+  node: PlaygroundHierarchy,
+  id: string | null,
+): PlaygroundHierarchy | null {
+  if (id === null) {
+    return null;
+  }
+
+  if (node.id === id) {
+    return node;
+  }
+
+  for (const child of node.children ?? []) {
+    const match = findHierarchyNode(child, id);
+
+    if (match) {
+      return match;
+    }
+  }
+
+  return null;
 }
 
 type PlaygroundLabel = ReturnType<typeof createPlaygroundLabels>[number];
@@ -4390,6 +5019,18 @@ function formatHour(value: number) {
 
 function formatCompact(value: number) {
   return formatNumber.format(value);
+}
+
+function formatNullableCompact(value: number | null) {
+  return value === null ? "n/a" : formatCompact(value);
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
+function formatNullablePercent(value: number | null) {
+  return value === null ? "n/a" : formatPercent(value);
 }
 
 function titleCase(value: string) {

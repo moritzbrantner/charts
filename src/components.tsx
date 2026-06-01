@@ -214,8 +214,13 @@ export type ChartAxisTransformMenuProps = {
 export type ChartWithLegendProps = {
   children: ReactNode;
   className?: string;
+  defaultLegendDisplay?: "expanded" | "hidden" | "minimized";
   legend: ReactNode;
+  legendDisplayLabel?: string;
+  legendMode?: "floating" | "side";
+  onLegendHide?: () => void;
   legendSide?: "left" | "right";
+  legendTitle?: ReactNode;
   legendWidthClassName?: string;
 };
 
@@ -1006,10 +1011,255 @@ export function ChartSeriesLegend({
 export function ChartWithLegend({
   children,
   className,
+  defaultLegendDisplay = "expanded",
   legend,
+  legendDisplayLabel = "Legend",
+  legendMode = "side",
+  onLegendHide,
   legendSide = "right",
+  legendTitle = "Legend",
   legendWidthClassName = "lg:w-64",
 }: ChartWithLegendProps): JSX.Element {
+  const [legendDisplay, setLegendDisplay] =
+    useState<NonNullable<ChartWithLegendProps["defaultLegendDisplay"]>>(defaultLegendDisplay);
+  const [legendPosition, setLegendPosition] = useState({ x: 12, y: 12 });
+  const floatingContainerRef = useRef<HTMLDivElement | null>(null);
+  const floatingLegendRef = useRef<HTMLDivElement | null>(null);
+  const legendDragRef = useRef<{
+    offsetX: number;
+    offsetY: number;
+    pointerId: number;
+  } | null>(null);
+  const removeLegendDragListenersRef = useRef<(() => void) | null>(null);
+
+  const clampLegendPosition = useCallback((position: { x: number; y: number }) => {
+    const container = floatingContainerRef.current;
+    const legendElement = floatingLegendRef.current;
+
+    if (!container || !legendElement) {
+      return {
+        x: Math.max(0, position.x),
+        y: Math.max(0, position.y),
+      };
+    }
+
+    const containerBounds = container.getBoundingClientRect();
+    const legendBounds = legendElement.getBoundingClientRect();
+    const maxX = Math.max(0, containerBounds.width - legendBounds.width - 8);
+    const maxY = Math.max(0, containerBounds.height - legendBounds.height - 8);
+
+    return {
+      x: clamp(position.x, 8, maxX),
+      y: clamp(position.y, 8, maxY),
+    };
+  }, []);
+
+  const moveLegendToPointer = useCallback(
+    (clientX: number, clientY: number, pointerId: number) => {
+      const drag = legendDragRef.current;
+      const container = floatingContainerRef.current;
+
+      if (!drag || drag.pointerId !== pointerId || !container) {
+        return;
+      }
+
+      const containerBounds = container.getBoundingClientRect();
+
+      setLegendPosition(
+        clampLegendPosition({
+          x: clientX - containerBounds.left - drag.offsetX,
+          y: clientY - containerBounds.top - drag.offsetY,
+        }),
+      );
+    },
+    [clampLegendPosition],
+  );
+
+  const stopLegendDrag = useCallback((pointerId?: number) => {
+    const drag = legendDragRef.current;
+
+    if (!drag || (pointerId !== undefined && drag.pointerId !== pointerId)) {
+      return;
+    }
+
+    legendDragRef.current = null;
+    removeLegendDragListenersRef.current?.();
+    removeLegendDragListenersRef.current = null;
+  }, []);
+
+  const startLegendDrag = useCallback(
+    (clientX: number, clientY: number, pointerId: number) => {
+      const container = floatingContainerRef.current;
+
+      if (!container) {
+        return;
+      }
+
+      const containerBounds = container.getBoundingClientRect();
+      const currentPosition = clampLegendPosition(legendPosition);
+
+      legendDragRef.current = {
+        offsetX: clientX - containerBounds.left - currentPosition.x,
+        offsetY: clientY - containerBounds.top - currentPosition.y,
+        pointerId,
+      };
+      setLegendPosition(currentPosition);
+      removeLegendDragListenersRef.current?.();
+
+      if (pointerId >= 0) {
+        const handleWindowPointerMove = (pointerEvent: globalThis.PointerEvent) => {
+          moveLegendToPointer(pointerEvent.clientX, pointerEvent.clientY, pointerEvent.pointerId);
+          pointerEvent.preventDefault();
+        };
+        const handleWindowPointerEnd = (pointerEvent: globalThis.PointerEvent) => {
+          stopLegendDrag(pointerEvent.pointerId);
+        };
+
+        window.addEventListener("pointermove", handleWindowPointerMove);
+        window.addEventListener("pointerup", handleWindowPointerEnd);
+        window.addEventListener("pointercancel", handleWindowPointerEnd);
+        removeLegendDragListenersRef.current = () => {
+          window.removeEventListener("pointermove", handleWindowPointerMove);
+          window.removeEventListener("pointerup", handleWindowPointerEnd);
+          window.removeEventListener("pointercancel", handleWindowPointerEnd);
+        };
+      } else {
+        const handleWindowMouseMove = (mouseEvent: globalThis.MouseEvent) => {
+          moveLegendToPointer(mouseEvent.clientX, mouseEvent.clientY, pointerId);
+          mouseEvent.preventDefault();
+        };
+        const handleWindowMouseEnd = () => {
+          stopLegendDrag(pointerId);
+        };
+
+        window.addEventListener("mousemove", handleWindowMouseMove);
+        window.addEventListener("mouseup", handleWindowMouseEnd);
+        removeLegendDragListenersRef.current = () => {
+          window.removeEventListener("mousemove", handleWindowMouseMove);
+          window.removeEventListener("mouseup", handleWindowMouseEnd);
+        };
+      }
+    },
+    [clampLegendPosition, legendPosition, moveLegendToPointer, stopLegendDrag],
+  );
+
+  const handleLegendPointerDown = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || isChartLegendDragControl(event.target)) {
+        return;
+      }
+
+      startLegendDrag(event.clientX, event.clientY, event.pointerId);
+      event.currentTarget.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    },
+    [startLegendDrag],
+  );
+
+  const handleLegendMouseDown = useCallback(
+    (event: MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || legendDragRef.current || isChartLegendDragControl(event.target)) {
+        return;
+      }
+
+      startLegendDrag(event.clientX, event.clientY, -1);
+      event.preventDefault();
+    },
+    [startLegendDrag],
+  );
+
+  const handleLegendPointerMove = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      moveLegendToPointer(event.clientX, event.clientY, event.pointerId);
+      event.preventDefault();
+    },
+    [moveLegendToPointer],
+  );
+
+  const handleLegendPointerEnd = useCallback(
+    (event: PointerEvent<HTMLDivElement>) => {
+      stopLegendDrag(event.pointerId);
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    },
+    [stopLegendDrag],
+  );
+
+  useEffect(
+    () => () => {
+      removeLegendDragListenersRef.current?.();
+    },
+    [],
+  );
+
+  if (legendMode === "floating") {
+    const legendStyle = {
+      left: `${legendPosition.x}px`,
+      top: `${legendPosition.y}px`,
+    };
+
+    return (
+      <div
+        ref={floatingContainerRef}
+        className={joinClassNames("relative min-w-0", className)}
+        data-chart-legend-mode="floating"
+      >
+        <div className="min-w-0">{children}</div>
+        {legendDisplay === "hidden" ? null : (
+          <div
+            ref={floatingLegendRef}
+            className="absolute z-20 w-[min(18rem,calc(100%-1rem))] overflow-hidden border border-border/70 bg-background/95 shadow-lg backdrop-blur"
+            style={legendStyle}
+            data-chart-floating-legend=""
+          >
+            <div
+              className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b border-border/60 px-3 py-2"
+              data-chart-floating-legend-handle=""
+              onMouseDown={handleLegendMouseDown}
+              onPointerCancel={handleLegendPointerEnd}
+              onPointerDown={handleLegendPointerDown}
+              onPointerMove={handleLegendPointerMove}
+              onPointerUp={handleLegendPointerEnd}
+            >
+              <span className="min-w-0 text-sm font-medium text-foreground">{legendTitle}</span>
+              <span className="flex shrink-0 items-center gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() =>
+                    setLegendDisplay(legendDisplay === "minimized" ? "expanded" : "minimized")
+                  }
+                  aria-label={
+                    legendDisplay === "minimized"
+                      ? `Expand ${legendDisplayLabel.toLowerCase()}`
+                      : `Minimize ${legendDisplayLabel.toLowerCase()}`
+                  }
+                >
+                  {legendDisplay === "minimized" ? "Expand" : "Minimize"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2"
+                  onClick={() => {
+                    setLegendDisplay("hidden");
+                    onLegendHide?.();
+                  }}
+                  aria-label={`Hide ${legendDisplayLabel.toLowerCase()}`}
+                >
+                  Hide
+                </Button>
+              </span>
+            </div>
+            {legendDisplay === "expanded" ? <div className="p-2">{legend}</div> : null}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const chart = (
     <div
       key="chart"
@@ -4374,6 +4624,13 @@ function renderDefaultChartLabel<TPayload>(
 
 function joinClassNames(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
+}
+
+function isChartLegendDragControl(target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    Boolean(target.closest("button, input, select, textarea, [role='button']"))
+  );
 }
 
 function isFiniteNumber(value: unknown): value is number {
