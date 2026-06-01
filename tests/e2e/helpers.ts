@@ -28,10 +28,44 @@ export function expectNoBrowserErrors(errors: BrowserErrors) {
   expect([...errors.pageErrors, ...errors.consoleErrors]).toEqual([]);
 }
 
-export async function expectA11yClean(page: Page) {
-  const results = await new AxeBuilder({ page }).analyze();
+function isAxeAlreadyRunningError(error: unknown) {
+  return error instanceof Error && error.message.includes("Axe is already running");
+}
 
-  expect(results.violations).toEqual([]);
+async function waitForAxeIdle(page: Page) {
+  await page.waitForFunction(
+    () => {
+      const windowWithAxe = window as Window & { axe?: { _running?: boolean } };
+
+      return windowWithAxe.axe?._running !== true;
+    },
+    undefined,
+    { timeout: 10_000 },
+  );
+}
+
+export async function expectA11yClean(page: Page) {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await waitForAxeIdle(page);
+
+    try {
+      const results = await new AxeBuilder({ page }).analyze();
+
+      expect(results.violations).toEqual([]);
+      return;
+    } catch (error) {
+      if (!isAxeAlreadyRunningError(error)) {
+        throw error;
+      }
+
+      lastError = error;
+      await page.waitForTimeout(100 * (attempt + 1));
+    }
+  }
+
+  throw lastError;
 }
 
 export async function expectNoInvalidSvgGeometry(page: Page) {

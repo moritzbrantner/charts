@@ -30,7 +30,7 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Dependency review
-        uses: actions/dependency-review-action@v4
+        uses: actions/dependency-review-action@v5.0.0
 
   quality:
     runs-on: ubuntu-latest
@@ -40,15 +40,15 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: |
             ~/.cargo/bin/
@@ -62,7 +62,7 @@ jobs:
         run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -105,15 +105,15 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: |
             ~/.cargo/bin/
@@ -127,7 +127,7 @@ jobs:
         run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -158,15 +158,15 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: |
             ~/.cargo/bin/
@@ -180,7 +180,7 @@ jobs:
         run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -207,7 +207,7 @@ jobs:
 
       - name: Upload browser artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: browser-artifacts
           path: |
@@ -225,12 +225,12 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Cache Bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -248,7 +248,7 @@ jobs:
 
       - name: Upload page-quality artifacts
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: page-quality-artifacts
           path: .unlighthouse/
@@ -263,15 +263,15 @@ jobs:
         uses: actions/checkout@v6.0.2
 
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
+        uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@v1
 
       - name: Cache Cargo
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: |
             ~/.cargo/bin/
@@ -285,7 +285,7 @@ jobs:
         run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5.0.5
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
@@ -305,7 +305,7 @@ jobs:
         run: bun run bench:large-data | tee benchmark-results.txt
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: benchmark-results
           path: benchmark-results.txt
