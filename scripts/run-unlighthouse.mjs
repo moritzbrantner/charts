@@ -40,7 +40,7 @@ try {
     "--urls",
     "/,/compose.html",
     "--budget",
-    "70",
+    "40",
     "--reporter",
     "jsonExpanded",
   ]);

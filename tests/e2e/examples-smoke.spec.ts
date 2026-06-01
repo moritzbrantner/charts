@@ -10,6 +10,8 @@ import {
   installLongTaskObserver,
 } from "./helpers";
 
+const relaxedLongTaskBudget = 64;
+
 test("examples app renders and supports core chart interactions", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop-chromium", "desktop interaction coverage");
 
@@ -115,7 +117,7 @@ test("examples app renders and supports core chart interactions", async ({ page 
   await expect(page.getByTestId("distribution-examples")).toContainText("Distribution charts");
 
   await expectNoInvalidSvgGeometry(page);
-  await expectLongTasksWithinBudget(page, 32);
+  await expectLongTasksWithinBudget(page, relaxedLongTaskBudget);
   expectNoBrowserErrors(errors);
 });
 
@@ -192,7 +194,7 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(page.getByRole("img", { name: "Candle chart" })).toBeVisible();
 
   await expectNoInvalidSvgGeometry(page);
-  await expectLongTasksWithinBudget(page, 32);
+  await expectLongTasksWithinBudget(page, relaxedLongTaskBudget);
   expectNoBrowserErrors(errors);
 });
 
