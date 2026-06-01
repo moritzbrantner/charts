@@ -549,10 +549,12 @@ function ChartPlayground({
   const [selectedFunnelRow, setSelectedFunnelRow] = useState<ChartFunnelRow | null>(null);
   const [selectedHierarchyNode, setSelectedHierarchyNode] =
     useState<PlaygroundHierarchySelection | null>(null);
+  const [treemapFocusId, setTreemapFocusId] = useState<string | null>(null);
   const clearBusinessSelections = useCallback(() => {
     setSelectedWaterfallRow(null);
     setSelectedFunnelRow(null);
     setSelectedHierarchyNode(null);
+    setTreemapFocusId(null);
   }, []);
   const playback = useChartPlaybackDomain({
     enabled: playbackEnabled && chartCapabilities.playback,
@@ -602,6 +604,7 @@ function ChartPlayground({
     ? axesTransform.orientation
     : "vertical";
   const definition = getChartValueModeDefinition(valueMode);
+  const definitionLabel = definition.label;
   const series = useMemo(
     () =>
       index.getChartSeries({
@@ -743,9 +746,19 @@ function ChartPlayground({
     [businessMetric, currentPoints, hiddenLegendIds, selectedDataset.id],
   );
   const hierarchyTotal = getHierarchyValue(hierarchy);
+  const treemapFocusedHierarchy = useMemo(
+    () =>
+      treemapFocusId ? (findHierarchyNode(hierarchy, treemapFocusId) ?? hierarchy) : hierarchy,
+    [hierarchy, treemapFocusId],
+  );
+  const treemapCenterNode =
+    treemapFocusedHierarchy === hierarchy
+      ? getLargestHierarchyChild(hierarchy)
+      : treemapFocusedHierarchy;
   const treemapData = useMemo(
-    () => createChartTreemapLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
-    [hierarchy],
+    () =>
+      createChartTreemapLayout(treemapFocusedHierarchy, { height: 320, padding: 3, width: 640 }),
+    [treemapFocusedHierarchy],
   );
   const sunburstData = useMemo(
     () => createChartSunburstLayout(hierarchy, { outerRadius: 160 }),
@@ -757,7 +770,7 @@ function ChartPlayground({
   const labels = activeShowLabels
     ? createPlaygroundLabels(renderRows, valueMode, axisOrientation)
     : [];
-  const config = playgroundChartConfig(valueMode, definition.label);
+  const config = playgroundChartConfig(valueMode, definitionLabel);
   const groupedConfig = Object.fromEntries(
     grouped.groups.map((group, index) => [
       group.key,
@@ -769,13 +782,15 @@ function ChartPlayground({
   );
   const legendItems = createPlaygroundLegendItems({
     chartType,
-    definitionLabel: definition.label,
+    definitionLabel,
     grouped,
     valueMode,
   });
-  const activeShowLegend = showLegend && chartCapabilities.legend && legendItems.length > 0;
+  const hasLegendItems = legendItems.length > 1;
+  const activeShowLegend = showLegend && chartCapabilities.legend && hasLegendItems;
+  const activeHiddenLegendIds = hasLegendItems ? hiddenLegendIds : [];
   const visibleSeriesIds = new Set(
-    legendItems.filter((item) => !hiddenLegendIds.includes(item.id)).map((item) => item.id),
+    legendItems.filter((item) => !activeHiddenLegendIds.includes(item.id)).map((item) => item.id),
   );
   const yAxisDataKeys = getPlaygroundYAxisDataKeys({
     chartType,
@@ -932,7 +947,7 @@ function ChartPlayground({
       });
     }
 
-    if (chartCapabilities.legend && legendItems.length > 0) {
+    if (chartCapabilities.legend && hasLegendItems) {
       items.push({
         checked: showLegend,
         id: "toggle-legend",
@@ -989,7 +1004,7 @@ function ChartPlayground({
     fixedChartType,
     fullDomain,
     handleInteractiveDomainChange,
-    legendItems.length,
+    hasLegendItems,
     onValueModeChange,
     showGrid,
     showLabels,
@@ -1067,9 +1082,18 @@ function ChartPlayground({
           />
         ) : chartType === "treemap" ? (
           <ChartTreemapSvg
+            centerLabel={treemapCenterNode?.label}
             data={treemapData}
             formatValue={businessMetric.formatValue}
-            onNodeSelect={setSelectedHierarchyNode}
+            onNodeSelect={(node) => {
+              setSelectedHierarchyNode(node);
+
+              if (treemapFocusId !== null) {
+                return;
+              }
+
+              setTreemapFocusId(getTreemapPlanFocusId(node));
+            }}
           />
         ) : chartType === "sunburst" ? (
           <ChartSunburstSvg
@@ -1479,7 +1503,7 @@ function ChartPlayground({
               {chartCapabilities.labels ? (
                 <SwitchKnob label="Labels" checked={showLabels} onCheckedChange={setShowLabels} />
               ) : null}
-              {chartCapabilities.legend ? (
+              {chartCapabilities.legend && hasLegendItems ? (
                 <SwitchKnob label="Legend" checked={showLegend} onCheckedChange={setShowLegend} />
               ) : null}
               {chartCapabilities.threshold ? (
@@ -2393,6 +2417,28 @@ function getHierarchyValue(node: PlaygroundHierarchy): number {
   }
 
   return (node.children ?? []).reduce((sum, child) => sum + getHierarchyValue(child), 0);
+}
+
+function getLargestHierarchyChild(node: PlaygroundHierarchy): PlaygroundHierarchy | null {
+  return (node.children ?? []).reduce<PlaygroundHierarchy | null>(
+    (largest, child) =>
+      largest === null || getHierarchyValue(child) > getHierarchyValue(largest) ? child : largest,
+    null,
+  );
+}
+
+function getTreemapPlanFocusId(node: ChartTreemapNode<PlaygroundHierarchyPayload>): string | null {
+  if (node.payload?.kind === "plan") {
+    return node.id;
+  }
+
+  if (node.payload?.kind === "channel" && node.payload.plan) {
+    return node.payload.plan;
+  }
+
+  const [planId] = node.id.split("-");
+
+  return playgroundPlans.includes(planId as PlaygroundPlan) ? planId : null;
 }
 
 function renderPlaygroundSelectionDetails({

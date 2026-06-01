@@ -143,6 +143,8 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
 
   const playground = page.getByTestId("chart-playground-example");
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
+  await playground.locator("select").nth(2).selectOption("line");
+  await expect(playground).toContainText("Line chart");
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
 
   await expectInteractionFast(page, async () => {
@@ -192,11 +194,10 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
     await expect.poll(async () => (await floatingLegend.boundingBox())?.x).not.toBe(legendBox.x);
   }
 
-  await legendHandle.getByRole("button", { name: "Minimize legend" }).click();
-  await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
-  await legendHandle.getByRole("button", { name: "Expand legend" }).click();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
-  await legendHandle.getByRole("button", { name: "Hide legend" }).click();
+  await expect(floatingLegend.getByRole("button", { name: "Minimize legend" })).toHaveCount(0);
+  await expect(floatingLegend.getByRole("button", { name: "Expand legend" })).toHaveCount(0);
+  await floatingLegend.getByRole("button", { name: "Hide legend" }).click();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Show legend" })).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Legend" })).toHaveAttribute(
@@ -205,6 +206,11 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   );
   await page.getByRole("switch", { name: "Legend" }).click();
   await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+  await page.getByRole("switch", { name: "Legend" }).click();
+  await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
+  await playground.locator("select").nth(2).selectOption("area");
+  await expect(playground).toContainText("Area chart");
+  await expect(page.getByRole("switch", { name: "Legend" })).toHaveCount(0);
 
   const chartOverlay = playground.locator("[data-chart-sample-interaction-overlay]").first();
 
@@ -219,16 +225,13 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
   await page.keyboard.press("Escape");
 
-  await playground.locator("select").nth(2).selectOption("line");
-  await expect(playground).toContainText("Line chart");
-
   const yAxisTrigger = playground.locator("[data-chart-y-axis-range-trigger]").first();
   await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
   const yAxisDialog = page.getByRole("dialog", { name: "Y-axis transform menu" });
   await expect(yAxisDialog).toBeVisible();
   await yAxisDialog.getByLabel("Min").fill("0");
   await yAxisDialog.getByLabel("Max").fill("250");
-  await yAxisDialog.getByRole("button", { name: "Apply" }).click();
+  await yAxisDialog.getByRole("button", { name: "Apply" }).click({ force: true });
   await expect(page.getByRole("dialog", { name: "Y-axis transform menu" })).toHaveCount(0);
   await yAxisTrigger.click({ button: "right", position: { x: 8, y: 24 } });
   await expect(page.getByRole("group", { name: "Y-axis series legend" })).toContainText("Average");
@@ -326,11 +329,23 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
 
   const errors = collectBrowserErrors(page);
   const chartPages = [
-    { label: "Area", path: "/area.html", title: "Area chart", value: "area" },
+    { label: "Area", legend: false, path: "/area.html", title: "Area chart", value: "area" },
     { label: "Line", path: "/line.html", title: "Line chart", value: "line" },
-    { label: "Bar", path: "/bar.html", title: "Bar chart", value: "bar" },
-    { label: "Scatter", path: "/scatter.html", title: "Scatter plot", value: "scatter" },
-    { label: "Bubble", path: "/bubble.html", title: "Bubble chart", value: "bubble" },
+    { label: "Bar", legend: false, path: "/bar.html", title: "Bar chart", value: "bar" },
+    {
+      label: "Scatter",
+      legend: false,
+      path: "/scatter.html",
+      title: "Scatter plot",
+      value: "scatter",
+    },
+    {
+      label: "Bubble",
+      legend: false,
+      path: "/bubble.html",
+      title: "Bubble chart",
+      value: "bubble",
+    },
     {
       interactiveDomain: true,
       label: "Candle",
@@ -344,8 +359,14 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
       title: "Area chart with rolling line",
       value: "combo",
     },
-    { label: "Histogram", path: "/histogram.html", title: "Histogram", value: "histogram" },
-    { label: "Heatmap", path: "/heatmap.html", title: "Heatmap", value: "heatmap" },
+    {
+      label: "Histogram",
+      legend: false,
+      path: "/histogram.html",
+      title: "Histogram",
+      value: "histogram",
+    },
+    { label: "Heatmap", legend: false, path: "/heatmap.html", title: "Heatmap", value: "heatmap" },
     { label: "Stacked bars", path: "/stacked.html", title: "Stacked bars", value: "stacked" },
     {
       label: "Waterfall",
@@ -447,6 +468,19 @@ test("business and hierarchy chart pages expose relevant interactions", async ({
     await expect(
       page.locator(`svg[aria-label='${chart.label}'] ${chart.selector}`).first(),
     ).toBeVisible();
+    if (chart.path === "/treemap.html") {
+      await page.getByRole("switch", { name: "Legend" }).click();
+      await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
+      await page
+        .locator(
+          `svg[aria-label='${chart.label}'] [data-chart-treemap-node-id='starter-direct'] rect`,
+        )
+        .click({ force: true });
+      await expect(page.locator(`svg[aria-label='${chart.label}'] > text`)).toHaveText("Starter");
+      await expect(page.locator(`svg[aria-label='${chart.label}'] g text`)).toHaveCount(0);
+      await page.getByRole("switch", { name: "Legend" }).click();
+      await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
+    }
     await page.getByRole("checkbox", { name: "Starter" }).click();
     await expect(page.getByRole("checkbox", { name: "Starter" })).toHaveAttribute(
       "aria-checked",

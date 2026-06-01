@@ -443,7 +443,7 @@ describe("@moritzbrantner/charts", () => {
     expect(container.firstElementChild?.firstElementChild?.textContent).toBe("Legend");
   });
 
-  test("renders a draggable floating legend with minimize and hide controls", () => {
+  test("renders a draggable floating legend with hide controls", () => {
     const onLegendHide = vi.fn();
     const { container } = render(
       <ChartWithLegend
@@ -493,10 +493,9 @@ describe("@moritzbrantner/charts", () => {
     expect(legend.style.left).toBe("332px");
     expect(legend.style.top).toBe("172px");
 
-    fireEvent.click(screen.getByRole("button", { name: "Minimize legend" }));
-    expect(screen.queryByRole("group", { name: "Chart series legend" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Expand legend" }));
     expect(screen.getByRole("group", { name: "Chart series legend" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Minimize legend" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Expand legend" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Hide legend" }));
     expect(screen.queryByRole("group", { name: "Chart series legend" })).toBeNull();
@@ -672,7 +671,7 @@ describe("@moritzbrantner/charts", () => {
       ],
     };
 
-    render(
+    const { container } = render(
       <>
         <ChartScatterSvg series={index.getScatter({ sizeAccessor: { metric: "revenue" } })} />
         <ChartWaterfallSvg
@@ -697,6 +696,13 @@ describe("@moritzbrantner/charts", () => {
     expect(screen.getByRole("img", { name: "Chart funnel" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Chart treemap" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Chart sunburst" })).toBeTruthy();
+    expect(container.querySelector("svg[aria-label='Chart treemap'] > text")?.textContent).toBe(
+      "A",
+    );
+
+    expect(container.querySelector("[data-chart-sunburst-hover-label]")).toBeNull();
+    fireEvent.pointerEnter(container.querySelector("path[aria-label='A: 2']")!);
+    expect(container.querySelector("[data-chart-sunburst-hover-label]")).toBeTruthy();
   });
 
   test("opens x-axis navigation menu and changes domains", () => {

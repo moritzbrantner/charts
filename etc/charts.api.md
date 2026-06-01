@@ -722,8 +722,13 @@ type ChartAxisTransformMenuProps = {
 type ChartWithLegendProps = {
     children: ReactNode;
     className?: string;
+    defaultLegendDisplay?: "expanded" | "hidden";
     legend: ReactNode;
+    legendDisplayLabel?: string;
+    legendMode?: "floating" | "side";
+    onLegendHide?: () => void;
     legendSide?: "left" | "right";
+    legendTitle?: ReactNode;
     legendWidthClassName?: string;
 };
 type BinnedChartRenderContext<TProperties = Record<string, unknown>> = {
@@ -912,6 +917,7 @@ type ChartFunnelSvgProps = {
 };
 type ChartTreemapSvgProps<TPayload = unknown> = {
     ariaLabel?: string;
+    centerLabel?: ReactNode;
     className?: string;
     data: Array<ChartTreemapNode<TPayload>>;
     formatValue?: (value: number) => string;
@@ -1058,7 +1064,7 @@ declare function ChartMetricCard({ className, hint, label, value, }: ChartMetric
 declare function ChartMetricStrip({ className, label, value }: ChartMetricStripProps): JSX.Element;
 declare function ChartDerivedMetricCard({ className, formatValue, label, previousValue, value, }: ChartDerivedMetricCardProps): JSX.Element;
 declare function ChartSeriesLegend({ "aria-label": ariaLabel, className, hiddenIds, items, onHiddenIdsChange, orientation, showCounts, }: ChartSeriesLegendProps): JSX.Element;
-declare function ChartWithLegend({ children, className, legend, legendSide, legendWidthClassName, }: ChartWithLegendProps): JSX.Element;
+declare function ChartWithLegend({ children, className, defaultLegendDisplay, legend, legendDisplayLabel, legendMode, onLegendHide, legendSide, legendTitle, legendWidthClassName, }: ChartWithLegendProps): JSX.Element;
 declare function BinnedChart<TProperties = Record<string, unknown>>({ binCountOptions, chartClassName, children, className, config, drag, dragOptions, domain, formatDomainValue, fullDomain, index, minSpan, minimap, minimapClassName, minimapTargetBinCount, onDomainChange, query, renderDataOptions, valueMode, wheel, wheelOptions, }: BinnedChartProps<TProperties>): JSX.Element;
 declare function ChartLabelOverlay<TPayload = unknown>({ boundaryPadding, className, collisionPadding, font, labels, leaderLine, lineHeight, maxWidth, obstacles, offset, padding, pixelObstacles, renderLabel, xAxisId, yAxisId, }: ChartLabelOverlayProps<TPayload>): JSX.Element | null;
 declare function ChartAxisTransformMenu(props: ChartAxisTransformMenuProps): JSX.Element | null;
@@ -1078,7 +1084,7 @@ declare function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({ ariaLa
 declare function ChartScatterSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, formatValue, height, onPointSelect, series, width, xDomain, yDomain, }: ChartScatterSvgProps<TProperties>): JSX.Element;
 declare function ChartWaterfallSvg({ ariaLabel, className, data, formatValue, height, onDatumSelect, width, }: ChartWaterfallSvgProps): JSX.Element;
 declare function ChartFunnelSvg({ ariaLabel, className, data, formatValue, height, onDatumSelect, width, }: ChartFunnelSvgProps): JSX.Element;
-declare function ChartTreemapSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, }: ChartTreemapSvgProps<TPayload>): JSX.Element;
+declare function ChartTreemapSvg<TPayload = unknown>({ ariaLabel, centerLabel, className, data, formatValue, onNodeSelect, }: ChartTreemapSvgProps<TPayload>): JSX.Element;
 declare function ChartSunburstSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, width, }: ChartSunburstSvgProps<TPayload>): JSX.Element;
 declare function ChartValueModePreview<TProperties = Record<string, unknown>>({ active, className, definition, measured, onSelect, }: ChartValueModePreviewProps<TProperties>): JSX.Element;
 declare function useProgressiveChartDensity<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): {

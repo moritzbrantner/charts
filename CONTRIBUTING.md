@@ -33,6 +33,8 @@ Useful commands:
 
 Run `bun run format` before committing formatting-only fixes.
 
+Always run `bun run lint` when a change touches Rust files.
+
 ## Public API changes
 
 The package is still pre-`1.0`. Public APIs may change, but every intentional

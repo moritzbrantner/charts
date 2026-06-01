@@ -29,6 +29,7 @@ import {
   useState,
   type ComponentProps,
   type JSX,
+  type KeyboardEvent,
   type MouseEvent,
   type MouseEventHandler,
   type PointerEvent,
@@ -214,7 +215,7 @@ export type ChartAxisTransformMenuProps = {
 export type ChartWithLegendProps = {
   children: ReactNode;
   className?: string;
-  defaultLegendDisplay?: "expanded" | "hidden" | "minimized";
+  defaultLegendDisplay?: "expanded" | "hidden";
   legend: ReactNode;
   legendDisplayLabel?: string;
   legendMode?: "floating" | "side";
@@ -447,6 +448,7 @@ export type ChartFunnelSvgProps = {
 
 export type ChartTreemapSvgProps<TPayload = unknown> = {
   ariaLabel?: string;
+  centerLabel?: ReactNode;
   className?: string;
   data: Array<ChartTreemapNode<TPayload>>;
   formatValue?: (value: number) => string;
@@ -1144,7 +1146,7 @@ export function ChartWithLegend({
   );
 
   const handleLegendPointerDown = useCallback(
-    (event: PointerEvent<HTMLDivElement>) => {
+    (event: PointerEvent<HTMLButtonElement>) => {
       if (event.button !== 0 || isChartLegendDragControl(event.target)) {
         return;
       }
@@ -1157,7 +1159,7 @@ export function ChartWithLegend({
   );
 
   const handleLegendMouseDown = useCallback(
-    (event: MouseEvent<HTMLDivElement>) => {
+    (event: MouseEvent<HTMLButtonElement>) => {
       if (event.button !== 0 || legendDragRef.current || isChartLegendDragControl(event.target)) {
         return;
       }
@@ -1169,7 +1171,7 @@ export function ChartWithLegend({
   );
 
   const handleLegendPointerMove = useCallback(
-    (event: PointerEvent<HTMLDivElement>) => {
+    (event: PointerEvent<HTMLButtonElement>) => {
       moveLegendToPointer(event.clientX, event.clientY, event.pointerId);
       event.preventDefault();
     },
@@ -1177,11 +1179,31 @@ export function ChartWithLegend({
   );
 
   const handleLegendPointerEnd = useCallback(
-    (event: PointerEvent<HTMLDivElement>) => {
+    (event: PointerEvent<HTMLButtonElement>) => {
       stopLegendDrag(event.pointerId);
       event.currentTarget.releasePointerCapture?.(event.pointerId);
     },
     [stopLegendDrag],
+  );
+  const handleLegendHandleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>) => {
+      const step = event.shiftKey ? 24 : 8;
+
+      if (event.key === "ArrowUp") {
+        setLegendPosition((position) => clampLegendPosition({ ...position, y: position.y - step }));
+        event.preventDefault();
+      } else if (event.key === "ArrowDown") {
+        setLegendPosition((position) => clampLegendPosition({ ...position, y: position.y + step }));
+        event.preventDefault();
+      } else if (event.key === "ArrowLeft") {
+        setLegendPosition((position) => clampLegendPosition({ ...position, x: position.x - step }));
+        event.preventDefault();
+      } else if (event.key === "ArrowRight") {
+        setLegendPosition((position) => clampLegendPosition({ ...position, x: position.x + step }));
+        event.preventDefault();
+      }
+    },
+    [clampLegendPosition],
   );
 
   useEffect(
@@ -1211,33 +1233,22 @@ export function ChartWithLegend({
             style={legendStyle}
             data-chart-floating-legend=""
           >
-            <div
-              className="flex cursor-move touch-none select-none items-center justify-between gap-2 border-b border-border/60 px-3 py-2"
-              data-chart-floating-legend-handle=""
-              onMouseDown={handleLegendMouseDown}
-              onPointerCancel={handleLegendPointerEnd}
-              onPointerDown={handleLegendPointerDown}
-              onPointerMove={handleLegendPointerMove}
-              onPointerUp={handleLegendPointerEnd}
-            >
-              <span className="min-w-0 text-sm font-medium text-foreground">{legendTitle}</span>
+            <div className="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+              <button
+                type="button"
+                className="min-w-0 flex-1 cursor-move touch-none select-none truncate border-0 bg-transparent p-0 text-left text-sm font-medium text-foreground"
+                aria-label={`Move ${legendDisplayLabel.toLowerCase()}`}
+                data-chart-floating-legend-handle=""
+                onKeyDown={handleLegendHandleKeyDown}
+                onMouseDown={handleLegendMouseDown}
+                onPointerCancel={handleLegendPointerEnd}
+                onPointerDown={handleLegendPointerDown}
+                onPointerMove={handleLegendPointerMove}
+                onPointerUp={handleLegendPointerEnd}
+              >
+                {legendTitle}
+              </button>
               <span className="flex shrink-0 items-center gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2"
-                  onClick={() =>
-                    setLegendDisplay(legendDisplay === "minimized" ? "expanded" : "minimized")
-                  }
-                  aria-label={
-                    legendDisplay === "minimized"
-                      ? `Expand ${legendDisplayLabel.toLowerCase()}`
-                      : `Minimize ${legendDisplayLabel.toLowerCase()}`
-                  }
-                >
-                  {legendDisplay === "minimized" ? "Expand" : "Minimize"}
-                </Button>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1253,7 +1264,7 @@ export function ChartWithLegend({
                 </Button>
               </span>
             </div>
-            {legendDisplay === "expanded" ? <div className="p-2">{legend}</div> : null}
+            <div className="p-2">{legend}</div>
           </div>
         )}
       </div>
@@ -3408,6 +3419,7 @@ export function ChartFunnelSvg({
 
 export function ChartTreemapSvg<TPayload = unknown>({
   ariaLabel = "Chart treemap",
+  centerLabel,
   className,
   data,
   formatValue = formatCompactNumber,
@@ -3419,6 +3431,12 @@ export function ChartTreemapSvg<TPayload = unknown>({
 
   const width = Math.max(...data.map((node) => node.x + node.width));
   const height = Math.max(...data.map((node) => node.y + node.height));
+  const topLevelNodes = data.filter((node) => node.depth === 1);
+  const defaultCenterNode = topLevelNodes.reduce<ChartTreemapNode<TPayload> | null>(
+    (largest, node) => (largest === null || node.value > largest.value ? node : largest),
+    null,
+  );
+  const resolvedCenterLabel = centerLabel ?? defaultCenterNode?.label ?? null;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
@@ -3432,10 +3450,15 @@ export function ChartTreemapSvg<TPayload = unknown>({
           .filter((node) => node.depth > 0)
           .map((node, index) => {
             const label = `${node.label}: ${formatValue(node.value)}`;
-            const showLabel = node.width >= 52 && node.height >= 24;
 
             return (
-              <g key={node.id} aria-label={label} onClick={() => onNodeSelect?.(node)}>
+              <g
+                key={node.id}
+                aria-label={label}
+                className={onNodeSelect ? "cursor-pointer" : undefined}
+                data-chart-treemap-node-id={node.id}
+                data-chart-treemap-node-parent-id={node.parentId ?? undefined}
+              >
                 <title>{label}</title>
                 <rect
                   x={node.x}
@@ -3446,15 +3469,29 @@ export function ChartTreemapSvg<TPayload = unknown>({
                   fillOpacity={0.22 + Math.min(0.5, node.depth * 0.1)}
                   stroke="var(--background)"
                   strokeWidth="1"
+                  onClick={() => onNodeSelect?.(node)}
                 />
-                {showLabel ? (
-                  <text x={node.x + 5} y={node.y + 15} fill="var(--foreground)" fontSize="11">
-                    {node.label}
-                  </text>
-                ) : null}
               </g>
             );
           })}
+        {resolvedCenterLabel ? (
+          <text
+            x={width / 2}
+            y={height / 2}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill="var(--foreground)"
+            fontSize="18"
+            fontWeight="700"
+            paintOrder="stroke"
+            stroke="var(--background)"
+            strokeLinejoin="round"
+            strokeWidth="6"
+            pointerEvents="none"
+          >
+            {resolvedCenterLabel}
+          </text>
+        ) : null}
       </svg>
     </div>
   );
@@ -3469,12 +3506,22 @@ export function ChartSunburstSvg<TPayload = unknown>({
   onNodeSelect,
   width = 340,
 }: ChartSunburstSvgProps<TPayload>): JSX.Element {
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+
   if (data.length === 0) {
     return <ChartEmptyState className={className}>No sunburst data.</ChartEmptyState>;
   }
 
   const cx = width / 2;
   const cy = height / 2;
+  const hoveredNode = hoveredNodeId ? data.find((node) => node.id === hoveredNodeId) : null;
+  const hoveredLabel = hoveredNode
+    ? `${hoveredNode.label}: ${formatValue(hoveredNode.value)}`
+    : null;
+  const hoveredLabelPoint =
+    hoveredNode && hoveredLabel
+      ? getSunburstLabelPoint(hoveredNode, hoveredLabel, width, height)
+      : null;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
@@ -3506,11 +3553,38 @@ export function ChartSunburstSvg<TPayload = unknown>({
                 strokeWidth="1"
                 aria-label={label}
                 onClick={() => onNodeSelect?.(node)}
+                onFocus={() => setHoveredNodeId(node.id)}
+                onBlur={() => setHoveredNodeId(null)}
+                onPointerEnter={() => setHoveredNodeId(node.id)}
+                onPointerLeave={() => setHoveredNodeId(null)}
               >
                 <title>{label}</title>
               </path>
             );
           })}
+        {hoveredLabel && hoveredLabelPoint ? (
+          <g data-chart-sunburst-hover-label="" pointerEvents="none">
+            <rect
+              x={hoveredLabelPoint.x}
+              y={hoveredLabelPoint.y - 17}
+              width={hoveredLabelPoint.width}
+              height="24"
+              rx="4"
+              fill="var(--background)"
+              fillOpacity="0.94"
+              stroke="var(--border)"
+            />
+            <text
+              x={hoveredLabelPoint.x + 8}
+              y={hoveredLabelPoint.y - 1}
+              fill="var(--foreground)"
+              fontSize="11"
+              fontWeight="600"
+            >
+              {hoveredLabel}
+            </text>
+          </g>
+        ) : null}
       </svg>
     </div>
   );
@@ -4522,6 +4596,27 @@ function polarToCartesian(cx: number, cy: number, radius: number, angle: number)
   };
 }
 
+function getSunburstLabelPoint(
+  node: ChartSunburstNode,
+  label: string,
+  width: number,
+  height: number,
+) {
+  const center = polarToCartesian(
+    width / 2,
+    height / 2,
+    (node.innerRadius + node.outerRadius) / 2,
+    (node.startAngle + node.endAngle) / 2,
+  );
+  const labelWidth = Math.min(width - 16, Math.max(64, label.length * 6.5 + 16));
+
+  return {
+    width: labelWidth,
+    x: clamp(center.x - labelWidth / 2, 8, width - labelWidth - 8),
+    y: clamp(center.y, 24, height - 8),
+  };
+}
+
 function describeArc(
   cx: number,
   cy: number,
@@ -4627,6 +4722,10 @@ function joinClassNames(...values: Array<string | false | null | undefined>) {
 }
 
 function isChartLegendDragControl(target: EventTarget | null) {
+  if (target instanceof Element && target.closest("[data-chart-floating-legend-handle]")) {
+    return false;
+  }
+
   return (
     target instanceof Element &&
     Boolean(target.closest("button, input, select, textarea, [role='button']"))
