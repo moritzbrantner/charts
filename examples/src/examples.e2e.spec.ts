@@ -8,7 +8,7 @@ import {
   expectNoInvalidSvgGeometry,
   expectNoVisibleTextOverflow,
   installLongTaskObserver,
-} from "./helpers";
+} from "./testing/playwright";
 
 const relaxedLongTaskBudget = 64;
 

@@ -10,7 +10,6 @@ const rootDir = fileURLToPath(new URL("./", import.meta.url));
 const tsFiles = [
   "src/**/*.{ts,tsx}",
   "examples/**/*.{ts,tsx}",
-  "tests/**/*.{ts,tsx}",
   ".storybook/**/*.{ts,tsx}",
   "*.{ts,tsx}",
 ];

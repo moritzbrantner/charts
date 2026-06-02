@@ -8,8 +8,9 @@ export default defineConfig({
     },
   },
   outputDir: "test-results/visual",
-  snapshotPathTemplate: "tests/visual/__screenshots__/{testFilePath}/{projectName}/{arg}{ext}",
-  testDir: "./tests/visual",
+  snapshotPathTemplate: "src/components/__screenshots__/{testFileName}/{projectName}/{arg}{ext}",
+  testDir: ".",
+  testMatch: "src/**/*.visual.spec.ts",
   use: {
     baseURL: "http://127.0.0.1:6007",
     trace: "on-first-retry",

@@ -35,6 +35,20 @@ Run `bun run format` before committing formatting-only fixes.
 
 Always run `bun run lint` when a change touches Rust files.
 
+## Code organization
+
+Keep tests and stories colocated with the source they exercise. Unit tests should
+sit next to the module or component under test as `*.test.ts` or `*.test.tsx`;
+Playwright coverage should live under the app or package source area it verifies
+as `*.e2e.spec.ts`, `*.visual.spec.ts`, or `*.storybook.spec.ts`; stories should
+live next to the component family they document as `*.stories.tsx`.
+
+Avoid catch-all files that grow into thousands of lines. When a file starts
+mixing unrelated responsibilities, split it into smaller files or bundles based
+on purpose, such as chart family, interaction type, data model, renderer, or
+shared test support. Prefer cohesive groups with clear ownership over one large
+file that is difficult to scan or maintain.
+
 ## Public API changes
 
 The package is still pre-`1.0`. Public APIs may change, but every intentional

@@ -4,7 +4,8 @@ export default defineConfig({
   expect: {
     timeout: 10_000,
   },
-  testDir: "./tests/e2e",
+  testDir: ".",
+  testMatch: "examples/src/**/*.e2e.spec.ts",
   use: {
     baseURL: "http://127.0.0.1:41735",
     trace: "on-first-retry",

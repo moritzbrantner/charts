@@ -5,7 +5,8 @@ export default defineConfig({
     timeout: 10_000,
   },
   outputDir: "test-results/storybook",
-  testDir: "./tests/storybook",
+  testDir: ".",
+  testMatch: "src/**/*.storybook.spec.ts",
   use: {
     baseURL: "http://127.0.0.1:6007",
     trace: "on-first-retry",

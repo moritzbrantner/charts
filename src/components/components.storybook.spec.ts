@@ -5,7 +5,7 @@ import {
   expectA11yClean,
   expectNoBrowserErrors,
   expectNoInvalidSvgGeometry,
-} from "../e2e/helpers";
+} from "../../examples/src/testing/playwright";
 
 const storyIds = [
   "charts-quality--dense-trend",

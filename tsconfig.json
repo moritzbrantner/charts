@@ -19,7 +19,6 @@
     "examples/**/*.ts",
     "examples/**/*.tsx",
     ".storybook/**/*.ts",
-    "tests/**/*.ts",
     "*.config.ts"
   ]
 }
