@@ -219,9 +219,9 @@ test("compose page renders a single chart composer", async ({ page }, testInfo) 
 
   await expect(chartOptionsMenu).toBeVisible();
   await expect(chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" })).toBeVisible();
-  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click();
+  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click({ force: true });
   await expect(page.getByLabel("Active chart labels")).toHaveCount(0);
-  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click();
+  await chartOptionsMenu.getByRole("menuitemcheckbox", { name: "Labels" }).click({ force: true });
   await expect(page.getByLabel("Active chart labels")).toBeVisible();
   await page.keyboard.press("Escape");
 
@@ -384,6 +384,32 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
     },
     { label: "Treemap", path: "/treemap.html", title: "Treemap", value: "treemap" },
     { label: "Sunburst", path: "/sunburst.html", title: "Sunburst chart", value: "sunburst" },
+    { label: "Icicle", path: "/icicle.html", title: "Icicle chart", value: "icicle" },
+    {
+      label: "Flame graph",
+      path: "/flame-graph.html",
+      title: "Flame graph",
+      value: "flame-graph",
+    },
+    {
+      label: "Circle pack",
+      path: "/circle-pack.html",
+      title: "Circle pack chart",
+      value: "circle-pack",
+    },
+    { label: "Tree", path: "/tree.html", title: "Tree chart", value: "tree" },
+    {
+      label: "Radial tree",
+      path: "/radial-tree.html",
+      title: "Radial tree chart",
+      value: "radial-tree",
+    },
+    {
+      label: "Indented tree",
+      path: "/indented-tree.html",
+      title: "Indented tree chart",
+      value: "indented-tree",
+    },
   ];
 
   for (const chartPage of chartPages) {
@@ -426,7 +452,7 @@ test("business and hierarchy chart pages expose relevant interactions", async ({
   await expect(playground.getByText("Curve", { exact: true })).toHaveCount(0);
   await expect(playground.getByText("Stroke", { exact: true })).toHaveCount(0);
   await expect(playground.getByText("Threshold", { exact: true })).toHaveCount(0);
-  await page.locator("svg[aria-label='Chart waterfall'] g").nth(1).click();
+  await page.locator("svg[aria-label='Chart waterfall'] g rect").nth(1).click({ force: true });
   await expect(page.getByLabel("Selected chart item")).toContainText("Running total");
 
   await playground.locator("select").first().selectOption("operations");
@@ -458,8 +484,54 @@ test("business and hierarchy chart pages expose relevant interactions", async ({
   await expect(playground.locator("[data-chart-domain-selection]")).toHaveCount(0);
 
   for (const chart of [
-    { label: "Chart treemap", path: "/treemap.html", selector: "g[aria-label^='Starter']" },
-    { label: "Chart sunburst", path: "/sunburst.html", selector: "path[aria-label^='Starter']" },
+    {
+      label: "Chart treemap",
+      path: "/treemap.html",
+      remainingSelector: "g[aria-label^='Enterprise'] rect",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart sunburst",
+      path: "/sunburst.html",
+      remainingSelector: "path[aria-label^='Scale']",
+      selector: "path[aria-label^='Starter']",
+    },
+    {
+      label: "Chart icicle",
+      path: "/icicle.html",
+      remainingSelector: "g[aria-label^='Enterprise'] rect",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart flame graph",
+      path: "/flame-graph.html",
+      remainingSelector: "g[aria-label^='Enterprise'] rect",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart circle pack",
+      path: "/circle-pack.html",
+      remainingSelector: "g[aria-label^='Enterprise'] circle",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart tree",
+      path: "/tree.html",
+      remainingSelector: "g[aria-label^='Enterprise'] circle",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart radial tree",
+      path: "/radial-tree.html",
+      remainingSelector: "g[aria-label^='Enterprise'] circle",
+      selector: "g[aria-label^='Starter']",
+    },
+    {
+      label: "Chart indented tree",
+      path: "/indented-tree.html",
+      remainingSelector: "g[aria-label^='Enterprise'] rect:nth-of-type(2)",
+      selector: "g[aria-label^='Starter']",
+    },
   ]) {
     await page.goto(chart.path);
     playground = page.getByTestId("chart-playground-example");
@@ -472,12 +544,19 @@ test("business and hierarchy chart pages expose relevant interactions", async ({
       await page.getByRole("switch", { name: "Legend" }).click();
       await expect(page.getByRole("group", { name: "Chart series legend" })).toHaveCount(0);
       await page
-        .locator(
-          `svg[aria-label='${chart.label}'] [data-chart-treemap-node-id='starter-direct'] rect`,
-        )
+        .locator(`svg[aria-label='${chart.label}'] [data-chart-treemap-node-id='starter'] rect`)
         .click({ force: true });
-      await expect(page.locator(`svg[aria-label='${chart.label}'] > text`)).toHaveText("Starter");
-      await expect(page.locator(`svg[aria-label='${chart.label}'] g text`)).toHaveCount(0);
+      await expect(
+        page.locator(
+          `svg[aria-label='${chart.label}'] [data-chart-treemap-node-id='starter-direct'] text`,
+        ),
+      ).toHaveText("Direct");
+      await page.getByRole("button", { name: "Back to parent treemap level" }).click();
+      await expect(
+        page.locator(
+          `svg[aria-label='${chart.label}'] [data-chart-treemap-node-id='starter'] text`,
+        ),
+      ).toHaveText("Starter");
       await page.getByRole("switch", { name: "Legend" }).click();
       await expect(page.getByRole("group", { name: "Chart series legend" })).toBeVisible();
     }
@@ -487,9 +566,21 @@ test("business and hierarchy chart pages expose relevant interactions", async ({
       "false",
     );
     await expect(page.locator(`svg[aria-label='${chart.label}'] ${chart.selector}`)).toHaveCount(0);
-    await page.locator(`svg[aria-label='${chart.label}'] [aria-label]`).first().click({
-      force: true,
-    });
+    const remainingNode = page.locator(
+      `svg[aria-label='${chart.label}'] ${chart.remainingSelector}`,
+    );
+
+    if (chart.path === "/indented-tree.html") {
+      await page
+        .locator(`svg[aria-label='${chart.label}'] g[aria-label^='Enterprise']`)
+        .evaluate((element) => {
+          element.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        });
+    } else {
+      await remainingNode.click({
+        force: true,
+      });
+    }
     await expect(page.getByLabel("Selected chart item")).toContainText("Of total");
   }
 

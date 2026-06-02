@@ -46,11 +46,15 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartCirclePackSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartFlameGraphSvg,
   ChartFunnelSvg,
   ChartHeatmapGrid,
   ChartHotBinRow,
+  ChartIcicleSvg,
+  ChartIndentedTreeSvg,
   ChartLabelOverlay,
   type ChartLegendItem,
   ChartMetricCard,
@@ -63,6 +67,8 @@ import {
   ChartSeriesLegend,
   ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartRadialTreeSvg,
+  ChartTreeSvg,
   ChartTreemapSvg,
   ChartWaterfallSvg,
   ChartXAxisNavigationMenu,
@@ -74,10 +80,16 @@ import {
   createDeltaChartSeries,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCirclePackLayout,
   createChartDensityIndex,
   createChartDensityViewportSummary,
+  createChartFlameGraphLayout,
   createChartFunnelData,
+  createChartIcicleLayout,
+  createChartIndentedTreeLayout,
   createChartTreemapLayout,
+  createChartRadialTreeLayout,
+  createChartTreeLayout,
   createChartWaterfallData,
   createGroupedChartRenderData,
   createChartRenderData,
@@ -102,16 +114,22 @@ import {
   type ChartAxesTransform,
   type ChartAxisRange,
   type ChartAxisScale,
+  type ChartCirclePackNode,
   type ChartDensitySample,
+  type ChartFlameGraphNode,
   type ChartFunnelRow,
   type ChartGapBehavior,
   type ChartAxisOrientation,
   type ChartHierarchyNode,
+  type ChartIcicleNode,
+  type ChartIndentedTreeNode,
   type IndexedChartSeriesPoint,
   type ChartRange,
   type ChartSampleInteraction,
   type ChartSeriesPoint,
   type ChartSunburstNode,
+  type ChartRadialTreeNode,
+  type ChartTreeNode,
   type ChartTreemapNode,
   type ChartValueMode,
   type ChartWaterfallRow,
@@ -131,21 +149,37 @@ type PlaygroundChartType =
   | "bar"
   | "bubble"
   | "candle"
+  | "circle-pack"
   | "combo"
+  | "flame-graph"
   | "funnel"
   | "heatmap"
   | "histogram"
+  | "icicle"
+  | "indented-tree"
   | "line"
+  | "radial-tree"
   | "scatter"
   | "stacked"
   | "sunburst"
+  | "tree"
   | "treemap"
   | "waterfall";
 type ChartPageId = `chart-${PlaygroundChartType}`;
 type ExamplePage = "compose" | "examples" | ChartPageId;
 type PlaygroundCurve = "linear" | "monotone" | "natural" | "step";
 type PlaygroundAnimationMode = ChartAnimationMode;
-type PlaygroundBusinessChartType = "funnel" | "sunburst" | "treemap" | "waterfall";
+type PlaygroundBusinessChartType =
+  | "circle-pack"
+  | "flame-graph"
+  | "funnel"
+  | "icicle"
+  | "indented-tree"
+  | "radial-tree"
+  | "sunburst"
+  | "tree"
+  | "treemap"
+  | "waterfall";
 type PlaygroundPlan = TelemetryProperties["plan"];
 type PlaygroundChannel = TelemetryProperties["channel"];
 type PlaygroundHierarchyPayload = {
@@ -155,7 +189,13 @@ type PlaygroundHierarchyPayload = {
 };
 type PlaygroundHierarchy = ChartHierarchyNode<PlaygroundHierarchyPayload>;
 type PlaygroundHierarchySelection =
+  | ChartCirclePackNode<PlaygroundHierarchyPayload>
+  | ChartFlameGraphNode<PlaygroundHierarchyPayload>
+  | ChartIcicleNode<PlaygroundHierarchyPayload>
+  | ChartIndentedTreeNode<PlaygroundHierarchyPayload>
+  | ChartRadialTreeNode<PlaygroundHierarchyPayload>
   | ChartSunburstNode<PlaygroundHierarchyPayload>
+  | ChartTreeNode<PlaygroundHierarchyPayload>
   | ChartTreemapNode<PlaygroundHierarchyPayload>;
 type PlaygroundMetricAccessor = (point: IndexedChartSeriesPoint<TelemetryProperties>) => number;
 
@@ -746,22 +786,36 @@ function ChartPlayground({
     [businessMetric, currentPoints, hiddenLegendIds, selectedDataset.id],
   );
   const hierarchyTotal = getHierarchyValue(hierarchy);
-  const treemapFocusedHierarchy = useMemo(
-    () =>
-      treemapFocusId ? (findHierarchyNode(hierarchy, treemapFocusId) ?? hierarchy) : hierarchy,
-    [hierarchy, treemapFocusId],
-  );
-  const treemapCenterNode =
-    treemapFocusedHierarchy === hierarchy
-      ? getLargestHierarchyChild(hierarchy)
-      : treemapFocusedHierarchy;
   const treemapData = useMemo(
-    () =>
-      createChartTreemapLayout(treemapFocusedHierarchy, { height: 320, padding: 3, width: 640 }),
-    [treemapFocusedHierarchy],
+    () => createChartTreemapLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
+    [hierarchy],
   );
   const sunburstData = useMemo(
     () => createChartSunburstLayout(hierarchy, { outerRadius: 160 }),
+    [hierarchy],
+  );
+  const icicleData = useMemo(
+    () => createChartIcicleLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
+    [hierarchy],
+  );
+  const flameGraphData = useMemo(
+    () => createChartFlameGraphLayout(hierarchy, { height: 320, padding: 3, width: 640 }),
+    [hierarchy],
+  );
+  const circlePackData = useMemo(
+    () => createChartCirclePackLayout(hierarchy, { height: 340, padding: 4, width: 340 }),
+    [hierarchy],
+  );
+  const treeData = useMemo(
+    () => createChartTreeLayout(hierarchy, { height: 320, width: 640 }),
+    [hierarchy],
+  );
+  const radialTreeData = useMemo(
+    () => createChartRadialTreeLayout(hierarchy, { height: 340, outerRadius: 150, width: 340 }),
+    [hierarchy],
+  );
+  const indentedTreeData = useMemo(
+    () => createChartIndentedTreeLayout(hierarchy, { width: 640 }),
     [hierarchy],
   );
   const activeShowLabels = showLabels && chartCapabilities.labels;
@@ -1082,22 +1136,52 @@ function ChartPlayground({
           />
         ) : chartType === "treemap" ? (
           <ChartTreemapSvg
-            centerLabel={treemapCenterNode?.label}
             data={treemapData}
+            focusedNodeId={treemapFocusId}
             formatValue={businessMetric.formatValue}
-            onNodeSelect={(node) => {
-              setSelectedHierarchyNode(node);
-
-              if (treemapFocusId !== null) {
-                return;
-              }
-
-              setTreemapFocusId(getTreemapPlanFocusId(node));
-            }}
+            onFocusedNodeChange={setTreemapFocusId}
+            onNodeSelect={setSelectedHierarchyNode}
+            zoomable
           />
         ) : chartType === "sunburst" ? (
           <ChartSunburstSvg
             data={sunburstData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "icicle" ? (
+          <ChartIcicleSvg
+            data={icicleData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "flame-graph" ? (
+          <ChartFlameGraphSvg
+            data={flameGraphData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "circle-pack" ? (
+          <ChartCirclePackSvg
+            data={circlePackData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "tree" ? (
+          <ChartTreeSvg
+            data={treeData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "radial-tree" ? (
+          <ChartRadialTreeSvg
+            data={radialTreeData}
+            formatValue={businessMetric.formatValue}
+            onNodeSelect={setSelectedHierarchyNode}
+          />
+        ) : chartType === "indented-tree" ? (
+          <ChartIndentedTreeSvg
+            data={indentedTreeData}
             formatValue={businessMetric.formatValue}
             onNodeSelect={setSelectedHierarchyNode}
           />
@@ -2047,10 +2131,16 @@ function getPlaygroundYAxisDataKeys({
       return visibleSeriesIds.has(valueMode) ? [valueMode] : [];
     case "bubble":
     case "candle":
+    case "circle-pack":
+    case "flame-graph":
     case "funnel":
     case "heatmap":
+    case "icicle":
+    case "indented-tree":
+    case "radial-tree":
     case "scatter":
     case "sunburst":
+    case "tree":
     case "treemap":
     case "waterfall":
       return [];
@@ -2150,7 +2240,13 @@ function createPlaygroundLegendItems({
         { color: "var(--chart-1)", id: "positive", label: "Positive" },
         { color: "var(--destructive)", id: "negative", label: "Negative" },
       ];
+    case "circle-pack":
+    case "flame-graph":
+    case "icicle":
+    case "indented-tree":
+    case "radial-tree":
     case "treemap":
+    case "tree":
     case "sunburst":
       return playgroundPlans.map((plan, index) => ({
         color: `var(--chart-${(index % 5) + 1})`,
@@ -2189,7 +2285,13 @@ function isBusinessHierarchyChart(
 ): chartType is PlaygroundBusinessChartType {
   return (
     chartType === "funnel" ||
+    chartType === "circle-pack" ||
+    chartType === "flame-graph" ||
+    chartType === "icicle" ||
+    chartType === "indented-tree" ||
+    chartType === "radial-tree" ||
     chartType === "sunburst" ||
+    chartType === "tree" ||
     chartType === "treemap" ||
     chartType === "waterfall"
   );
@@ -2197,7 +2299,15 @@ function isBusinessHierarchyChart(
 
 function getPlaygroundChartCapabilities(chartType: PlaygroundChartType) {
   const isBusinessHierarchy = isBusinessHierarchyChart(chartType);
-  const isHierarchy = chartType === "treemap" || chartType === "sunburst";
+  const isHierarchy =
+    chartType === "circle-pack" ||
+    chartType === "flame-graph" ||
+    chartType === "icicle" ||
+    chartType === "indented-tree" ||
+    chartType === "radial-tree" ||
+    chartType === "sunburst" ||
+    chartType === "tree" ||
+    chartType === "treemap";
 
   return {
     advancedControls: !isBusinessHierarchy,
@@ -2419,28 +2529,6 @@ function getHierarchyValue(node: PlaygroundHierarchy): number {
   return (node.children ?? []).reduce((sum, child) => sum + getHierarchyValue(child), 0);
 }
 
-function getLargestHierarchyChild(node: PlaygroundHierarchy): PlaygroundHierarchy | null {
-  return (node.children ?? []).reduce<PlaygroundHierarchy | null>(
-    (largest, child) =>
-      largest === null || getHierarchyValue(child) > getHierarchyValue(largest) ? child : largest,
-    null,
-  );
-}
-
-function getTreemapPlanFocusId(node: ChartTreemapNode<PlaygroundHierarchyPayload>): string | null {
-  if (node.payload?.kind === "plan") {
-    return node.id;
-  }
-
-  if (node.payload?.kind === "channel" && node.payload.plan) {
-    return node.payload.plan;
-  }
-
-  const [planId] = node.id.split("-");
-
-  return playgroundPlans.includes(planId as PlaygroundPlan) ? planId : null;
-}
-
 function renderPlaygroundSelectionDetails({
   businessMetric,
   chartType,
@@ -2484,7 +2572,17 @@ function renderPlaygroundSelectionDetails({
     );
   }
 
-  if ((chartType === "treemap" || chartType === "sunburst") && selectedHierarchyNode) {
+  if (
+    (chartType === "circle-pack" ||
+      chartType === "flame-graph" ||
+      chartType === "icicle" ||
+      chartType === "indented-tree" ||
+      chartType === "radial-tree" ||
+      chartType === "sunburst" ||
+      chartType === "tree" ||
+      chartType === "treemap") &&
+    selectedHierarchyNode
+  ) {
     const parent = findHierarchyNode(hierarchy, selectedHierarchyNode.parentId);
     const percentOfRoot = hierarchyTotal > 0 ? selectedHierarchyNode.value / hierarchyTotal : 0;
 
@@ -2980,6 +3078,12 @@ const playgroundChartOptions: Array<{ id: PlaygroundChartType; label: string }> 
   { id: "funnel", label: "Funnel" },
   { id: "treemap", label: "Treemap" },
   { id: "sunburst", label: "Sunburst" },
+  { id: "icicle", label: "Icicle" },
+  { id: "flame-graph", label: "Flame graph" },
+  { id: "circle-pack", label: "Circle pack" },
+  { id: "tree", label: "Tree" },
+  { id: "radial-tree", label: "Radial tree" },
+  { id: "indented-tree", label: "Indented tree" },
 ];
 
 const chartPageLinks: Array<{
@@ -2997,14 +3101,20 @@ const playgroundChartTitles: Record<PlaygroundChartType, string> = {
   bar: "Bar chart",
   bubble: "Bubble chart",
   candle: "Candle chart",
+  "circle-pack": "Circle pack chart",
   combo: "Area chart with rolling line",
+  "flame-graph": "Flame graph",
   funnel: "Funnel chart",
   heatmap: "Heatmap",
   histogram: "Histogram",
+  icicle: "Icicle chart",
+  "indented-tree": "Indented tree chart",
   line: "Line chart",
+  "radial-tree": "Radial tree chart",
   scatter: "Scatter plot",
   stacked: "Stacked bars",
   sunburst: "Sunburst chart",
+  tree: "Tree chart",
   treemap: "Treemap",
   waterfall: "Waterfall chart",
 };

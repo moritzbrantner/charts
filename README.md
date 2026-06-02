@@ -100,7 +100,11 @@ const rows = createChartRenderData(series.samples, {
 - `createGroupedChartRenderData(grouped, options)`
 - `createChartBandRenderData(samples, options)` / `createChartBoxPlotData(samples, options)`
 - `createChartWaterfallData(data, options)` / `createChartFunnelData(data)`
-- `createChartTreemapLayout(root, options)` / `createChartSunburstLayout(root, options)`
+- `createChartTreemapLayout(root, options)` / `createChartSunburstLayout(root, options)` /
+  `createChartIcicleLayout(root, options)` / `createChartCirclePackLayout(root, options)` /
+  `createChartTreeLayout(root, options)` / `createChartFlameGraphLayout(root, options)` /
+  `createChartRadialTreeLayout(root, options)` /
+  `createChartIndentedTreeLayout(root, options)`
 - `CHART_VALUE_MODE_DEFINITIONS`, `getChartValueModeDefinition(mode)`,
   `getChartValueModeDefinitions(modes)`
 - `useProgressiveChartDensity(points, options)` / `useChartBinCount(options)`
@@ -108,7 +112,9 @@ const rows = createChartRenderData(series.samples, {
   `ChartValueModeSelector`
 - `ChartBackendStatus`, `ChartSampleSparkline`, `ChartHotBinRow`, `ChartValueModePreview`
 - `ChartScatterSvg`, `ChartWaterfallSvg`, `ChartFunnelSvg`, `ChartTreemapSvg`,
-  `ChartSunburstSvg`, `ChartXAxisNavigationMenu`
+  `ChartSunburstSvg`, `ChartIcicleSvg`, `ChartCirclePackSvg`, `ChartTreeSvg`,
+  `ChartFlameGraphSvg`, `ChartRadialTreeSvg`, `ChartIndentedTreeSvg`,
+  `ChartXAxisNavigationMenu`
 - `layoutChartLabels`, `doChartLabelRectsIntersect`, `ChartLabelOverlay`
 
 ## Composable binned chart
@@ -511,6 +517,12 @@ const funnelRows = createChartFunnelData([
 ]);
 const treemapNodes = createChartTreemapLayout(hierarchy, { width: 640, height: 320 });
 const sunburstNodes = createChartSunburstLayout(hierarchy, { outerRadius: 160 });
+const icicleNodes = createChartIcicleLayout(hierarchy, { width: 640, height: 320 });
+const circlePackNodes = createChartCirclePackLayout(hierarchy, { width: 340, height: 340 });
+const treeNodes = createChartTreeLayout(hierarchy, { width: 640, height: 320 });
+const flameGraphNodes = createChartFlameGraphLayout(hierarchy, { width: 640, height: 320 });
+const radialTreeNodes = createChartRadialTreeLayout(hierarchy, { width: 340, height: 340 });
+const indentedTreeNodes = createChartIndentedTreeLayout(hierarchy, { width: 640 });
 ```
 
 ## Gap behavior

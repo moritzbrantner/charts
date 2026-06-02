@@ -6,10 +6,16 @@ import {
   createChartDensityViewportSummary,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCirclePackLayout,
+  createChartFlameGraphLayout,
   createChartFunnelData,
+  createChartIcicleLayout,
+  createChartIndentedTreeLayout,
   createGroupedChartRenderData,
   createChartRenderData,
+  createChartRadialTreeLayout,
   createChartSunburstLayout,
+  createChartTreeLayout,
   createChartTreemapLayout,
   createChartWaterfallData,
   createProgressiveChartDensityIndex,
@@ -135,7 +141,7 @@ describe("@moritzbrantner/charts", () => {
     ]);
   });
 
-  test("creates finite treemap and sunburst layouts inside bounds", () => {
+  test("creates finite hierarchy layouts inside bounds", () => {
     const hierarchy = {
       label: "Root",
       children: [
@@ -145,6 +151,16 @@ describe("@moritzbrantner/charts", () => {
     };
     const treemap = createChartTreemapLayout(hierarchy, { height: 100, padding: 2, width: 200 });
     const sunburst = createChartSunburstLayout(hierarchy, { outerRadius: 80 });
+    const icicle = createChartIcicleLayout(hierarchy, { height: 100, padding: 2, width: 200 });
+    const flameGraph = createChartFlameGraphLayout(hierarchy, {
+      height: 100,
+      padding: 2,
+      width: 200,
+    });
+    const circlePack = createChartCirclePackLayout(hierarchy, { height: 160, width: 160 });
+    const tree = createChartTreeLayout(hierarchy, { height: 100, width: 200 });
+    const radialTree = createChartRadialTreeLayout(hierarchy, { height: 160, width: 160 });
+    const indentedTree = createChartIndentedTreeLayout(hierarchy, { width: 200 });
 
     expect(treemap).toHaveLength(3);
     for (const node of treemap) {
@@ -161,6 +177,59 @@ describe("@moritzbrantner/charts", () => {
         Number.isFinite(node.startAngle + node.endAngle + node.innerRadius + node.outerRadius),
       ).toBe(true);
       expect(node.outerRadius).toBeLessThanOrEqual(80);
+    }
+
+    expect(icicle).toHaveLength(3);
+    for (const node of icicle) {
+      expect(Number.isFinite(node.x + node.y + node.width + node.height)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(200);
+      expect(node.y + node.height).toBeLessThanOrEqual(100);
+    }
+
+    expect(flameGraph).toHaveLength(3);
+    for (const node of flameGraph) {
+      expect(Number.isFinite(node.x + node.y + node.width + node.height)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(200);
+      expect(node.y + node.height).toBeLessThanOrEqual(100);
+    }
+
+    expect(circlePack).toHaveLength(3);
+    for (const node of circlePack) {
+      expect(Number.isFinite(node.x + node.y + node.radius)).toBe(true);
+      expect(node.x - node.radius).toBeGreaterThanOrEqual(0);
+      expect(node.y - node.radius).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.radius).toBeLessThanOrEqual(160);
+      expect(node.y + node.radius).toBeLessThanOrEqual(160);
+    }
+
+    expect(tree).toHaveLength(3);
+    for (const node of tree) {
+      expect(Number.isFinite(node.x + node.y)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x).toBeLessThanOrEqual(200);
+      expect(node.y).toBeLessThanOrEqual(100);
+    }
+
+    expect(radialTree).toHaveLength(3);
+    for (const node of radialTree) {
+      expect(Number.isFinite(node.angle + node.radius + node.x + node.y)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x).toBeLessThanOrEqual(160);
+      expect(node.y).toBeLessThanOrEqual(160);
+    }
+
+    expect(indentedTree).toHaveLength(3);
+    for (const node of indentedTree) {
+      expect(Number.isFinite(node.x + node.y + node.width + node.height)).toBe(true);
+      expect(node.x).toBeGreaterThanOrEqual(0);
+      expect(node.y).toBeGreaterThanOrEqual(0);
+      expect(node.x + node.width).toBeLessThanOrEqual(200);
     }
   });
 

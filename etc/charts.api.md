@@ -426,6 +426,82 @@ type ChartSunburstNode<TPayload = unknown> = {
     startAngle: number;
     value: number;
 };
+type ChartIcicleNode<TPayload = unknown> = {
+    color?: string;
+    depth: number;
+    height: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    value: number;
+    width: number;
+    x: number;
+    y: number;
+};
+type ChartFlameGraphNode<TPayload = unknown> = {
+    color?: string;
+    depth: number;
+    height: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    value: number;
+    width: number;
+    x: number;
+    y: number;
+};
+type ChartCirclePackNode<TPayload = unknown> = {
+    color?: string;
+    depth: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    radius: number;
+    value: number;
+    x: number;
+    y: number;
+};
+type ChartTreeNode<TPayload = unknown> = {
+    color?: string;
+    depth: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    value: number;
+    x: number;
+    y: number;
+};
+type ChartRadialTreeNode<TPayload = unknown> = {
+    angle: number;
+    color?: string;
+    depth: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    radius: number;
+    value: number;
+    x: number;
+    y: number;
+};
+type ChartIndentedTreeNode<TPayload = unknown> = {
+    color?: string;
+    depth: number;
+    height: number;
+    id: string;
+    label: string;
+    parentId: string | null;
+    payload?: TPayload;
+    rowIndex: number;
+    value: number;
+    width: number;
+    x: number;
+    y: number;
+};
 type ChartPointGroupAccessor<TProperties = Record<string, unknown>> = {
     metric: string;
 } | {
@@ -550,6 +626,51 @@ declare function createChartSunburstLayout<TPayload = unknown>(root: ChartHierar
     outerRadius: number;
     paddingAngle?: number;
 }): Array<ChartSunburstNode<TPayload>>;
+declare function createChartIcicleLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
+    height: number;
+    padding?: number;
+    width: number;
+    x?: number;
+    y?: number;
+}): Array<ChartIcicleNode<TPayload>>;
+declare function createChartFlameGraphLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
+    height: number;
+    padding?: number;
+    width: number;
+    x?: number;
+    y?: number;
+}): Array<ChartFlameGraphNode<TPayload>>;
+declare function createChartCirclePackLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options?: {
+    height?: number;
+    padding?: number;
+    radius?: number;
+    width?: number;
+    x?: number;
+    y?: number;
+}): Array<ChartCirclePackNode<TPayload>>;
+declare function createChartTreeLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
+    height: number;
+    width: number;
+    x?: number;
+    y?: number;
+}): Array<ChartTreeNode<TPayload>>;
+declare function createChartRadialTreeLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options?: {
+    height?: number;
+    innerRadius?: number;
+    outerRadius?: number;
+    startAngle?: number;
+    width?: number;
+    x?: number;
+    y?: number;
+}): Array<ChartRadialTreeNode<TPayload>>;
+declare function createChartIndentedTreeLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
+    indent?: number;
+    padding?: number;
+    rowHeight?: number;
+    width: number;
+    x?: number;
+    y?: number;
+}): Array<ChartIndentedTreeNode<TPayload>>;
 
 type ChartLabelPlacement = "top" | "top-right" | "right" | "bottom-right" | "bottom" | "bottom-left" | "left" | "top-left";
 type ChartLabelRect = {
@@ -870,6 +991,17 @@ type ChartAnomalyMarkerListProps<TProperties = Record<string, unknown>> = {
     formatValue?: (value: number) => ReactNode;
     onSelect?: (anomaly: ChartAnomalyAnnotation<TProperties>) => void;
 };
+type ChartSvgAxisOptions = {
+    formatValue?: (value: number) => string;
+    label?: string;
+    tickCount?: number;
+    visible?: boolean;
+};
+type ChartSvgLegendItem = {
+    color?: string;
+    label: ReactNode;
+    value?: ReactNode;
+};
 type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
     ariaLabel?: string;
     cells: Array<ChartHeatmapCell<TProperties>>;
@@ -877,24 +1009,34 @@ type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
     formatValue?: (cell: ChartHeatmapCell<TProperties>) => string;
     formatX?: (value: number) => string;
     formatY?: (value: number) => string;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
     onCellSelect?: (cell: ChartHeatmapCell<TProperties>) => void;
+    xAxis?: ChartSvgAxisOptions | false;
+    yAxis?: ChartSvgAxisOptions | false;
 };
 type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
     ariaLabel?: string;
     className?: string;
     data: Array<ChartBoxPlotDatum<TProperties>>;
     formatValue?: (value: number | null) => string;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
     onDatumSelect?: (datum: ChartBoxPlotDatum<TProperties>) => void;
+    showValueLabels?: boolean;
+    xAxis?: ChartSvgAxisOptions | false;
+    yAxis?: ChartSvgAxisOptions | false;
 };
 type ChartScatterSvgProps<TProperties = Record<string, unknown>> = {
     ariaLabel?: string;
     className?: string;
     formatValue?: (value: number) => string;
     height?: number;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
     onPointSelect?: (point: ChartScatterSeries<TProperties>["points"][number]) => void;
     series: ChartScatterSeries<TProperties>;
     width?: number;
+    xAxis?: ChartSvgAxisOptions | false;
     xDomain?: [number, number];
+    yAxis?: ChartSvgAxisOptions | false;
     yDomain?: [number, number];
 };
 type ChartWaterfallSvgProps = {
@@ -903,8 +1045,12 @@ type ChartWaterfallSvgProps = {
     data: ChartWaterfallRow[];
     formatValue?: (value: number) => string;
     height?: number;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
     onDatumSelect?: (datum: ChartWaterfallRow) => void;
+    showValueLabels?: boolean;
     width?: number;
+    xAxis?: ChartSvgAxisOptions | false;
+    yAxis?: ChartSvgAxisOptions | false;
 };
 type ChartFunnelSvgProps = {
     ariaLabel?: string;
@@ -912,7 +1058,9 @@ type ChartFunnelSvgProps = {
     data: ChartFunnelRow[];
     formatValue?: (value: number) => string;
     height?: number;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
     onDatumSelect?: (datum: ChartFunnelRow) => void;
+    showValueLabels?: boolean;
     width?: number;
 };
 type ChartTreemapSvgProps<TPayload = unknown> = {
@@ -920,8 +1068,13 @@ type ChartTreemapSvgProps<TPayload = unknown> = {
     centerLabel?: ReactNode;
     className?: string;
     data: Array<ChartTreemapNode<TPayload>>;
+    defaultFocusedNodeId?: string | null;
+    focusedNodeId?: string | null;
     formatValue?: (value: number) => string;
+    onFocusedNodeChange?: (nodeId: string | null, node: ChartTreemapNode<TPayload> | null) => void;
     onNodeSelect?: (node: ChartTreemapNode<TPayload>) => void;
+    showNodeLabels?: boolean;
+    zoomable?: boolean;
 };
 type ChartSunburstSvgProps<TPayload = unknown> = {
     ariaLabel?: string;
@@ -930,6 +1083,60 @@ type ChartSunburstSvgProps<TPayload = unknown> = {
     formatValue?: (value: number) => string;
     height?: number;
     onNodeSelect?: (node: ChartSunburstNode<TPayload>) => void;
+    width?: number;
+};
+type ChartIcicleSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartIcicleNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    onNodeSelect?: (node: ChartIcicleNode<TPayload>) => void;
+    showNodeLabels?: boolean;
+};
+type ChartFlameGraphSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartFlameGraphNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    onNodeSelect?: (node: ChartFlameGraphNode<TPayload>) => void;
+    showNodeLabels?: boolean;
+};
+type ChartCirclePackSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartCirclePackNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    height?: number;
+    onNodeSelect?: (node: ChartCirclePackNode<TPayload>) => void;
+    showNodeLabels?: boolean;
+    width?: number;
+};
+type ChartRadialTreeSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartRadialTreeNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    height?: number;
+    onNodeSelect?: (node: ChartRadialTreeNode<TPayload>) => void;
+    showNodeLabels?: boolean;
+    width?: number;
+};
+type ChartIndentedTreeSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartIndentedTreeNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    onNodeSelect?: (node: ChartIndentedTreeNode<TPayload>) => void;
+    showValueBars?: boolean;
+};
+type ChartTreeSvgProps<TPayload = unknown> = {
+    ariaLabel?: string;
+    className?: string;
+    data: Array<ChartTreeNode<TPayload>>;
+    formatValue?: (value: number) => string;
+    height?: number;
+    onNodeSelect?: (node: ChartTreeNode<TPayload>) => void;
+    showNodeLabels?: boolean;
     width?: number;
 };
 type ChartXAxisNavigationMenuProps = {
@@ -1079,13 +1286,19 @@ declare function ChartDomainMinimap<TProperties = Record<string, unknown>>({ ari
 declare function ChartHotBinRow<TProperties = Record<string, unknown>>({ className, formatMetric, formatX, sample, }: ChartHotBinRowProps<TProperties>): JSX.Element;
 declare function ChartThresholdMarker<TProperties = Record<string, unknown>>({ annotations, className, formatLabel, }: ChartThresholdMarkerProps<TProperties>): JSX.Element;
 declare function ChartAnomalyMarkerList<TProperties = Record<string, unknown>>({ anomalies, className, formatValue, onSelect, }: ChartAnomalyMarkerListProps<TProperties>): JSX.Element;
-declare function ChartHeatmapGrid<TProperties = Record<string, unknown>>({ ariaLabel, cells, className, formatValue, formatX, formatY, onCellSelect, }: ChartHeatmapGridProps<TProperties>): JSX.Element;
-declare function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatValue, onDatumSelect, }: ChartBoxPlotSvgProps<TProperties>): JSX.Element;
-declare function ChartScatterSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, formatValue, height, onPointSelect, series, width, xDomain, yDomain, }: ChartScatterSvgProps<TProperties>): JSX.Element;
-declare function ChartWaterfallSvg({ ariaLabel, className, data, formatValue, height, onDatumSelect, width, }: ChartWaterfallSvgProps): JSX.Element;
-declare function ChartFunnelSvg({ ariaLabel, className, data, formatValue, height, onDatumSelect, width, }: ChartFunnelSvgProps): JSX.Element;
-declare function ChartTreemapSvg<TPayload = unknown>({ ariaLabel, centerLabel, className, data, formatValue, onNodeSelect, }: ChartTreemapSvgProps<TPayload>): JSX.Element;
+declare function ChartHeatmapGrid<TProperties = Record<string, unknown>>({ ariaLabel, cells, className, formatValue, formatX, formatY, legend, onCellSelect, xAxis, yAxis, }: ChartHeatmapGridProps<TProperties>): JSX.Element;
+declare function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatValue, legend, onDatumSelect, showValueLabels, xAxis, yAxis, }: ChartBoxPlotSvgProps<TProperties>): JSX.Element;
+declare function ChartScatterSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, formatValue, height, legend, onPointSelect, series, width, xAxis, xDomain, yAxis, yDomain, }: ChartScatterSvgProps<TProperties>): JSX.Element;
+declare function ChartWaterfallSvg({ ariaLabel, className, data, formatValue, height, legend, onDatumSelect, showValueLabels, width, xAxis, yAxis, }: ChartWaterfallSvgProps): JSX.Element;
+declare function ChartFunnelSvg({ ariaLabel, className, data, formatValue, height, legend, onDatumSelect, showValueLabels, width, }: ChartFunnelSvgProps): JSX.Element;
+declare function ChartTreemapSvg<TPayload = unknown>({ ariaLabel, centerLabel, className, data, defaultFocusedNodeId, focusedNodeId, formatValue, onFocusedNodeChange, onNodeSelect, showNodeLabels, zoomable, }: ChartTreemapSvgProps<TPayload>): JSX.Element;
 declare function ChartSunburstSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, width, }: ChartSunburstSvgProps<TPayload>): JSX.Element;
+declare function ChartIcicleSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, showNodeLabels, }: ChartIcicleSvgProps<TPayload>): JSX.Element;
+declare function ChartFlameGraphSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, showNodeLabels, }: ChartFlameGraphSvgProps<TPayload>): JSX.Element;
+declare function ChartCirclePackSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, showNodeLabels, width, }: ChartCirclePackSvgProps<TPayload>): JSX.Element;
+declare function ChartRadialTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, showNodeLabels, width, }: ChartRadialTreeSvgProps<TPayload>): JSX.Element;
+declare function ChartIndentedTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, showValueBars, }: ChartIndentedTreeSvgProps<TPayload>): JSX.Element;
+declare function ChartTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, showNodeLabels, width, }: ChartTreeSvgProps<TPayload>): JSX.Element;
 declare function ChartValueModePreview<TProperties = Record<string, unknown>>({ active, className, definition, measured, onSelect, }: ChartValueModePreviewProps<TProperties>): JSX.Element;
 declare function useProgressiveChartDensity<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): {
     index: ProgressiveChartDensityIndex<TProperties>;
@@ -1109,5 +1322,5 @@ declare function getNearestChartSample<TProperties>(samples: readonly ChartDensi
     isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
 }): ChartDensitySample<TProperties> | null;
 
-export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnimationMode, type ChartAnimationOptions, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, type ChartAxesTransform, type ChartAxisOrientation, type ChartAxisRange, type ChartAxisScale, type ChartAxisTransform, ChartAxisTransformMenu, type ChartAxisTransformMenuProps, type ChartAxisTransformStatus, type ChartBackendCapabilities, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBackendPolicy, type ChartDensityBackendPolicyInput, type ChartDensityBin, type ChartDensityCacheOptions, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, type ChartDomainDragPreview, type ChartDomainDragSelection, type ChartDomainDragUpdateMode, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartFunnelDatum, type ChartFunnelRow, ChartFunnelSvg, type ChartFunnelSvgProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHierarchyNode, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, type ChartLegendItem, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPlaybackState, type ChartPointGroupAccessor, type ChartPointQuery, type ChartPointSampling, type ChartPointSeries, type ChartPointValueAccessor, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, type ChartScatterPoint, type ChartScatterQuery, type ChartScatterSeries, ChartScatterSvg, type ChartScatterSvgProps, ChartSeriesLegend, type ChartSeriesLegendProps, type ChartSeriesPoint, type ChartSunburstNode, ChartSunburstSvg, type ChartSunburstSvgProps, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartTreemapNode, ChartTreemapSvg, type ChartTreemapSvgProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, type ChartWaterfallDatum, type ChartWaterfallRow, ChartWaterfallSvg, type ChartWaterfallSvgProps, ChartWithLegend, type ChartWithLegendProps, ChartXAxisNavigationMenu, type ChartXAxisNavigationMenuProps, ChartYAxisRangeMenu, type ChartYAxisRangeMenuProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartDragDomainOptions, type UseChartDragDomainResult, type UseChartSeriesVisibilityOptions, type UseChartSeriesVisibilityResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartFunnelData, createChartRenderData, createChartSeriesIndex, createChartSunburstLayout, createChartTreemapLayout, createChartWaterfallData, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartAxisScaleDefinitions, getChartDataYBounds, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, getRechartsAnimationProps, layoutChartLabels, measureChartSeries, resolveChartAxisTransformStatus, resolveChartDensityBackendPolicy, useChartAnimatedDomain, useChartBinCount, useChartDragDomain, useChartPlaybackDomain, useChartSeriesVisibility, useChartWheelDomain, useProgressiveChartDensity };
+export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnimationMode, type ChartAnimationOptions, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, type ChartAxesTransform, type ChartAxisOrientation, type ChartAxisRange, type ChartAxisScale, type ChartAxisTransform, ChartAxisTransformMenu, type ChartAxisTransformMenuProps, type ChartAxisTransformStatus, type ChartBackendCapabilities, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartCirclePackNode, ChartCirclePackSvg, type ChartCirclePackSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBackendPolicy, type ChartDensityBackendPolicyInput, type ChartDensityBin, type ChartDensityCacheOptions, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, type ChartDomainDragPreview, type ChartDomainDragSelection, type ChartDomainDragUpdateMode, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartFlameGraphNode, ChartFlameGraphSvg, type ChartFlameGraphSvgProps, type ChartFunnelDatum, type ChartFunnelRow, ChartFunnelSvg, type ChartFunnelSvgProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHierarchyNode, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartIcicleNode, ChartIcicleSvg, type ChartIcicleSvgProps, type ChartIndentedTreeNode, ChartIndentedTreeSvg, type ChartIndentedTreeSvgProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, type ChartLegendItem, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPlaybackState, type ChartPointGroupAccessor, type ChartPointQuery, type ChartPointSampling, type ChartPointSeries, type ChartPointValueAccessor, type ChartRadialTreeNode, ChartRadialTreeSvg, type ChartRadialTreeSvgProps, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, type ChartScatterPoint, type ChartScatterQuery, type ChartScatterSeries, ChartScatterSvg, type ChartScatterSvgProps, ChartSeriesLegend, type ChartSeriesLegendProps, type ChartSeriesPoint, type ChartSunburstNode, ChartSunburstSvg, type ChartSunburstSvgProps, type ChartSvgAxisOptions, type ChartSvgLegendItem, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartTreeNode, ChartTreeSvg, type ChartTreeSvgProps, type ChartTreemapNode, ChartTreemapSvg, type ChartTreemapSvgProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, type ChartWaterfallDatum, type ChartWaterfallRow, ChartWaterfallSvg, type ChartWaterfallSvgProps, ChartWithLegend, type ChartWithLegendProps, ChartXAxisNavigationMenu, type ChartXAxisNavigationMenuProps, ChartYAxisRangeMenu, type ChartYAxisRangeMenuProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartDragDomainOptions, type UseChartDragDomainResult, type UseChartSeriesVisibilityOptions, type UseChartSeriesVisibilityResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartCirclePackLayout, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartFlameGraphLayout, createChartFunnelData, createChartIcicleLayout, createChartIndentedTreeLayout, createChartRadialTreeLayout, createChartRenderData, createChartSeriesIndex, createChartSunburstLayout, createChartTreeLayout, createChartTreemapLayout, createChartWaterfallData, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartAxisScaleDefinitions, getChartDataYBounds, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, getRechartsAnimationProps, layoutChartLabels, measureChartSeries, resolveChartAxisTransformStatus, resolveChartDensityBackendPolicy, useChartAnimatedDomain, useChartBinCount, useChartDragDomain, useChartPlaybackDomain, useChartSeriesVisibility, useChartWheelDomain, useProgressiveChartDensity };
 ```

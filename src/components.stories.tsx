@@ -18,8 +18,12 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartCirclePackSvg,
+  ChartFlameGraphSvg,
   ChartFunnelSvg,
   ChartHeatmapGrid,
+  ChartIcicleSvg,
+  ChartIndentedTreeSvg,
   ChartLabelOverlay,
   ChartPanel,
   ChartRangeSelector,
@@ -28,16 +32,24 @@ import {
   ChartSeriesLegend,
   ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartRadialTreeSvg,
+  ChartTreeSvg,
   ChartTreemapSvg,
   ChartWaterfallSvg,
   ChartXAxisNavigationMenu,
   ChartValueModeSelector,
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
+  createChartCirclePackLayout,
   createChartDensityIndex,
+  createChartFlameGraphLayout,
   createChartFunnelData,
+  createChartIcicleLayout,
+  createChartIndentedTreeLayout,
   createChartRenderData,
+  createChartRadialTreeLayout,
   createChartSunburstLayout,
+  createChartTreeLayout,
   createChartTreemapLayout,
   createChartWaterfallData,
   createGroupedChartRenderData,
@@ -143,7 +155,7 @@ export const WaterfallFunnel: Story = {
 };
 
 export const HierarchyCharts: Story = {
-  name: "Hierarchy/TreemapSunburst",
+  name: "Hierarchy/TreeLayouts",
   render: () => <HierarchyChartsStory />,
 };
 
@@ -546,10 +558,35 @@ function HierarchyChartsStory() {
         <ChartPanel title="Treemap" description="Rectangular hierarchy layout.">
           <ChartTreemapSvg
             data={createChartTreemapLayout(hierarchy, { height: 320, width: 640 })}
+            zoomable
           />
         </ChartPanel>
         <ChartPanel title="Sunburst" description="Radial hierarchy layout.">
           <ChartSunburstSvg data={createChartSunburstLayout(hierarchy, { outerRadius: 150 })} />
+        </ChartPanel>
+        <ChartPanel title="Icicle" description="Layered partition layout.">
+          <ChartIcicleSvg data={createChartIcicleLayout(hierarchy, { height: 320, width: 640 })} />
+        </ChartPanel>
+        <ChartPanel title="Flame graph" description="Inverted hierarchy partition layout.">
+          <ChartFlameGraphSvg
+            data={createChartFlameGraphLayout(hierarchy, { height: 320, width: 640 })}
+          />
+        </ChartPanel>
+        <ChartPanel title="Circle pack" description="Nested circle hierarchy layout.">
+          <ChartCirclePackSvg
+            data={createChartCirclePackLayout(hierarchy, { height: 340, width: 340 })}
+          />
+        </ChartPanel>
+        <ChartPanel title="Tree" description="Node-link hierarchy layout.">
+          <ChartTreeSvg data={createChartTreeLayout(hierarchy, { height: 320, width: 640 })} />
+        </ChartPanel>
+        <ChartPanel title="Radial tree" description="Circular node-link hierarchy layout.">
+          <ChartRadialTreeSvg
+            data={createChartRadialTreeLayout(hierarchy, { height: 340, width: 340 })}
+          />
+        </ChartPanel>
+        <ChartPanel title="Indented tree" description="Tree rows with value bars.">
+          <ChartIndentedTreeSvg data={createChartIndentedTreeLayout(hierarchy, { width: 640 })} />
         </ChartPanel>
       </div>
     </StoryFrame>

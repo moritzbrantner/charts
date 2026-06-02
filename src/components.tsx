@@ -21,6 +21,7 @@ import {
   ToggleGroupItem,
 } from "@moritzbrantner/ui";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useId,
@@ -60,11 +61,17 @@ import {
   type ChartDensitySample,
   type ChartDensitySeries,
   type ChartBoxPlotDatum,
+  type ChartFlameGraphNode,
   type ChartFunnelRow,
   type ChartHeatmapCell,
+  type ChartIcicleNode,
+  type ChartIndentedTreeNode,
+  type ChartCirclePackNode,
+  type ChartRadialTreeNode,
   type ChartScatterSeries,
   type ChartSeriesPoint,
   type ChartSunburstNode,
+  type ChartTreeNode,
   type ChartTreemapNode,
   type ChartWaterfallRow,
   type ChartRenderData,
@@ -396,6 +403,19 @@ export type ChartAnomalyMarkerListProps<TProperties = Record<string, unknown>> =
   onSelect?: (anomaly: ChartAnomalyAnnotation<TProperties>) => void;
 };
 
+export type ChartSvgAxisOptions = {
+  formatValue?: (value: number) => string;
+  label?: string;
+  tickCount?: number;
+  visible?: boolean;
+};
+
+export type ChartSvgLegendItem = {
+  color?: string;
+  label: ReactNode;
+  value?: ReactNode;
+};
+
 export type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
   ariaLabel?: string;
   cells: Array<ChartHeatmapCell<TProperties>>;
@@ -403,7 +423,10 @@ export type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
   formatValue?: (cell: ChartHeatmapCell<TProperties>) => string;
   formatX?: (value: number) => string;
   formatY?: (value: number) => string;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
   onCellSelect?: (cell: ChartHeatmapCell<TProperties>) => void;
+  xAxis?: ChartSvgAxisOptions | false;
+  yAxis?: ChartSvgAxisOptions | false;
 };
 
 export type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
@@ -411,7 +434,11 @@ export type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
   className?: string;
   data: Array<ChartBoxPlotDatum<TProperties>>;
   formatValue?: (value: number | null) => string;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
   onDatumSelect?: (datum: ChartBoxPlotDatum<TProperties>) => void;
+  showValueLabels?: boolean;
+  xAxis?: ChartSvgAxisOptions | false;
+  yAxis?: ChartSvgAxisOptions | false;
 };
 
 export type ChartScatterSvgProps<TProperties = Record<string, unknown>> = {
@@ -419,10 +446,13 @@ export type ChartScatterSvgProps<TProperties = Record<string, unknown>> = {
   className?: string;
   formatValue?: (value: number) => string;
   height?: number;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
   onPointSelect?: (point: ChartScatterSeries<TProperties>["points"][number]) => void;
   series: ChartScatterSeries<TProperties>;
   width?: number;
+  xAxis?: ChartSvgAxisOptions | false;
   xDomain?: [number, number];
+  yAxis?: ChartSvgAxisOptions | false;
   yDomain?: [number, number];
 };
 
@@ -432,8 +462,12 @@ export type ChartWaterfallSvgProps = {
   data: ChartWaterfallRow[];
   formatValue?: (value: number) => string;
   height?: number;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
   onDatumSelect?: (datum: ChartWaterfallRow) => void;
+  showValueLabels?: boolean;
   width?: number;
+  xAxis?: ChartSvgAxisOptions | false;
+  yAxis?: ChartSvgAxisOptions | false;
 };
 
 export type ChartFunnelSvgProps = {
@@ -442,7 +476,9 @@ export type ChartFunnelSvgProps = {
   data: ChartFunnelRow[];
   formatValue?: (value: number) => string;
   height?: number;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
   onDatumSelect?: (datum: ChartFunnelRow) => void;
+  showValueLabels?: boolean;
   width?: number;
 };
 
@@ -451,8 +487,13 @@ export type ChartTreemapSvgProps<TPayload = unknown> = {
   centerLabel?: ReactNode;
   className?: string;
   data: Array<ChartTreemapNode<TPayload>>;
+  defaultFocusedNodeId?: string | null;
+  focusedNodeId?: string | null;
   formatValue?: (value: number) => string;
+  onFocusedNodeChange?: (nodeId: string | null, node: ChartTreemapNode<TPayload> | null) => void;
   onNodeSelect?: (node: ChartTreemapNode<TPayload>) => void;
+  showNodeLabels?: boolean;
+  zoomable?: boolean;
 };
 
 export type ChartSunburstSvgProps<TPayload = unknown> = {
@@ -462,6 +503,66 @@ export type ChartSunburstSvgProps<TPayload = unknown> = {
   formatValue?: (value: number) => string;
   height?: number;
   onNodeSelect?: (node: ChartSunburstNode<TPayload>) => void;
+  width?: number;
+};
+
+export type ChartIcicleSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartIcicleNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  onNodeSelect?: (node: ChartIcicleNode<TPayload>) => void;
+  showNodeLabels?: boolean;
+};
+
+export type ChartFlameGraphSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartFlameGraphNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  onNodeSelect?: (node: ChartFlameGraphNode<TPayload>) => void;
+  showNodeLabels?: boolean;
+};
+
+export type ChartCirclePackSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartCirclePackNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  height?: number;
+  onNodeSelect?: (node: ChartCirclePackNode<TPayload>) => void;
+  showNodeLabels?: boolean;
+  width?: number;
+};
+
+export type ChartRadialTreeSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartRadialTreeNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  height?: number;
+  onNodeSelect?: (node: ChartRadialTreeNode<TPayload>) => void;
+  showNodeLabels?: boolean;
+  width?: number;
+};
+
+export type ChartIndentedTreeSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartIndentedTreeNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  onNodeSelect?: (node: ChartIndentedTreeNode<TPayload>) => void;
+  showValueBars?: boolean;
+};
+
+export type ChartTreeSvgProps<TPayload = unknown> = {
+  ariaLabel?: string;
+  className?: string;
+  data: Array<ChartTreeNode<TPayload>>;
+  formatValue?: (value: number) => string;
+  height?: number;
+  onNodeSelect?: (node: ChartTreeNode<TPayload>) => void;
+  showNodeLabels?: boolean;
   width?: number;
 };
 
@@ -1958,11 +2059,6 @@ function ChartAxisTransformMenuContent({
             role="dialog"
             style={getChartAxisMenuStyle(menuPosition)}
             tabIndex={-1}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget)) {
-                setMenuPosition(null);
-              }
-            }}
           >
             <form
               className="grid gap-3"
@@ -3030,7 +3126,10 @@ export function ChartHeatmapGrid<TProperties = Record<string, unknown>>({
   formatValue = (cell) => `${formatCompactNumber(cell.pointCount)} points`,
   formatX = formatCompactNumber,
   formatY = formatCompactNumber,
+  legend,
   onCellSelect,
+  xAxis,
+  yAxis,
 }: ChartHeatmapGridProps<TProperties>): JSX.Element {
   if (cells.length === 0) {
     return (
@@ -3047,21 +3146,121 @@ export function ChartHeatmapGrid<TProperties = Record<string, unknown>>({
 
   const xBinCount = Math.max(...cells.map((cell) => cell.xIndex)) + 1;
   const yBinCount = Math.max(...cells.map((cell) => cell.yIndex)) + 1;
-  const cellWidth = 100 / xBinCount;
-  const cellHeight = 100 / yBinCount;
+  const resolvedXAxis = resolveChartSvgAxis(xAxis, formatX);
+  const resolvedYAxis = resolveChartSvgAxis(yAxis, formatY);
+  const viewWidth = 160;
+  const viewHeight = 100;
+  const plot = {
+    bottom: resolvedXAxis.visible ? 14 : 2,
+    left: resolvedYAxis.visible ? 16 : 2,
+    right: 4,
+    top: 3,
+  };
+  const plotWidth = viewWidth - plot.left - plot.right;
+  const plotHeight = viewHeight - plot.top - plot.bottom;
+  const cellWidth = plotWidth / xBinCount;
+  const cellHeight = plotHeight / yBinCount;
+  const xDomain = [
+    Math.min(...cells.map((cell) => cell.x0)),
+    Math.max(...cells.map((cell) => cell.x1)),
+  ] as [number, number];
+  const yDomain = [
+    Math.min(...cells.map((cell) => cell.y0)),
+    Math.max(...cells.map((cell) => cell.y1)),
+  ] as [number, number];
+  const densityLegend =
+    legend === undefined
+      ? [
+          { color: "color-mix(in srgb, var(--primary) 16%, transparent)", label: "Low density" },
+          { color: "color-mix(in srgb, var(--primary) 90%, transparent)", label: "High density" },
+        ]
+      : legend;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
       <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
+        viewBox={`0 0 ${viewWidth} ${viewHeight}`}
         role="img"
         aria-label={ariaLabel}
         className="h-72 w-full"
       >
+        {resolvedXAxis.visible
+          ? createChartSvgTicks(xDomain, resolvedXAxis.tickCount).map((tick) => {
+              const x = plot.left + getDomainRatio(tick, xDomain) * plotWidth;
+
+              return (
+                <Fragment key={`x-${tick}`}>
+                  <line
+                    x1={x}
+                    x2={x}
+                    y1={plot.top + plotHeight}
+                    y2={plot.top + plotHeight + 1.5}
+                    stroke="var(--border)"
+                    strokeWidth="0.35"
+                  />
+                  <text
+                    x={x}
+                    y={viewHeight - 2}
+                    textAnchor="middle"
+                    fill="var(--muted-foreground)"
+                    fontSize="3.2"
+                  >
+                    {resolvedXAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedYAxis.visible
+          ? createChartSvgTicks(yDomain, resolvedYAxis.tickCount).map((tick) => {
+              const y = plot.top + (1 - getDomainRatio(tick, yDomain)) * plotHeight;
+
+              return (
+                <Fragment key={`y-${tick}`}>
+                  <line
+                    x1={plot.left - 1.5}
+                    x2={plot.left}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeWidth="0.35"
+                  />
+                  <text
+                    x={plot.left - 2.2}
+                    y={y + 1}
+                    textAnchor="end"
+                    fill="var(--muted-foreground)"
+                    fontSize="3.2"
+                  >
+                    {resolvedYAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedXAxis.visible ? (
+          <line
+            x1={plot.left}
+            x2={plot.left + plotWidth}
+            y1={plot.top + plotHeight}
+            y2={plot.top + plotHeight}
+            stroke="var(--border)"
+            strokeWidth="0.35"
+          />
+        ) : null}
+        {resolvedYAxis.visible ? (
+          <line
+            x1={plot.left}
+            x2={plot.left}
+            y1={plot.top}
+            y2={plot.top + plotHeight}
+            stroke="var(--border)"
+            strokeWidth="0.35"
+          />
+        ) : null}
         {cells.map((cell) => {
-          const x = cell.xIndex * cellWidth;
-          const y = 100 - (cell.yIndex + 1) * cellHeight;
+          const x = plot.left + cell.xIndex * cellWidth;
+          const y = plot.top + plotHeight - (cell.yIndex + 1) * cellHeight;
           const label = `${formatX(cell.x0)}-${formatX(cell.x1)}, ${formatY(cell.y0)}-${formatY(
             cell.y1,
           )}: ${formatValue(cell)}`;
@@ -3086,6 +3285,7 @@ export function ChartHeatmapGrid<TProperties = Record<string, unknown>>({
           );
         })}
       </svg>
+      {renderChartSvgLegend(densityLegend)}
     </div>
   );
 }
@@ -3095,7 +3295,11 @@ export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
   className,
   data,
   formatValue = formatNullableNumber,
+  legend,
   onDatumSelect,
+  showValueLabels = false,
+  xAxis,
+  yAxis,
 }: ChartBoxPlotSvgProps<TProperties>): JSX.Element {
   const valuedData = data.filter((datum) =>
     [datum.lowerWhisker, datum.upperWhisker, datum.q1, datum.q3, datum.median].some(
@@ -3124,15 +3328,89 @@ export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
   const minValue = Math.min(...allValues);
   const maxValue = Math.max(...allValues);
   const span = Math.max(1, maxValue - minValue);
-  const xStep = 100 / Math.max(1, valuedData.length);
+  const resolvedXAxis = resolveChartSvgAxis(xAxis);
+  const resolvedYAxis = resolveChartSvgAxis(yAxis, (value) => formatValue(value));
+  const plot = {
+    bottom: resolvedXAxis.visible ? 14 : 8,
+    left: resolvedYAxis.visible ? 16 : 8,
+    right: 5,
+    top: 8,
+  };
+  const plotWidth = 100 - plot.left - plot.right;
+  const plotHeight = 100 - plot.top - plot.bottom;
+  const xStep = plotWidth / Math.max(1, valuedData.length);
   const yForValue = (value: number | null) =>
-    value === null ? null : 92 - ((value - minValue) / span) * 84;
+    value === null ? null : plot.top + (1 - (value - minValue) / span) * plotHeight;
+  const yDomain: [number, number] = [minValue, maxValue];
+  const resolvedLegend =
+    legend === undefined
+      ? [
+          { color: "var(--primary)", label: "Quartile range" },
+          { color: "var(--muted-foreground)", label: "Whisker range" },
+        ]
+      : legend;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
       <svg viewBox="0 0 100 100" role="img" aria-label={ariaLabel} className="h-72 w-full">
+        {resolvedYAxis.visible
+          ? createChartSvgTicks(yDomain, resolvedYAxis.tickCount).map((tick) => {
+              const y = yForValue(tick) ?? plot.top + plotHeight;
+
+              return (
+                <Fragment key={`y-${tick}`}>
+                  <line
+                    x1={plot.left - 1.5}
+                    x2={plot.left}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeWidth="0.35"
+                  />
+                  <line
+                    x1={plot.left}
+                    x2={plot.left + plotWidth}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeOpacity="0.55"
+                    strokeWidth="0.25"
+                  />
+                  <text
+                    x={plot.left - 2.2}
+                    y={y + 1}
+                    textAnchor="end"
+                    fill="var(--muted-foreground)"
+                    fontSize="3.2"
+                  >
+                    {resolvedYAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedXAxis.visible ? (
+          <line
+            x1={plot.left}
+            x2={plot.left + plotWidth}
+            y1={plot.top + plotHeight}
+            y2={plot.top + plotHeight}
+            stroke="var(--border)"
+            strokeWidth="0.35"
+          />
+        ) : null}
+        {resolvedYAxis.visible ? (
+          <line
+            x1={plot.left}
+            x2={plot.left}
+            y1={plot.top}
+            y2={plot.top + plotHeight}
+            stroke="var(--border)"
+            strokeWidth="0.35"
+          />
+        ) : null}
         {valuedData.map((datum, datumIndex) => {
-          const x = datumIndex * xStep + xStep / 2;
+          const x = plot.left + datumIndex * xStep + xStep / 2;
           const boxWidth = Math.max(1.5, Math.min(8, xStep * 0.42));
           const lowerWhiskerY = yForValue(datum.lowerWhisker);
           const upperWhiskerY = yForValue(datum.upperWhisker);
@@ -3204,10 +3482,38 @@ export function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({
                   strokeWidth="1"
                 />
               ) : null}
+              {showValueLabels && medianY !== null ? (
+                <text
+                  x={x}
+                  y={Math.max(4, medianY - 2)}
+                  textAnchor="middle"
+                  fill="var(--foreground)"
+                  fontSize="3.2"
+                  fontWeight="700"
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="1.5"
+                >
+                  {formatValue(datum.median)}
+                </text>
+              ) : null}
+              {resolvedXAxis.visible && valuedData.length <= 12 ? (
+                <text
+                  x={x}
+                  y={98}
+                  textAnchor="middle"
+                  fill="var(--muted-foreground)"
+                  fontSize="3.2"
+                >
+                  {truncateChartText(datum.label, Math.max(3, Math.floor(xStep / 2)))}
+                </text>
+              ) : null}
             </g>
           );
         })}
       </svg>
+      {renderChartSvgLegend(resolvedLegend)}
     </div>
   );
 }
@@ -3217,10 +3523,13 @@ export function ChartScatterSvg<TProperties = Record<string, unknown>>({
   className,
   formatValue = formatCompactNumber,
   height = 320,
+  legend,
   onPointSelect,
   series,
   width = 640,
+  xAxis,
   xDomain,
+  yAxis,
   yDomain,
 }: ChartScatterSvgProps<TProperties>): JSX.Element {
   if (series.points.length === 0) {
@@ -3233,12 +3542,22 @@ export function ChartScatterSvg<TProperties = Record<string, unknown>>({
     xDomain ?? series.summary.xDomain ?? getNumericDomain(series.points.map((point) => point.x));
   const resolvedYDomain =
     yDomain ?? series.summary.yDomain ?? getNumericDomain(series.points.map((point) => point.y));
-  const padding = 28;
-  const plotWidth = Math.max(1, width - padding * 2);
-  const plotHeight = Math.max(1, height - padding * 2);
-  const xScale = (value: number) => padding + getDomainRatio(value, resolvedXDomain) * plotWidth;
+  const resolvedXAxis = resolveChartSvgAxis(xAxis, formatValue);
+  const resolvedYAxis = resolveChartSvgAxis(yAxis, formatValue);
+  const padding = {
+    bottom: resolvedXAxis.visible ? 42 : 28,
+    left: resolvedYAxis.visible ? 52 : 28,
+    right: 24,
+    top: 20,
+  };
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
+  const xScale = (value: number) =>
+    padding.left + getDomainRatio(value, resolvedXDomain) * plotWidth;
   const yScale = (value: number) =>
-    padding + (1 - getDomainRatio(value, resolvedYDomain)) * plotHeight;
+    padding.top + (1 - getDomainRatio(value, resolvedYDomain)) * plotHeight;
+  const resolvedLegend =
+    legend === undefined ? [{ color: "var(--primary)", label: "Sampled points" }] : legend;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
@@ -3249,19 +3568,104 @@ export function ChartScatterSvg<TProperties = Record<string, unknown>>({
         className="h-72 w-full"
       >
         <line
-          x1={padding}
-          x2={padding + plotWidth}
-          y1={padding + plotHeight}
-          y2={padding + plotHeight}
+          x1={padding.left}
+          x2={padding.left + plotWidth}
+          y1={padding.top + plotHeight}
+          y2={padding.top + plotHeight}
           stroke="var(--border)"
         />
         <line
-          x1={padding}
-          x2={padding}
-          y1={padding}
-          y2={padding + plotHeight}
+          x1={padding.left}
+          x2={padding.left}
+          y1={padding.top}
+          y2={padding.top + plotHeight}
           stroke="var(--border)"
         />
+        {resolvedXAxis.visible
+          ? createChartSvgTicks(resolvedXDomain, resolvedXAxis.tickCount).map((tick) => {
+              const x = xScale(tick);
+
+              return (
+                <Fragment key={`x-${tick}`}>
+                  <line
+                    x1={x}
+                    x2={x}
+                    y1={padding.top + plotHeight}
+                    y2={padding.top + plotHeight + 5}
+                    stroke="var(--border)"
+                  />
+                  <text
+                    x={x}
+                    y={height - 12}
+                    textAnchor="middle"
+                    fill="var(--muted-foreground)"
+                    fontSize="11"
+                  >
+                    {resolvedXAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedYAxis.visible
+          ? createChartSvgTicks(resolvedYDomain, resolvedYAxis.tickCount).map((tick) => {
+              const y = yScale(tick);
+
+              return (
+                <Fragment key={`y-${tick}`}>
+                  <line
+                    x1={padding.left - 5}
+                    x2={padding.left}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                  />
+                  <line
+                    x1={padding.left}
+                    x2={padding.left + plotWidth}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeOpacity="0.45"
+                  />
+                  <text
+                    x={padding.left - 8}
+                    y={y + 4}
+                    textAnchor="end"
+                    fill="var(--muted-foreground)"
+                    fontSize="11"
+                  >
+                    {resolvedYAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedXAxis.label ? (
+          <text
+            x={padding.left + plotWidth / 2}
+            y={height - 2}
+            textAnchor="middle"
+            fill="var(--muted-foreground)"
+            fontSize="11"
+            fontWeight="600"
+          >
+            {resolvedXAxis.label}
+          </text>
+        ) : null}
+        {resolvedYAxis.label ? (
+          <text
+            x={12}
+            y={padding.top + plotHeight / 2}
+            textAnchor="middle"
+            fill="var(--muted-foreground)"
+            fontSize="11"
+            fontWeight="600"
+            transform={`rotate(-90 12 ${padding.top + plotHeight / 2})`}
+          >
+            {resolvedYAxis.label}
+          </text>
+        ) : null}
         {series.points.map((point) => {
           const label = `${point.label || point.id}: x ${formatValue(point.x)}, y ${formatValue(point.y)}`;
 
@@ -3283,6 +3687,7 @@ export function ChartScatterSvg<TProperties = Record<string, unknown>>({
           );
         })}
       </svg>
+      {renderChartSvgLegend(resolvedLegend)}
     </div>
   );
 }
@@ -3293,8 +3698,12 @@ export function ChartWaterfallSvg({
   data,
   formatValue = formatCompactNumber,
   height = 320,
+  legend,
   onDatumSelect,
+  showValueLabels = true,
   width = 640,
+  xAxis,
+  yAxis,
 }: ChartWaterfallSvgProps): JSX.Element {
   if (data.length === 0) {
     return <ChartEmptyState className={className}>No waterfall data.</ChartEmptyState>;
@@ -3302,12 +3711,26 @@ export function ChartWaterfallSvg({
 
   const values = data.flatMap((datum) => [datum.start, datum.end, 0]);
   const yDomain = getNumericDomain(values);
-  const padding = 32;
-  const plotWidth = Math.max(1, width - padding * 2);
-  const plotHeight = Math.max(1, height - padding * 2);
+  const resolvedXAxis = resolveChartSvgAxis(xAxis);
+  const resolvedYAxis = resolveChartSvgAxis(yAxis, formatValue);
+  const padding = {
+    bottom: resolvedXAxis.visible ? 44 : 32,
+    left: resolvedYAxis.visible ? 56 : 32,
+    right: 24,
+    top: 24,
+  };
+  const plotWidth = Math.max(1, width - padding.left - padding.right);
+  const plotHeight = Math.max(1, height - padding.top - padding.bottom);
   const step = plotWidth / data.length;
   const barWidth = Math.max(8, step * 0.58);
-  const yScale = (value: number) => padding + (1 - getDomainRatio(value, yDomain)) * plotHeight;
+  const yScale = (value: number) => padding.top + (1 - getDomainRatio(value, yDomain)) * plotHeight;
+  const resolvedLegend =
+    legend === undefined
+      ? [
+          { color: "var(--primary)", label: "Positive" },
+          { color: "var(--destructive)", label: "Negative" },
+        ]
+      : legend;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
@@ -3318,14 +3741,66 @@ export function ChartWaterfallSvg({
         className="h-72 w-full"
       >
         <line
-          x1={padding}
-          x2={padding + plotWidth}
+          x1={padding.left}
+          x2={padding.left + plotWidth}
           y1={yScale(0)}
           y2={yScale(0)}
           stroke="var(--border)"
         />
+        {resolvedYAxis.visible
+          ? createChartSvgTicks(yDomain, resolvedYAxis.tickCount).map((tick) => {
+              const y = yScale(tick);
+
+              return (
+                <Fragment key={`y-${tick}`}>
+                  <line
+                    x1={padding.left - 5}
+                    x2={padding.left}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                  />
+                  <line
+                    x1={padding.left}
+                    x2={padding.left + plotWidth}
+                    y1={y}
+                    y2={y}
+                    stroke="var(--border)"
+                    strokeOpacity="0.45"
+                  />
+                  <text
+                    x={padding.left - 8}
+                    y={y + 4}
+                    textAnchor="end"
+                    fill="var(--muted-foreground)"
+                    fontSize="11"
+                  >
+                    {resolvedYAxis.formatValue(tick)}
+                  </text>
+                </Fragment>
+              );
+            })
+          : null}
+        {resolvedYAxis.visible ? (
+          <line
+            x1={padding.left}
+            x2={padding.left}
+            y1={padding.top}
+            y2={padding.top + plotHeight}
+            stroke="var(--border)"
+          />
+        ) : null}
+        {resolvedXAxis.visible ? (
+          <line
+            x1={padding.left}
+            x2={padding.left + plotWidth}
+            y1={padding.top + plotHeight}
+            y2={padding.top + plotHeight}
+            stroke="var(--border)"
+          />
+        ) : null}
         {data.map((datum, index) => {
-          const x = padding + index * step + step / 2 - barWidth / 2;
+          const x = padding.left + index * step + step / 2 - barWidth / 2;
           const yStart = yScale(datum.start);
           const yEnd = yScale(datum.end);
           const y = Math.min(yStart, yEnd);
@@ -3342,10 +3817,40 @@ export function ChartWaterfallSvg({
                 fill={datum.color ?? (datum.negative ? "var(--destructive)" : "var(--primary)")}
                 fillOpacity="0.7"
               />
+              {showValueLabels ? (
+                <text
+                  x={x + barWidth / 2}
+                  y={Math.max(12, y - 8)}
+                  textAnchor="middle"
+                  fill="var(--foreground)"
+                  fontSize="11"
+                  fontWeight="700"
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                  pointerEvents="none"
+                >
+                  {formatValue(datum.value)}
+                </text>
+              ) : null}
+              {resolvedXAxis.visible ? (
+                <text
+                  x={x + barWidth / 2}
+                  y={height - 12}
+                  textAnchor="middle"
+                  fill="var(--muted-foreground)"
+                  fontSize="11"
+                  pointerEvents="none"
+                >
+                  {truncateChartText(datum.label, Math.max(3, Math.floor(step / 8)))}
+                </text>
+              ) : null}
             </g>
           );
         })}
       </svg>
+      {renderChartSvgLegend(resolvedLegend)}
     </div>
   );
 }
@@ -3356,7 +3861,9 @@ export function ChartFunnelSvg({
   data,
   formatValue = formatCompactNumber,
   height = 320,
+  legend,
   onDatumSelect,
+  showValueLabels = true,
   width = 640,
 }: ChartFunnelSvgProps): JSX.Element {
   if (data.length === 0) {
@@ -3366,6 +3873,17 @@ export function ChartFunnelSvg({
   const padding = 24;
   const maxValue = Math.max(1, ...data.map((datum) => datum.value));
   const stepHeight = (height - padding * 2) / data.length;
+  const resolvedLegend =
+    legend === undefined
+      ? [
+          { color: "var(--chart-1)", label: "Largest stage", value: formatValue(maxValue) },
+          {
+            color: "var(--chart-4)",
+            label: "Final stage",
+            value: formatValue(data.at(-1)?.value ?? 0),
+          },
+        ]
+      : legend;
 
   return (
     <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
@@ -3377,12 +3895,17 @@ export function ChartFunnelSvg({
       >
         {data.map((datum, index) => {
           const next = data[index + 1];
+          const previous = data[index - 1];
           const topWidth = (datum.value / maxValue) * (width - padding * 2);
           const bottomWidth = ((next?.value ?? datum.value) / maxValue) * (width - padding * 2);
           const y = padding + index * stepHeight;
           const topLeft = (width - topWidth) / 2;
           const bottomLeft = (width - bottomWidth) / 2;
           const label = `${datum.label}: ${formatValue(datum.value)}`;
+          const retention =
+            previous && previous.value > 0
+              ? `${Math.round((datum.value / previous.value) * 100)}%`
+              : null;
           const points = [
             `${topLeft},${y}`,
             `${topLeft + topWidth},${y}`,
@@ -3401,18 +3924,43 @@ export function ChartFunnelSvg({
               {stepHeight > 30 ? (
                 <text
                   x={width / 2}
-                  y={y + stepHeight / 2 + 4}
+                  y={showValueLabels ? y + stepHeight / 2 - 2 : y + stepHeight / 2 + 4}
                   textAnchor="middle"
                   fill="var(--foreground)"
                   fontSize="12"
+                  fontWeight="700"
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                  pointerEvents="none"
                 >
                   {datum.label}
+                </text>
+              ) : null}
+              {showValueLabels && stepHeight > 42 ? (
+                <text
+                  x={width / 2}
+                  y={y + stepHeight / 2 + 14}
+                  textAnchor="middle"
+                  fill="var(--foreground)"
+                  fontSize="11"
+                  paintOrder="stroke"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                  pointerEvents="none"
+                >
+                  {retention
+                    ? `${formatValue(datum.value)} (${retention})`
+                    : formatValue(datum.value)}
                 </text>
               ) : null}
             </g>
           );
         })}
       </svg>
+      {renderChartSvgLegend(resolvedLegend)}
     </div>
   );
 }
@@ -3422,62 +3970,212 @@ export function ChartTreemapSvg<TPayload = unknown>({
   centerLabel,
   className,
   data,
+  defaultFocusedNodeId = null,
+  focusedNodeId,
   formatValue = formatCompactNumber,
+  onFocusedNodeChange,
   onNodeSelect,
+  showNodeLabels = true,
+  zoomable = false,
 }: ChartTreemapSvgProps<TPayload>): JSX.Element {
+  const [uncontrolledFocusedNodeId, setUncontrolledFocusedNodeId] = useState<string | null>(
+    defaultFocusedNodeId,
+  );
+
   if (data.length === 0) {
     return <ChartEmptyState className={className}>No treemap data.</ChartEmptyState>;
   }
 
   const width = Math.max(...data.map((node) => node.x + node.width));
   const height = Math.max(...data.map((node) => node.y + node.height));
-  const topLevelNodes = data.filter((node) => node.depth === 1);
-  const defaultCenterNode = topLevelNodes.reduce<ChartTreemapNode<TPayload> | null>(
-    (largest, node) => (largest === null || node.value > largest.value ? node : largest),
-    null,
-  );
-  const resolvedCenterLabel = centerLabel ?? defaultCenterNode?.label ?? null;
+  const rootNode = data.find((node) => node.depth === 0) ?? null;
+  const nodeById = new Map(data.map((node) => [node.id, node]));
+  const childrenByParentId = new Map<string | null, Array<ChartTreemapNode<TPayload>>>();
+
+  for (const node of data) {
+    const siblings = childrenByParentId.get(node.parentId) ?? [];
+
+    siblings.push(node);
+    childrenByParentId.set(node.parentId, siblings);
+  }
+
+  const requestedFocusId = focusedNodeId === undefined ? uncontrolledFocusedNodeId : focusedNodeId;
+  const focusedNode =
+    requestedFocusId !== null && requestedFocusId !== undefined
+      ? (nodeById.get(requestedFocusId) ?? null)
+      : null;
+  const activeFocusNode = focusedNode ?? rootNode;
+  const allVisibleNodes = data.filter((node) => node.depth > 0);
+  const clickableNodes = zoomable
+    ? activeFocusNode === null
+      ? data.filter((node) => node.depth === 1)
+      : (childrenByParentId.get(activeFocusNode.id) ?? [])
+    : allVisibleNodes;
+  const clickableNodeIds = new Set(clickableNodes.map((node) => node.id));
+  const focusRootId = activeFocusNode?.id ?? null;
+  const visibleNodes = zoomable
+    ? focusRootId === null
+      ? allVisibleNodes
+      : data.filter(
+          (node) => node.id !== focusRootId && isTreemapDescendantOf(node, focusRootId, nodeById),
+        )
+    : allVisibleNodes;
+  const previewNodes = zoomable
+    ? visibleNodes.filter((node) => !clickableNodeIds.has(node.id))
+    : [];
+  const resolvedCenterLabel = centerLabel ?? null;
+  const viewBoxNode = focusedNode ?? { height, width, x: 0, y: 0 };
+
+  const setFocusedNode = (node: ChartTreemapNode<TPayload> | null) => {
+    const nextId = node?.id ?? null;
+
+    if (focusedNodeId === undefined) {
+      setUncontrolledFocusedNodeId(nextId);
+    }
+
+    onFocusedNodeChange?.(nextId, node);
+  };
+
+  const stepBack = () => {
+    if (focusedNode === null) {
+      return;
+    }
+
+    const parent = focusedNode.parentId ? (nodeById.get(focusedNode.parentId) ?? null) : null;
+
+    setFocusedNode(parent?.depth === 0 ? null : parent);
+  };
+
+  const activateNode = (node: ChartTreemapNode<TPayload>) => {
+    onNodeSelect?.(node);
+
+    if (!zoomable || (childrenByParentId.get(node.id) ?? []).length === 0) {
+      return;
+    }
+
+    setFocusedNode(node);
+  };
+
+  const handleNodeKeyDown = (
+    event: KeyboardEvent<SVGGElement>,
+    node: ChartTreemapNode<TPayload>,
+  ) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    event.preventDefault();
+    activateNode(node);
+  };
 
   return (
-    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+    <div className={joinClassNames("relative border border-border/60 bg-muted/20 p-3", className)}>
+      {zoomable && focusedNode ? (
+        <Button
+          type="button"
+          aria-label="Back to parent treemap level"
+          variant="outline"
+          size="sm"
+          className="absolute left-5 top-5 z-10 bg-background/90"
+          onClick={stepBack}
+        >
+          Back
+        </Button>
+      ) : null}
       <svg
-        viewBox={`0 0 ${width} ${height}`}
+        viewBox={`${viewBoxNode.x} ${viewBoxNode.y} ${viewBoxNode.width} ${viewBoxNode.height}`}
         role="img"
         aria-label={ariaLabel}
         className="h-72 w-full"
+        onClick={() => {
+          if (zoomable) {
+            stepBack();
+          }
+        }}
       >
-        {data
-          .filter((node) => node.depth > 0)
-          .map((node, index) => {
-            const label = `${node.label}: ${formatValue(node.value)}`;
+        {previewNodes.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
 
-            return (
-              <g
-                key={node.id}
-                aria-label={label}
-                className={onNodeSelect ? "cursor-pointer" : undefined}
-                data-chart-treemap-node-id={node.id}
-                data-chart-treemap-node-parent-id={node.parentId ?? undefined}
-              >
-                <title>{label}</title>
-                <rect
-                  x={node.x}
-                  y={node.y}
-                  width={node.width}
-                  height={node.height}
-                  fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
-                  fillOpacity={0.22 + Math.min(0.5, node.depth * 0.1)}
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              data-chart-treemap-node-id={node.id}
+              data-chart-treemap-node-parent-id={node.parentId ?? undefined}
+            >
+              <title>{label}</title>
+              <rect
+                x={node.x}
+                y={node.y}
+                width={node.width}
+                height={node.height}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity={0.32}
+                stroke="var(--background)"
+                strokeWidth="1"
+              />
+            </g>
+          );
+        })}
+        {clickableNodes.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = onNodeSelect || (zoomable && childrenByParentId.has(node.id));
+          const canShowLabel = showNodeLabels && node.width >= 46 && node.height >= 22;
+          const visibleLabel = truncateChartText(
+            node.label,
+            Math.max(3, Math.floor((node.width - 12) / 4)),
+          );
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-treemap-node-id={node.id}
+              data-chart-treemap-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                activateNode(node);
+              }}
+              onKeyDown={isInteractive ? (event) => handleNodeKeyDown(event, node) : undefined}
+            >
+              <title>{label}</title>
+              <rect
+                x={node.x}
+                y={node.y}
+                width={node.width}
+                height={node.height}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity={zoomable ? 0.46 : 0.22 + Math.min(0.5, node.depth * 0.1)}
+                stroke="var(--background)"
+                strokeWidth="1"
+              />
+              {canShowLabel ? (
+                <text
+                  x={node.x + node.width / 2}
+                  y={node.y + node.height / 2}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--foreground)"
+                  fontSize="12"
+                  fontWeight="700"
+                  paintOrder="stroke"
                   stroke="var(--background)"
-                  strokeWidth="1"
-                  onClick={() => onNodeSelect?.(node)}
-                />
-              </g>
-            );
-          })}
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                  pointerEvents="none"
+                >
+                  {visibleLabel}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
         {resolvedCenterLabel ? (
           <text
-            x={width / 2}
-            y={height / 2}
+            x={viewBoxNode.x + viewBoxNode.width / 2}
+            y={viewBoxNode.y + viewBoxNode.height / 2}
             textAnchor="middle"
             dominantBaseline="middle"
             fill="var(--foreground)"
@@ -3495,6 +4193,24 @@ export function ChartTreemapSvg<TPayload = unknown>({
       </svg>
     </div>
   );
+}
+
+function isTreemapDescendantOf<TPayload>(
+  node: ChartTreemapNode<TPayload>,
+  ancestorId: string,
+  nodeById: Map<string, ChartTreemapNode<TPayload>>,
+) {
+  let parentId = node.parentId;
+
+  while (parentId) {
+    if (parentId === ancestorId) {
+      return true;
+    }
+
+    parentId = nodeById.get(parentId)?.parentId ?? null;
+  }
+
+  return false;
 }
 
 export function ChartSunburstSvg<TPayload = unknown>({
@@ -3515,8 +4231,11 @@ export function ChartSunburstSvg<TPayload = unknown>({
   const cx = width / 2;
   const cy = height / 2;
   const hoveredNode = hoveredNodeId ? data.find((node) => node.id === hoveredNodeId) : null;
-  const hoveredLabel = hoveredNode
+  const fullHoveredLabel = hoveredNode
     ? `${hoveredNode.label}: ${formatValue(hoveredNode.value)}`
+    : null;
+  const hoveredLabel = fullHoveredLabel
+    ? truncateChartText(fullHoveredLabel, Math.max(12, Math.floor(width / 6)))
     : null;
   const hoveredLabelPoint =
     hoveredNode && hoveredLabel
@@ -3585,6 +4304,649 @@ export function ChartSunburstSvg<TPayload = unknown>({
             </text>
           </g>
         ) : null}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartIcicleSvg<TPayload = unknown>({
+  ariaLabel = "Chart icicle",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  onNodeSelect,
+  showNodeLabels = true,
+}: ChartIcicleSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No icicle data.</ChartEmptyState>;
+  }
+
+  const width = Math.max(...data.map((node) => node.x + node.width));
+  const height = Math.max(...data.map((node) => node.y + node.height));
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        {data
+          .filter((node) => node.depth > 0)
+          .map((node, index) => {
+            const label = `${node.label}: ${formatValue(node.value)}`;
+            const isInteractive = Boolean(onNodeSelect);
+            const canShowLabel = showNodeLabels && node.width >= 42 && node.height >= 18;
+            const visibleLabel = truncateChartText(
+              node.label,
+              Math.max(3, Math.floor((node.width - 12) / 7)),
+            );
+
+            return (
+              <g
+                key={node.id}
+                aria-label={label}
+                className={isInteractive ? "cursor-pointer" : undefined}
+                data-chart-icicle-node-id={node.id}
+                data-chart-icicle-node-parent-id={node.parentId ?? undefined}
+                tabIndex={isInteractive ? 0 : undefined}
+                onClick={() => onNodeSelect?.(node)}
+                onKeyDown={
+                  isInteractive
+                    ? (event) => {
+                        if (event.key !== "Enter" && event.key !== " ") {
+                          return;
+                        }
+
+                        event.preventDefault();
+                        onNodeSelect?.(node);
+                      }
+                    : undefined
+                }
+              >
+                <title>{label}</title>
+                <rect
+                  x={node.x}
+                  y={node.y}
+                  width={node.width}
+                  height={node.height}
+                  fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                  fillOpacity={0.24 + Math.min(0.48, node.depth * 0.1)}
+                  stroke="var(--background)"
+                  strokeWidth="1"
+                />
+                {canShowLabel ? (
+                  <text
+                    x={node.x + 6}
+                    y={node.y + node.height / 2}
+                    dominantBaseline="middle"
+                    fill="var(--foreground)"
+                    fontSize="12"
+                    fontWeight="700"
+                    paintOrder="stroke"
+                    pointerEvents="none"
+                    stroke="var(--background)"
+                    strokeLinejoin="round"
+                    strokeWidth="4"
+                  >
+                    {visibleLabel}
+                  </text>
+                ) : null}
+              </g>
+            );
+          })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartFlameGraphSvg<TPayload = unknown>({
+  ariaLabel = "Chart flame graph",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  onNodeSelect,
+  showNodeLabels = true,
+}: ChartFlameGraphSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No flame graph data.</ChartEmptyState>;
+  }
+
+  const width = Math.max(...data.map((node) => node.x + node.width));
+  const height = Math.max(...data.map((node) => node.y + node.height));
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-72 w-full"
+      >
+        {data.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = Boolean(onNodeSelect);
+          const canShowLabel = showNodeLabels && node.width >= 42 && node.height >= 18;
+          const visibleLabel = truncateChartText(
+            node.label,
+            Math.max(3, Math.floor((node.width - 12) / 7)),
+          );
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-flame-graph-node-id={node.id}
+              data-chart-flame-graph-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={() => onNodeSelect?.(node)}
+              onKeyDown={
+                isInteractive
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onNodeSelect?.(node);
+                    }
+                  : undefined
+              }
+            >
+              <title>{label}</title>
+              <rect
+                x={node.x}
+                y={node.y}
+                width={node.width}
+                height={node.height}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity={node.depth === 0 ? 0.18 : 0.26 + Math.min(0.48, node.depth * 0.1)}
+                stroke="var(--background)"
+                strokeWidth="1"
+              />
+              {canShowLabel ? (
+                <text
+                  x={node.x + 6}
+                  y={node.y + node.height / 2}
+                  dominantBaseline="middle"
+                  fill="var(--foreground)"
+                  fontSize="12"
+                  fontWeight="700"
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                >
+                  {visibleLabel}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartCirclePackSvg<TPayload = unknown>({
+  ariaLabel = "Chart circle pack",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height,
+  onNodeSelect,
+  showNodeLabels = true,
+  width,
+}: ChartCirclePackSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No circle pack data.</ChartEmptyState>;
+  }
+
+  const minX = Math.min(...data.map((node) => node.x - node.radius));
+  const minY = Math.min(...data.map((node) => node.y - node.radius));
+  const maxX = Math.max(...data.map((node) => node.x + node.radius));
+  const maxY = Math.max(...data.map((node) => node.y + node.radius));
+  const viewWidth = width ?? maxX - minX;
+  const viewHeight = height ?? maxY - minY;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`${minX} ${minY} ${viewWidth} ${viewHeight}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-80 w-full"
+      >
+        {data.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = node.depth > 0 && Boolean(onNodeSelect);
+          const canShowLabel = showNodeLabels && node.depth > 0 && node.radius >= 18;
+          const visibleLabel = truncateChartText(
+            node.label,
+            Math.max(3, Math.floor((node.radius * 1.65) / 6)),
+          );
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-circle-pack-node-id={node.id}
+              data-chart-circle-pack-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={() => {
+                if (node.depth > 0) {
+                  onNodeSelect?.(node);
+                }
+              }}
+              onKeyDown={
+                isInteractive
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onNodeSelect?.(node);
+                    }
+                  : undefined
+              }
+            >
+              <title>{label}</title>
+              <circle
+                cx={node.x}
+                cy={node.y}
+                r={node.radius}
+                fill={
+                  node.depth === 0
+                    ? "transparent"
+                    : (node.color ?? `var(--chart-${(index % 5) + 1})`)
+                }
+                fillOpacity={node.depth === 0 ? 0 : 0.24 + Math.min(0.44, node.depth * 0.1)}
+                stroke={node.depth === 0 ? "var(--border)" : "var(--background)"}
+                strokeWidth={node.depth === 0 ? 1 : 1.5}
+              />
+              {canShowLabel ? (
+                <text
+                  x={node.x}
+                  y={node.y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fill="var(--foreground)"
+                  fontSize="11"
+                  fontWeight="700"
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                >
+                  {visibleLabel}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartRadialTreeSvg<TPayload = unknown>({
+  ariaLabel = "Chart radial tree",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height = 340,
+  onNodeSelect,
+  showNodeLabels = true,
+  width = 340,
+}: ChartRadialTreeSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No radial tree data.</ChartEmptyState>;
+  }
+
+  const nodeById = new Map(data.map((node) => [node.id, node]));
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-80 w-full"
+      >
+        {data
+          .filter((node) => node.parentId !== null)
+          .map((node) => {
+            const parent = node.parentId ? nodeById.get(node.parentId) : null;
+
+            if (!parent) {
+              return null;
+            }
+
+            return (
+              <line
+                key={`${node.id}-link`}
+                x1={parent.x}
+                y1={parent.y}
+                x2={node.x}
+                y2={node.y}
+                stroke="var(--border)"
+                strokeWidth="1.5"
+              />
+            );
+          })}
+        {data.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = Boolean(onNodeSelect);
+          const labelOffset = node.depth === 0 ? 0 : 13;
+          const visibleLabel = truncateChartText(node.label, 18);
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-radial-tree-node-id={node.id}
+              data-chart-radial-tree-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={() => onNodeSelect?.(node)}
+              onKeyDown={
+                isInteractive
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onNodeSelect?.(node);
+                    }
+                  : undefined
+              }
+            >
+              <title>{label}</title>
+              <circle
+                cx={node.x}
+                cy={node.y}
+                r={node.depth === 0 ? 7 : 6}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity={node.depth === 0 ? 0.92 : 0.78}
+                stroke="var(--background)"
+                strokeWidth="2"
+              />
+              {showNodeLabels && node.depth > 0 ? (
+                <text
+                  x={node.x + Math.cos(node.angle) * labelOffset}
+                  y={node.y + Math.sin(node.angle) * labelOffset}
+                  textAnchor={Math.cos(node.angle) < -0.2 ? "end" : "start"}
+                  dominantBaseline="middle"
+                  fill="var(--foreground)"
+                  fontSize="10.5"
+                  fontWeight="600"
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                >
+                  {visibleLabel}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartIndentedTreeSvg<TPayload = unknown>({
+  ariaLabel = "Chart indented tree",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  onNodeSelect,
+  showValueBars = true,
+}: ChartIndentedTreeSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No indented tree data.</ChartEmptyState>;
+  }
+
+  const width = Math.max(...data.map((node) => node.x + node.width));
+  const height = Math.max(...data.map((node) => node.y + node.height + 2));
+  const maxValue = Math.max(1, ...data.map((node) => node.value));
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-80 w-full"
+      >
+        {data.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = Boolean(onNodeSelect);
+          const valueBarWidth = Math.max(0, Math.min(120, (node.value / maxValue) * 120));
+          const valueBarX = Math.max(node.x + 110, width - 148);
+          const labelSpace = Math.max(24, valueBarX - node.x - 22);
+          const visibleLabel = truncateChartText(
+            node.label,
+            Math.max(3, Math.floor(labelSpace / 7)),
+          );
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-indented-tree-node-id={node.id}
+              data-chart-indented-tree-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={() => onNodeSelect?.(node)}
+              onKeyDown={
+                isInteractive
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onNodeSelect?.(node);
+                    }
+                  : undefined
+              }
+            >
+              <title>{label}</title>
+              <rect
+                x="0"
+                y={node.y}
+                width={width}
+                height={node.height}
+                fill={node.rowIndex % 2 === 0 ? "var(--muted)" : "transparent"}
+                fillOpacity="0.24"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNodeSelect?.(node);
+                }}
+              />
+              <rect
+                x={node.x}
+                y={node.y + node.height / 2 - 5}
+                width="10"
+                height="10"
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity="0.76"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onNodeSelect?.(node);
+                }}
+              />
+              <text
+                x={node.x + 16}
+                y={node.y + node.height / 2}
+                dominantBaseline="middle"
+                fill="var(--foreground)"
+                fontSize="12"
+                fontWeight={node.depth === 0 ? 700 : 500}
+                pointerEvents="none"
+              >
+                {visibleLabel}
+              </text>
+              {showValueBars ? (
+                <>
+                  <rect
+                    x={valueBarX}
+                    y={node.y + node.height / 2 - 4}
+                    width="120"
+                    height="8"
+                    fill="var(--muted)"
+                    fillOpacity="0.5"
+                  />
+                  <rect
+                    x={valueBarX}
+                    y={node.y + node.height / 2 - 4}
+                    width={valueBarWidth}
+                    height="8"
+                    fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                    fillOpacity="0.68"
+                  />
+                </>
+              ) : null}
+              <text
+                x={width - 8}
+                y={node.y + node.height / 2}
+                textAnchor="end"
+                dominantBaseline="middle"
+                fill="var(--muted-foreground)"
+                fontSize="11"
+                pointerEvents="none"
+              >
+                {formatValue(node.value)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+export function ChartTreeSvg<TPayload = unknown>({
+  ariaLabel = "Chart tree",
+  className,
+  data,
+  formatValue = formatCompactNumber,
+  height = 320,
+  onNodeSelect,
+  showNodeLabels = true,
+  width = 640,
+}: ChartTreeSvgProps<TPayload>): JSX.Element {
+  if (data.length === 0) {
+    return <ChartEmptyState className={className}>No tree data.</ChartEmptyState>;
+  }
+
+  const nodeById = new Map(data.map((node) => [node.id, node]));
+  const padding = 28;
+  const contentWidth = Math.max(1, width - padding * 2);
+  const contentHeight = Math.max(1, height - padding * 2);
+  const maxX = Math.max(1, ...data.map((node) => node.x));
+  const maxY = Math.max(1, ...data.map((node) => node.y));
+  const resolveX = (x: number) => padding + (x / maxX) * contentWidth;
+  const resolveY = (y: number) => padding + (y / maxY) * contentHeight;
+
+  return (
+    <div className={joinClassNames("border border-border/60 bg-muted/20 p-3", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={ariaLabel}
+        className="h-80 w-full"
+      >
+        {data
+          .filter((node) => node.parentId !== null)
+          .map((node) => {
+            const parent = node.parentId ? nodeById.get(node.parentId) : null;
+
+            if (!parent) {
+              return null;
+            }
+
+            return (
+              <line
+                key={`${node.id}-link`}
+                x1={resolveX(parent.x)}
+                y1={resolveY(parent.y)}
+                x2={resolveX(node.x)}
+                y2={resolveY(node.y)}
+                stroke="var(--border)"
+                strokeWidth="1.5"
+              />
+            );
+          })}
+        {data.map((node, index) => {
+          const label = `${node.label}: ${formatValue(node.value)}`;
+          const isInteractive = Boolean(onNodeSelect);
+          const x = resolveX(node.x);
+          const y = resolveY(node.y);
+          const visibleLabel = truncateChartText(node.label, 18);
+
+          return (
+            <g
+              key={node.id}
+              aria-label={label}
+              className={isInteractive ? "cursor-pointer" : undefined}
+              data-chart-tree-node-id={node.id}
+              data-chart-tree-node-parent-id={node.parentId ?? undefined}
+              tabIndex={isInteractive ? 0 : undefined}
+              onClick={() => onNodeSelect?.(node)}
+              onKeyDown={
+                isInteractive
+                  ? (event) => {
+                      if (event.key !== "Enter" && event.key !== " ") {
+                        return;
+                      }
+
+                      event.preventDefault();
+                      onNodeSelect?.(node);
+                    }
+                  : undefined
+              }
+            >
+              <title>{label}</title>
+              <circle
+                cx={x}
+                cy={y}
+                r={node.depth === 0 ? 7 : 6}
+                fill={node.color ?? `var(--chart-${(index % 5) + 1})`}
+                fillOpacity={node.depth === 0 ? 0.92 : 0.78}
+                stroke="var(--background)"
+                strokeWidth="2"
+              />
+              {showNodeLabels ? (
+                <text
+                  x={x}
+                  y={y + 18}
+                  textAnchor="middle"
+                  fill="var(--foreground)"
+                  fontSize="11"
+                  fontWeight={node.depth === 0 ? 700 : 500}
+                  paintOrder="stroke"
+                  pointerEvents="none"
+                  stroke="var(--background)"
+                  strokeLinejoin="round"
+                  strokeWidth="4"
+                >
+                  {visibleLabel}
+                </text>
+              ) : null}
+            </g>
+          );
+        })}
       </svg>
     </div>
   );
@@ -4568,6 +5930,85 @@ function formatCompactNumber(value: number) {
 
 function formatNullableNumber(value: number | null) {
   return value === null ? "n/a" : formatCompactNumber(value);
+}
+
+function resolveChartSvgAxis(
+  axis: ChartSvgAxisOptions | false | undefined,
+  formatValue = formatCompactNumber,
+) {
+  return {
+    formatValue: axis && axis.formatValue ? axis.formatValue : formatValue,
+    label: axis && axis.label ? axis.label : null,
+    tickCount: axis && axis.tickCount ? Math.max(2, Math.floor(axis.tickCount)) : 3,
+    visible: axis !== false && axis?.visible !== false,
+  };
+}
+
+function createChartSvgTicks(domain: [number, number], tickCount: number) {
+  const count = Math.max(2, Math.floor(tickCount));
+
+  if (!Number.isFinite(domain[0]) || !Number.isFinite(domain[1])) {
+    return [];
+  }
+
+  if (domain[0] === domain[1]) {
+    return [domain[0]];
+  }
+
+  return Array.from({ length: count }, (_, tickIndex) => {
+    const ratio = tickIndex / Math.max(1, count - 1);
+
+    return domain[0] + (domain[1] - domain[0]) * ratio;
+  });
+}
+
+function renderChartSvgLegend(legend: ReactNode | readonly ChartSvgLegendItem[] | undefined) {
+  if (legend === undefined || legend === null || legend === false) {
+    return null;
+  }
+
+  if (isChartSvgLegendItems(legend)) {
+    return (
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {legend.map((item, itemIndex) => (
+          <span key={itemIndex} className="inline-flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="size-2 rounded-[2px]"
+              style={{ backgroundColor: item.color ?? "var(--primary)" }}
+            />
+            <span>{item.label}</span>
+            {item.value ? <span className="font-medium text-foreground">{item.value}</span> : null}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  return <div className="mt-2">{legend}</div>;
+}
+
+function isChartSvgLegendItems(
+  legend: ReactNode | readonly ChartSvgLegendItem[],
+): legend is readonly ChartSvgLegendItem[] {
+  return (
+    Array.isArray(legend) &&
+    legend.every((item) => Boolean(item) && typeof item === "object" && "label" in item)
+  );
+}
+
+function truncateChartText(text: string, maxCharacters: number) {
+  const normalizedMaxCharacters = Math.max(1, Math.floor(maxCharacters));
+
+  if (text.length <= normalizedMaxCharacters) {
+    return text;
+  }
+
+  if (normalizedMaxCharacters <= 3) {
+    return ".".repeat(normalizedMaxCharacters);
+  }
+
+  return `${text.slice(0, normalizedMaxCharacters - 3).trimEnd()}...`;
 }
 
 function getNumericDomain(values: number[]): [number, number] {

@@ -8,10 +8,14 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartCirclePackSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
+  ChartFlameGraphSvg,
   ChartFunnelSvg,
   ChartHeatmapGrid,
+  ChartIcicleSvg,
+  ChartIndentedTreeSvg,
   ChartRangeSelector,
   ChartSampleInteractionOverlay,
   ChartSampleSparkline,
@@ -19,6 +23,8 @@ import {
   ChartSeriesLegend,
   ChartSunburstSvg,
   ChartThresholdMarker,
+  ChartRadialTreeSvg,
+  ChartTreeSvg,
   ChartTreemapSvg,
   ChartWaterfallSvg,
   ChartXAxisNavigationMenu,
@@ -26,9 +32,15 @@ import {
   ChartWithLegend,
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
+  createChartCirclePackLayout,
   createChartDensityIndex,
+  createChartFlameGraphLayout,
   createChartFunnelData,
+  createChartIcicleLayout,
+  createChartIndentedTreeLayout,
+  createChartRadialTreeLayout,
   createChartSunburstLayout,
+  createChartTreeLayout,
   createChartTreemapLayout,
   createChartWaterfallData,
   getChartAxisScaleDefinitions,
@@ -688,6 +700,20 @@ describe("@moritzbrantner/charts", () => {
         />
         <ChartTreemapSvg data={createChartTreemapLayout(hierarchy, { height: 100, width: 100 })} />
         <ChartSunburstSvg data={createChartSunburstLayout(hierarchy, { outerRadius: 40 })} />
+        <ChartIcicleSvg data={createChartIcicleLayout(hierarchy, { height: 100, width: 100 })} />
+        <ChartFlameGraphSvg
+          data={createChartFlameGraphLayout(hierarchy, { height: 100, width: 100 })}
+        />
+        <ChartCirclePackSvg
+          data={createChartCirclePackLayout(hierarchy, { height: 100, width: 100 })}
+        />
+        <ChartTreeSvg data={createChartTreeLayout(hierarchy, { height: 100, width: 100 })} />
+        <ChartRadialTreeSvg
+          data={createChartRadialTreeLayout(hierarchy, { height: 100, width: 100 })}
+          height={100}
+          width={100}
+        />
+        <ChartIndentedTreeSvg data={createChartIndentedTreeLayout(hierarchy, { width: 100 })} />
       </>,
     );
 
@@ -696,13 +722,129 @@ describe("@moritzbrantner/charts", () => {
     expect(screen.getByRole("img", { name: "Chart funnel" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Chart treemap" })).toBeTruthy();
     expect(screen.getByRole("img", { name: "Chart sunburst" })).toBeTruthy();
-    expect(container.querySelector("svg[aria-label='Chart treemap'] > text")?.textContent).toBe(
+    expect(screen.getByRole("img", { name: "Chart icicle" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart flame graph" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart circle pack" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart tree" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart radial tree" })).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Chart indented tree" })).toBeTruthy();
+    expect(container.querySelector("svg[aria-label='Chart treemap'] g text")?.textContent).toBe(
       "A",
+    );
+    expect(container.querySelector("svg[aria-label='Chart icicle'] g text")?.textContent).toBe("A");
+    expect(container.querySelector("svg[aria-label='Chart flame graph'] g text")?.textContent).toBe(
+      "Root",
+    );
+    expect(container.querySelector("svg[aria-label='Chart tree'] g text")?.textContent).toBe(
+      "Root",
     );
 
     expect(container.querySelector("[data-chart-sunburst-hover-label]")).toBeNull();
     fireEvent.pointerEnter(container.querySelector("path[aria-label='A: 2']")!);
     expect(container.querySelector("[data-chart-sunburst-hover-label]")).toBeTruthy();
+  });
+
+  test("zooms treemap nodes and returns to the parent layer", () => {
+    const hierarchy = {
+      id: "accounts",
+      label: "Accounts",
+      children: [
+        {
+          id: "starter",
+          label: "Starter",
+          children: [
+            { id: "starter-direct", label: "Direct", value: 24 },
+            { id: "starter-partner", label: "Partner", value: 18 },
+          ],
+        },
+        { id: "scale", label: "Scale", value: 16 },
+      ],
+    };
+    const data = createChartTreemapLayout(hierarchy, { height: 100, width: 200 });
+    const { container } = render(<ChartTreemapSvg data={data} zoomable />);
+
+    expect(
+      container.querySelector("[data-chart-treemap-node-id='starter'] text")?.textContent,
+    ).toBe("Starter");
+
+    fireEvent.click(container.querySelector("[data-chart-treemap-node-id='starter'] rect")!);
+
+    expect(
+      container.querySelector("[data-chart-treemap-node-id='starter-direct'] text")?.textContent,
+    ).toBe("Direct");
+    expect(
+      container.querySelector("[data-chart-treemap-node-id='starter-partner'] text")?.textContent,
+    ).toBe("Partner");
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to parent treemap level" }));
+
+    expect(
+      container.querySelector("[data-chart-treemap-node-id='starter'] text")?.textContent,
+    ).toBe("Starter");
+  });
+
+  test("supports controlled treemap focus without focusing leaf clicks", () => {
+    const onFocusedNodeChange = vi.fn();
+    const onNodeSelect = vi.fn();
+    const hierarchy = {
+      id: "accounts",
+      label: "Accounts",
+      children: [
+        {
+          id: "starter",
+          label: "Starter",
+          children: [
+            { id: "starter-direct", label: "Direct", value: 24 },
+            { id: "starter-partner", label: "Partner", value: 18 },
+          ],
+        },
+      ],
+    };
+    const data = createChartTreemapLayout(hierarchy, { height: 100, width: 200 });
+    const { container } = render(
+      <ChartTreemapSvg
+        data={data}
+        focusedNodeId="starter"
+        onFocusedNodeChange={onFocusedNodeChange}
+        onNodeSelect={onNodeSelect}
+        zoomable
+      />,
+    );
+
+    fireEvent.click(container.querySelector("[data-chart-treemap-node-id='starter-direct'] rect")!);
+
+    expect(onNodeSelect).toHaveBeenCalledWith(expect.objectContaining({ id: "starter-direct" }));
+    expect(onFocusedNodeChange).not.toHaveBeenCalled();
+  });
+
+  test("reports treemap focus changes", () => {
+    const onFocusedNodeChange = vi.fn();
+    const hierarchy = {
+      id: "accounts",
+      label: "Accounts",
+      children: [
+        {
+          id: "starter",
+          label: "Starter",
+          children: [{ id: "starter-direct", label: "Direct", value: 24 }],
+        },
+      ],
+    };
+    const data = createChartTreemapLayout(hierarchy, { height: 100, width: 200 });
+    const { container } = render(
+      <ChartTreemapSvg data={data} onFocusedNodeChange={onFocusedNodeChange} zoomable />,
+    );
+
+    fireEvent.click(container.querySelector("[data-chart-treemap-node-id='starter'] rect")!);
+
+    expect(onFocusedNodeChange).toHaveBeenCalledWith(
+      "starter",
+      expect.objectContaining({ id: "starter" }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Back to parent treemap level" }));
+
+    expect(onFocusedNodeChange).toHaveBeenLastCalledWith(null, null);
   });
 
   test("opens x-axis navigation menu and changes domains", () => {
