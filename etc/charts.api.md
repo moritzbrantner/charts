@@ -4,60 +4,7 @@ This file is generated from `dist/index.d.ts`. Update it intentionally when the 
 
 ```ts
 import { ChartContainer, ChartConfig } from '@moritzbrantner/ui';
-import { ComponentProps, JSX, ReactNode, MouseEvent, MouseEventHandler, PointerEventHandler, WheelEventHandler } from 'react';
-
-type DataDensityMetricRecord = Record<string, number>;
-type DataDensityMetricSummary = {
-    itemCount: number;
-    metricKeys: string[];
-    metrics: DataDensityMetricRecord;
-};
-type DataDensityViewportSummary = DataDensityMetricSummary & {
-    kind: "chart" | "graph" | "map" | "table";
-};
-type NumericSeriesPoint<TProperties = Record<string, unknown>> = {
-    id?: string | number;
-    label?: string;
-    metrics?: DataDensityMetricRecord;
-    properties?: TProperties;
-    x: number;
-    y: number;
-};
-type IndexedNumericSeriesPoint<TProperties = Record<string, unknown>> = Required<NumericSeriesPoint<TProperties>> & {
-    id: string;
-};
-type NumericSeriesDomain = [min: number, max: number];
-type BinnedSeriesQuery = {
-    includeEmptyBins?: boolean;
-    targetBinCount: number;
-    xDomain: NumericSeriesDomain;
-};
-type BinnedSeriesBin<TProperties = Record<string, unknown>> = {
-    averageY: number | null;
-    firstPoint: IndexedNumericSeriesPoint<TProperties> | null;
-    index: number;
-    lastPoint: IndexedNumericSeriesPoint<TProperties> | null;
-    maxY: number | null;
-    metrics: DataDensityMetricRecord;
-    minY: number | null;
-    pointCount: number;
-    sumY: number;
-    x0: number;
-    x1: number;
-};
-type BinnedSeriesSummary = {
-    binCount: number;
-    metrics: DataDensityMetricRecord;
-    pointCount: number;
-    xDomain: NumericSeriesDomain;
-};
-type BinnedSeries<TProperties = Record<string, unknown>> = {
-    bins: Array<BinnedSeriesBin<TProperties>>;
-    summary: BinnedSeriesSummary;
-};
-type BinnedSeriesIndexOptions<TProperties = Record<string, unknown>> = {
-    filterPoint?: (point: IndexedNumericSeriesPoint<TProperties>) => boolean;
-};
+import { ComponentProps, ReactNode, MouseEvent, MouseEventHandler, PointerEventHandler, WheelEventHandler, JSX } from 'react';
 
 type ChartSampleValueAccessor<TProperties = Record<string, unknown>> = ChartValueMode | {
     metric: string;
@@ -115,6 +62,59 @@ declare function getChartThresholdAnnotations<TProperties>(samples: Array<ChartD
     direction?: "above" | "below";
 }): Array<ChartThresholdAnnotation<TProperties>>;
 declare function getChartAnomalyAnnotations<TProperties>(samples: Array<ChartDensitySample<TProperties>>, options?: ChartAnomalyOptions<TProperties>): Array<ChartAnomalyAnnotation<TProperties>>;
+
+type DataDensityMetricRecord = Record<string, number>;
+type DataDensityMetricSummary = {
+    itemCount: number;
+    metricKeys: string[];
+    metrics: DataDensityMetricRecord;
+};
+type DataDensityViewportSummary = DataDensityMetricSummary & {
+    kind: "chart" | "graph" | "map" | "table";
+};
+type NumericSeriesPoint<TProperties = Record<string, unknown>> = {
+    id?: string | number;
+    label?: string;
+    metrics?: DataDensityMetricRecord;
+    properties?: TProperties;
+    x: number;
+    y: number;
+};
+type IndexedNumericSeriesPoint<TProperties = Record<string, unknown>> = Required<NumericSeriesPoint<TProperties>> & {
+    id: string;
+};
+type NumericSeriesDomain = [min: number, max: number];
+type BinnedSeriesQuery = {
+    includeEmptyBins?: boolean;
+    targetBinCount: number;
+    xDomain: NumericSeriesDomain;
+};
+type BinnedSeriesBin<TProperties = Record<string, unknown>> = {
+    averageY: number | null;
+    firstPoint: IndexedNumericSeriesPoint<TProperties> | null;
+    index: number;
+    lastPoint: IndexedNumericSeriesPoint<TProperties> | null;
+    maxY: number | null;
+    metrics: DataDensityMetricRecord;
+    minY: number | null;
+    pointCount: number;
+    sumY: number;
+    x0: number;
+    x1: number;
+};
+type BinnedSeriesSummary = {
+    binCount: number;
+    metrics: DataDensityMetricRecord;
+    pointCount: number;
+    xDomain: NumericSeriesDomain;
+};
+type BinnedSeries<TProperties = Record<string, unknown>> = {
+    bins: Array<BinnedSeriesBin<TProperties>>;
+    summary: BinnedSeriesSummary;
+};
+type BinnedSeriesIndexOptions<TProperties = Record<string, unknown>> = {
+    filterPoint?: (point: IndexedNumericSeriesPoint<TProperties>) => boolean;
+};
 
 type BinnedSeriesBackend = "hybrid-js" | "wasm-index";
 type ChartMetricRecord = DataDensityMetricRecord;
@@ -579,13 +579,16 @@ type ChartDensityBackendPolicyInput = {
     pointCount: number;
     requestedModes?: readonly ChartValueMode[];
 };
+
 declare const CHART_VALUE_MODE_DEFINITIONS: readonly ChartValueModeDefinition[];
 declare function getChartValueModeDefinition(mode: ChartValueMode): ChartValueModeDefinition;
 declare function getChartValueModeDefinitions(modes?: readonly ChartValueMode[]): ChartValueModeDefinition[];
+
 declare function resolveChartDensityBackendPolicy({ hasPercentiles, operationKind, pointCount, requestedModes, }: ChartDensityBackendPolicyInput): BinnedSeriesBackend;
 declare function createChartDensityIndex<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: ChartDensityIndexOptions<TProperties>): ChartDensityIndex<TProperties>;
 declare function createProgressiveChartDensityIndex<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): ProgressiveChartDensityIndex<TProperties>;
 declare const createChartSeriesIndex: typeof createChartDensityIndex;
+
 declare function createChartDensitySample<TProperties = Record<string, unknown>>(bin: ChartDensityBin<TProperties>, valueMode?: ChartValueMode): ChartDensitySample<TProperties>;
 declare function createChartDensityViewportSummary<TProperties = Record<string, unknown>>(series: ChartDensitySeries<TProperties>): ChartDensityViewportSummary;
 declare function getChartGapAnnotations<TProperties>(samples: Array<ChartDensitySample<TProperties>>): ChartGapAnnotation[];
@@ -614,6 +617,7 @@ declare function createChartWaterfallData(data: readonly ChartWaterfallDatum[], 
     initialValue?: number;
 }): ChartWaterfallRow[];
 declare function createChartFunnelData(data: readonly ChartFunnelDatum[]): ChartFunnelRow[];
+
 declare function createChartTreemapLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
     height: number;
     padding?: number;
@@ -1233,6 +1237,7 @@ type UseChartSeriesVisibilityResult = {
     toggle: (id: string) => void;
     visibleIds: string[];
 };
+
 declare function getChartAxisScaleDefinitions(): Array<{
     id: ChartAxisScale;
     label: string;
@@ -1242,6 +1247,10 @@ declare function resolveChartAxisTransformStatus({ dataDomain, scale, }: {
     dataDomain: [number, number] | null;
     scale: ChartAxisScale;
 }): ChartAxisTransformStatus;
+declare function ChartAxisTransformMenu(props: ChartAxisTransformMenuProps): JSX.Element | null;
+declare function ChartXAxisNavigationMenu({ "aria-label": ariaLabel, axisHeight, className, domain, formatValue, fullDomain, minSpan, onDomainChange, orientation, ranges, }: ChartXAxisNavigationMenuProps): JSX.Element | null;
+declare function ChartYAxisRangeMenu({ "aria-label": ariaLabel, axisWidth, className, dataDomain, formatValue, hiddenIds, legendItems, minSpan, onHiddenIdsChange, onValueChange, orientation, value, }: ChartYAxisRangeMenuProps): JSX.Element | null;
+
 declare function getRechartsAnimationProps(options?: ChartAnimationOptions): {
     animationDuration: number;
     animationEasing: string;
@@ -1266,6 +1275,7 @@ declare function useChartPlaybackDomain({ durationMs, enabled, fullDomain, onCom
     progress: number;
     reset: () => void;
 };
+
 declare function ChartPanel({ badge, children, className, description, title, }: ChartPanelProps): JSX.Element;
 declare function ChartMetricCard({ className, hint, label, value, }: ChartMetricCardProps): JSX.Element;
 declare function ChartMetricStrip({ className, label, value }: ChartMetricStripProps): JSX.Element;
@@ -1273,24 +1283,26 @@ declare function ChartDerivedMetricCard({ className, formatValue, label, previou
 declare function ChartSeriesLegend({ "aria-label": ariaLabel, className, hiddenIds, items, onHiddenIdsChange, orientation, showCounts, }: ChartSeriesLegendProps): JSX.Element;
 declare function ChartWithLegend({ children, className, defaultLegendDisplay, legend, legendDisplayLabel, legendMode, onLegendHide, legendSide, legendTitle, legendWidthClassName, }: ChartWithLegendProps): JSX.Element;
 declare function BinnedChart<TProperties = Record<string, unknown>>({ binCountOptions, chartClassName, children, className, config, drag, dragOptions, domain, formatDomainValue, fullDomain, index, minSpan, minimap, minimapClassName, minimapTargetBinCount, onDomainChange, query, renderDataOptions, valueMode, wheel, wheelOptions, }: BinnedChartProps<TProperties>): JSX.Element;
+
 declare function ChartLabelOverlay<TPayload = unknown>({ boundaryPadding, className, collisionPadding, font, labels, leaderLine, lineHeight, maxWidth, obstacles, offset, padding, pixelObstacles, renderLabel, xAxisId, yAxisId, }: ChartLabelOverlayProps<TPayload>): JSX.Element | null;
-declare function ChartAxisTransformMenu(props: ChartAxisTransformMenuProps): JSX.Element | null;
-declare function ChartXAxisNavigationMenu({ "aria-label": ariaLabel, axisHeight, className, domain, formatValue, fullDomain, minSpan, onDomainChange, orientation, ranges, }: ChartXAxisNavigationMenuProps): JSX.Element | null;
-declare function ChartYAxisRangeMenu({ "aria-label": ariaLabel, axisWidth, className, dataDomain, formatValue, hiddenIds, legendItems, minSpan, onHiddenIdsChange, onValueChange, orientation, value, }: ChartYAxisRangeMenuProps): JSX.Element | null;
+
 declare function ChartRangeSelector({ "aria-label": ariaLabel, className, formatDomain, onValueChange, ranges, value, }: ChartRangeSelectorProps): JSX.Element;
 declare function ChartValueModeSelector({ "aria-label": ariaLabel, className, definitions, onValueChange, value, }: ChartValueModeSelectorProps): JSX.Element;
 declare function ChartBackendStatus({ className, formatError, onWarmNow, progress, status, warmLabel, }: ChartBackendStatusProps): JSX.Element;
+
 declare function ChartSampleSparkline<TProperties = Record<string, unknown>>({ ariaLabel, className, domain, formatDomainValue, formatSampleLabel, formatValue, onSampleHover, onSampleSelect, samples, selectedSampleIndex, }: ChartSampleSparklineProps<TProperties>): JSX.Element;
 declare function ChartSampleInteractionOverlay<TProperties = Record<string, unknown>>({ ariaLabel, className, domain, formatSampleLabel, isSampleSelectable, orientation, onSampleContextMenu, onSampleHover, onSampleSelect, samples, selectedSampleIndex, }: ChartSampleInteractionOverlayProps<TProperties>): JSX.Element | null;
 declare function ChartDomainMinimap<TProperties = Record<string, unknown>>({ ariaLabel, className, domain, formatDomainValue, fullDomain, minSpan, onDomainChange, samples, }: ChartDomainMinimapProps<TProperties>): JSX.Element;
 declare function ChartHotBinRow<TProperties = Record<string, unknown>>({ className, formatMetric, formatX, sample, }: ChartHotBinRowProps<TProperties>): JSX.Element;
 declare function ChartThresholdMarker<TProperties = Record<string, unknown>>({ annotations, className, formatLabel, }: ChartThresholdMarkerProps<TProperties>): JSX.Element;
 declare function ChartAnomalyMarkerList<TProperties = Record<string, unknown>>({ anomalies, className, formatValue, onSelect, }: ChartAnomalyMarkerListProps<TProperties>): JSX.Element;
+
 declare function ChartHeatmapGrid<TProperties = Record<string, unknown>>({ ariaLabel, cells, className, formatValue, formatX, formatY, legend, onCellSelect, xAxis, yAxis, }: ChartHeatmapGridProps<TProperties>): JSX.Element;
 declare function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatValue, legend, onDatumSelect, showValueLabels, xAxis, yAxis, }: ChartBoxPlotSvgProps<TProperties>): JSX.Element;
 declare function ChartScatterSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, formatValue, height, legend, onPointSelect, series, width, xAxis, xDomain, yAxis, yDomain, }: ChartScatterSvgProps<TProperties>): JSX.Element;
 declare function ChartWaterfallSvg({ ariaLabel, className, data, formatValue, height, legend, onDatumSelect, showValueLabels, width, xAxis, yAxis, }: ChartWaterfallSvgProps): JSX.Element;
 declare function ChartFunnelSvg({ ariaLabel, className, data, formatValue, height, legend, onDatumSelect, showValueLabels, width, }: ChartFunnelSvgProps): JSX.Element;
+
 declare function ChartTreemapSvg<TPayload = unknown>({ ariaLabel, centerLabel, className, data, defaultFocusedNodeId, focusedNodeId, formatValue, onFocusedNodeChange, onNodeSelect, showNodeLabels, zoomable, }: ChartTreemapSvgProps<TPayload>): JSX.Element;
 declare function ChartSunburstSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, width, }: ChartSunburstSvgProps<TPayload>): JSX.Element;
 declare function ChartIcicleSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, showNodeLabels, }: ChartIcicleSvgProps<TPayload>): JSX.Element;
@@ -1299,16 +1311,20 @@ declare function ChartCirclePackSvg<TPayload = unknown>({ ariaLabel, className, 
 declare function ChartRadialTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, showNodeLabels, width, }: ChartRadialTreeSvgProps<TPayload>): JSX.Element;
 declare function ChartIndentedTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, onNodeSelect, showValueBars, }: ChartIndentedTreeSvgProps<TPayload>): JSX.Element;
 declare function ChartTreeSvg<TPayload = unknown>({ ariaLabel, className, data, formatValue, height, onNodeSelect, showNodeLabels, width, }: ChartTreeSvgProps<TPayload>): JSX.Element;
+
 declare function ChartValueModePreview<TProperties = Record<string, unknown>>({ active, className, definition, measured, onSelect, }: ChartValueModePreviewProps<TProperties>): JSX.Element;
+
 declare function useProgressiveChartDensity<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): {
     index: ProgressiveChartDensityIndex<TProperties>;
     status: ChartDensityProgressiveStatus;
     warmWasmNow: () => Promise<void>;
 };
+
 declare function useChartBinCount<TElement extends Element = HTMLDivElement>(options?: UseChartBinCountOptions): UseChartBinCountResult<TElement>;
 declare function useChartDragDomain<TElement extends Element = HTMLElement>({ disabled, domain, fullDomain, minDragPixels, minSpan, onDomainChange, onDomainPreviewChange, panScale, resetOnDoubleClick, selectModifier, updateMode, }: UseChartDragDomainOptions): UseChartDragDomainResult<TElement>;
 declare function useChartWheelDomain<TElement extends Element = HTMLElement>({ disabled, domain, fullDomain, minSpan, onDomainChange, scrollScale, zoomScale, }: UseChartWheelDomainOptions): UseChartWheelDomainResult<TElement>;
 declare function useChartSeriesVisibility({ defaultHiddenIds, hiddenIds, itemIds, minVisible, onHiddenIdsChange, }: UseChartSeriesVisibilityOptions): UseChartSeriesVisibilityResult;
+
 declare function measureChartSeries<TProperties = Record<string, unknown>>(index: ChartDensityIndex<TProperties>, query: ChartDensityQuery): MeasuredChartSeries<TProperties>;
 declare function getChartSampleYBounds<TProperties = Record<string, unknown>>(samples: Array<ChartDensitySample<TProperties>>): {
     maxY: number | null;
