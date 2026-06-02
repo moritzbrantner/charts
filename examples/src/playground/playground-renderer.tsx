@@ -200,6 +200,7 @@ export function renderPlaygroundChart({
       axisLine={false}
       domain={valueAxisRenderDomain}
       scale={valueAxisStatus.renderScale}
+      tickFormatter={formatCompact}
       tickLine={false}
       width={52}
     />

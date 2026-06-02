@@ -269,7 +269,7 @@ function DenseTrendStory() {
               <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" minTickGap={30} />
-                <YAxis width={48} />
+                <YAxis tickFormatter={formatStoryNumber} width={48} />
                 <Line
                   dataKey="value"
                   dot={false}
@@ -314,7 +314,7 @@ function GapBehaviorsStory() {
                 <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" hide />
-                  <YAxis width={42} />
+                  <YAxis tickFormatter={formatStoryNumber} width={42} />
                   <Line
                     connectNulls={behavior === "connect"}
                     dataKey="value"
@@ -366,7 +366,7 @@ function GroupedStackedStory() {
             <AreaChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" minTickGap={28} />
-              <YAxis width={42} />
+              <YAxis tickFormatter={formatStoryNumber} width={42} />
               {grouped.groups.map((group) =>
                 visibility.isVisible(group.key) ? (
                   <Area
@@ -420,7 +420,7 @@ function HistogramStory() {
           <BarChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" minTickGap={16} />
-            <YAxis width={42} />
+            <YAxis tickFormatter={formatStoryNumber} width={42} />
             <Bar dataKey="count" fill="var(--color-value)" isAnimationActive={false} />
           </BarChart>
         </ChartContainer>
@@ -610,7 +610,7 @@ function CrowdedOverlayStory() {
           <LineChart data={rows} margin={{ bottom: 24, left: 20, right: 24, top: 32 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" />
-            <YAxis width={42} />
+            <YAxis tickFormatter={formatStoryNumber} width={42} />
             <Line
               dataKey="value"
               dot={{ r: 3 }}
@@ -713,7 +713,11 @@ function YAxisRangeMenuStory() {
           >
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" />
-            <YAxis domain={range ?? ["auto", "auto"]} width={58} />
+            <YAxis
+              domain={range ?? ["auto", "auto"]}
+              tickFormatter={formatStoryNumber}
+              width={58}
+            />
             <Line
               dataKey="average"
               dot={false}
@@ -762,6 +766,7 @@ function AxisTransformMenuStory() {
             <YAxis
               domain={transform.domain ?? ["auto", "auto"]}
               scale={transform.scale}
+              tickFormatter={formatStoryNumber}
               width={58}
             />
             <Line
@@ -804,7 +809,7 @@ function XAxisNavigationMenuStory() {
           <LineChart data={rows} margin={{ bottom: 28, left: 20, right: 16, top: 16 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="x" domain={domain} tickFormatter={formatStoryHour} type="number" />
-            <YAxis width={58} />
+            <YAxis tickFormatter={formatStoryNumber} width={58} />
             <Line
               dataKey="value"
               dot={false}
@@ -855,7 +860,7 @@ function AxisTransformsStory() {
           <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="x" domain={[120, 720]} tickFormatter={formatStoryHour} type="number" />
-            <YAxis domain={[1, "auto"]} scale="log" width={58} />
+            <YAxis domain={[1, "auto"]} scale="log" tickFormatter={formatStoryNumber} width={58} />
             <Line
               dataKey="average"
               dot={false}
@@ -908,7 +913,7 @@ function AnimatedTrendStory() {
           <AreaChart data={rows} margin={{ bottom: 8, left: 4, right: 16, top: 16 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="x" domain={[0, 720]} tickFormatter={formatStoryHour} type="number" />
-            <YAxis width={54} />
+            <YAxis tickFormatter={formatStoryNumber} width={54} />
             <Area
               dataKey="average"
               fill="var(--color-average)"
@@ -1037,4 +1042,11 @@ function rangesEqual(left: [number, number], right: [number, number]) {
 
 function formatStoryHour(value: number) {
   return `${Math.round(value)}h`;
+}
+
+function formatStoryNumber(value: number) {
+  return new Intl.NumberFormat("en", {
+    maximumFractionDigits: 1,
+    notation: "compact",
+  }).format(value);
 }

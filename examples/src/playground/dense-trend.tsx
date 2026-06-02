@@ -276,7 +276,12 @@ export function DenseTrendExample({
                 <BarChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                  <YAxis tickLine={false} axisLine={false} width={56} />
+                  <YAxis
+                    tickFormatter={formatCompact}
+                    tickLine={false}
+                    axisLine={false}
+                    width={56}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Bar dataKey="value" fill="var(--color-value)" radius={0} />
                   {sampleOverlay}
@@ -285,7 +290,12 @@ export function DenseTrendExample({
                 <AreaChart data={renderData} margin={{ bottom: 8, left: 8, right: 12, top: 12 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                  <YAxis tickLine={false} axisLine={false} width={56} />
+                  <YAxis
+                    tickFormatter={formatCompact}
+                    tickLine={false}
+                    axisLine={false}
+                    width={56}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Area
                     dataKey="value"

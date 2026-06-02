@@ -248,7 +248,7 @@ export function AnalyticsExamples({
             <LineChart data={renderRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-              <YAxis tickLine={false} axisLine={false} width={48} />
+              <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Line
                 dataKey="average"
@@ -302,7 +302,7 @@ export function AnalyticsExamples({
           <AreaChart data={cumulativeRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-            <YAxis tickLine={false} axisLine={false} width={60} />
+            <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={60} />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Area
               dataKey="cumulativeRevenue"
@@ -530,7 +530,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
         <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={48} />
+          <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
           <ChartTooltip content={<ChartTooltipContent />} />
           <Line
             dataKey="previous"
@@ -570,7 +570,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
         <BarChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={42} />
+          <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
           <ChartTooltip content={<ChartTooltipContent />} />
           <Bar dataKey="revenueK" fill="var(--color-revenueK)" radius={0} />
         </BarChart>
@@ -580,7 +580,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
         <BarChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={42} />
+          <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
           <ChartTooltip content={<ChartTooltipContent />} />
           <Bar dataKey="volume" fill="var(--color-volume)" radius={0} />
         </BarChart>
@@ -590,7 +590,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
         <LineChart data={rows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-          <YAxis tickLine={false} axisLine={false} width={48} />
+          <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
           <ChartTooltip content={<ChartTooltipContent />} />
           <Line
             dataKey="peak"
@@ -781,6 +781,7 @@ export function ComposedChartExamples({
                 <YAxis
                   allowDataOverflow={lineYAxisRange !== null}
                   domain={lineYAxisDomain}
+                  tickFormatter={formatCompact}
                   tickLine={false}
                   axisLine={false}
                   width={60}
@@ -858,7 +859,7 @@ export function ComposedChartExamples({
               <BarChart data={groupedRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-                <YAxis tickLine={false} axisLine={false} width={42} />
+                <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
                 <ChartTooltip content={<ChartTooltipContent />} />
                 {grouped.groups.map((group, index) =>
                   groupedVisibility.isVisible(group.key) ? (
@@ -1063,7 +1064,7 @@ export function DistributionExamples({
             <BarChart data={histogramRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-              <YAxis tickLine={false} axisLine={false} width={42} />
+              <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Bar dataKey="count" fill="var(--color-count)" radius={0} />
             </BarChart>
@@ -1084,7 +1085,7 @@ export function DistributionExamples({
             <BarChart data={groupedRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-              <YAxis tickLine={false} axisLine={false} width={42} />
+              <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
               <ChartTooltip content={<ChartTooltipContent />} />
               {grouped.groups.map((group, index) => (
                 <Bar
@@ -1104,7 +1105,7 @@ export function DistributionExamples({
             <AreaChart data={bandRows} margin={{ bottom: 8, left: 4, right: 14, top: 12 }}>
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
-              <YAxis tickLine={false} axisLine={false} width={48} />
+              <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
               <ChartTooltip content={<ChartTooltipContent />} />
               <Area
                 dataKey="range"
@@ -1286,7 +1287,12 @@ export function GapBehaviorExample({
                 >
                   <CartesianGrid vertical={false} />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={24} />
-                  <YAxis tickLine={false} axisLine={false} width={42} />
+                  <YAxis
+                    tickFormatter={formatCompact}
+                    tickLine={false}
+                    axisLine={false}
+                    width={42}
+                  />
                   <ChartTooltip content={<ChartTooltipContent />} />
                   <Line
                     dataKey="average"
