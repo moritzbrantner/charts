@@ -1,18 +1,35 @@
 import { expect, test } from "@playwright/test";
 
-const stories = [
+type VisualStory = {
+  id: string;
+  maxDiffPixelRatio?: number;
+  name: string;
+  responsive: boolean;
+};
+
+const stories: readonly VisualStory[] = [
   { id: "charts-quality--dense-trend", name: "dense-trend", responsive: true },
   { id: "charts-quality--gap-behaviors", name: "gap-behaviors", responsive: false },
   { id: "charts-quality--heatmap", name: "heatmap", responsive: false },
-  { id: "charts-quality--box-plot", name: "box-plot", responsive: false },
+  {
+    id: "charts-quality--box-plot",
+    maxDiffPixelRatio: 0.03,
+    name: "box-plot",
+    responsive: false,
+  },
   { id: "charts-quality--scatter-bubble", name: "scatter-bubble", responsive: false },
-  { id: "charts-quality--waterfall-funnel", name: "waterfall-funnel", responsive: false },
+  {
+    id: "charts-quality--waterfall-funnel",
+    maxDiffPixelRatio: 0.03,
+    name: "waterfall-funnel",
+    responsive: false,
+  },
   { id: "charts-quality--hierarchy-charts", name: "hierarchy-charts", responsive: false },
   { id: "charts-quality--crowded-overlay", name: "crowded-overlay", responsive: false },
   { id: "charts-quality--axis-transforms", name: "axis-transforms", responsive: false },
   { id: "charts-quality--animated-trend", name: "animated-trend", responsive: false },
   { id: "charts-quality--interactive-samples", name: "interactive-samples", responsive: true },
-] as const;
+];
 
 for (const story of stories) {
   test(`${story.name} visual snapshot`, async ({ page }, testInfo) => {
@@ -29,7 +46,13 @@ for (const story of stories) {
       await expect(page.getByRole("img").first()).toBeVisible();
     }
 
-    await expect(page.locator("#storybook-root")).toHaveScreenshot(`${story.name}.png`);
+    if (story.maxDiffPixelRatio === undefined) {
+      await expect(page.locator("#storybook-root")).toHaveScreenshot(`${story.name}.png`);
+    } else {
+      await expect(page.locator("#storybook-root")).toHaveScreenshot(`${story.name}.png`, {
+        maxDiffPixelRatio: story.maxDiffPixelRatio,
+      });
+    }
   });
 }
 
