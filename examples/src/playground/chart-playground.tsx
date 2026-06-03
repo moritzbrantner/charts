@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import {
   ChartCirclePackSvg,
+  ChartCalendarHeatmapSvg,
   ChartDomainMinimap,
   ChartFlameGraphSvg,
   ChartFunnelSvg,
@@ -11,6 +12,7 @@ import {
   ChartIndentedTreeSvg,
   ChartPanel,
   ChartRadialTreeSvg,
+  ChartRidgelineSvg,
   ChartScatterSvg,
   ChartSeriesLegend,
   ChartSunburstSvg,
@@ -20,11 +22,13 @@ import {
   ChartWaterfallSvg,
   ChartWithLegend,
   createChartCirclePackLayout,
+  createChartCalendarHeatmapData,
   createChartDensityViewportSummary,
   createChartFlameGraphLayout,
   createChartIcicleLayout,
   createChartIndentedTreeLayout,
   createChartRadialTreeLayout,
+  createChartRidgelineData,
   createChartRenderData,
   createChartSunburstLayout,
   createChartTreeLayout,
@@ -189,9 +193,11 @@ export function ChartPlayground({
   });
   const supportsAxisOrientation =
     chartType !== "bubble" &&
+    chartType !== "calendar-heatmap" &&
     chartType !== "candle" &&
     chartType !== "funnel" &&
     chartType !== "heatmap" &&
+    chartType !== "ridgeline" &&
     chartType !== "scatter" &&
     chartType !== "sunburst" &&
     chartType !== "treemap" &&
@@ -254,6 +260,32 @@ export function ChartPlayground({
           })
         : { cells: [] },
     [effectiveDomain, chartType, heatmapYBins, index, targetBinCount],
+  );
+  const distributionPoints = useMemo(
+    () =>
+      chartType === "calendar-heatmap" || chartType === "ridgeline"
+        ? index.getChartPoints({ maxPoints: 20_000, xDomain: effectiveDomain }).points
+        : [],
+    [chartType, effectiveDomain, index],
+  );
+  const calendarHeatmap = useMemo(
+    () =>
+      createChartCalendarHeatmapData(distributionPoints, {
+        dayMs: 24,
+        xDomain: effectiveDomain,
+      }),
+    [distributionPoints, effectiveDomain],
+  );
+  const ridgeline = useMemo(
+    () =>
+      createChartRidgelineData(distributionPoints, {
+        bucketCount: 24,
+        groupBy: (point) => point.properties.plan,
+        maxGroups: 4,
+        valueAccessor: "y",
+        xDomain: effectiveDomain,
+      }),
+    [distributionPoints, effectiveDomain],
   );
   const grouped = useMemo(
     () =>
@@ -588,6 +620,13 @@ export function ChartPlayground({
             formatValue={businessMetric.formatValue}
             onNodeSelect={setSelectedHierarchyNode}
           />
+        ) : chartType === "calendar-heatmap" ? (
+          <ChartCalendarHeatmapSvg
+            data={calendarHeatmap}
+            formatValue={(day) => (day.value === null ? "n/a" : formatCompact(day.value))}
+          />
+        ) : chartType === "ridgeline" ? (
+          <ChartRidgelineSvg data={ridgeline} formatValue={formatCompact} />
         ) : chartType === "heatmap" ? (
           <ChartHeatmapGrid
             cells={heatmap.cells}

@@ -17,8 +17,10 @@ import {
 } from "./stories/control-stories";
 import {
   BoxPlotStory,
+  CalendarHeatmapStory,
   HeatmapStory,
   HistogramStory,
+  RidgelineStory,
   ScatterBubbleStory,
 } from "./stories/distribution-stories";
 import {
@@ -63,6 +65,16 @@ export const Histogram: Story = {
 export const Heatmap: Story = {
   name: "Distribution/Heatmap",
   render: () => <HeatmapStory />,
+};
+
+export const CalendarHeatmap: Story = {
+  name: "Distribution/CalendarHeatmap",
+  render: () => <CalendarHeatmapStory />,
+};
+
+export const Ridgeline: Story = {
+  name: "Distribution/Ridgeline",
+  render: () => <RidgelineStory />,
 };
 
 export const BoxPlot: Story = {

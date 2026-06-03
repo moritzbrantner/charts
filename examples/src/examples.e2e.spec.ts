@@ -367,6 +367,20 @@ test("chart type pages render locked composers from the top navbar", async ({ pa
       value: "histogram",
     },
     { label: "Heatmap", legend: false, path: "/heatmap.html", title: "Heatmap", value: "heatmap" },
+    {
+      label: "Calendar heatmap",
+      legend: false,
+      path: "/calendar-heatmap.html",
+      title: "Calendar heatmap",
+      value: "calendar-heatmap",
+    },
+    {
+      label: "Ridgeline",
+      legend: false,
+      path: "/ridgeline.html",
+      title: "Ridgeline plot",
+      value: "ridgeline",
+    },
     { label: "Stacked bars", path: "/stacked.html", title: "Stacked bars", value: "stacked" },
     {
       label: "Waterfall",

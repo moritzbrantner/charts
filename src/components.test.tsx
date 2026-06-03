@@ -8,6 +8,7 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartCalendarHeatmapSvg,
   ChartCirclePackSvg,
   ChartDerivedMetricCard,
   ChartDomainMinimap,
@@ -24,6 +25,7 @@ import {
   ChartSunburstSvg,
   ChartThresholdMarker,
   ChartRadialTreeSvg,
+  ChartRidgelineSvg,
   ChartTreeSvg,
   ChartTreemapSvg,
   ChartWaterfallSvg,
@@ -32,6 +34,7 @@ import {
   ChartWithLegend,
   ChartYAxisRangeMenu,
   createChartBoxPlotData,
+  createChartCalendarHeatmapData,
   createChartCirclePackLayout,
   createChartDensityIndex,
   createChartFlameGraphLayout,
@@ -39,6 +42,7 @@ import {
   createChartIcicleLayout,
   createChartIndentedTreeLayout,
   createChartRadialTreeLayout,
+  createChartRidgelineData,
   createChartSunburstLayout,
   createChartTreeLayout,
   createChartTreemapLayout,
@@ -645,6 +649,62 @@ describe("@moritzbrantner/charts", () => {
     fireEvent.click(document.querySelector("[data-chart-heatmap-cell='0']")!);
 
     expect(onCellSelect).toHaveBeenCalledWith(heatmap.cells[0]);
+  });
+
+  test("renders calendar heatmap days and selects a day", () => {
+    const onDatumSelect = vi.fn();
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", x: 0, y: 2 },
+        { id: "b", x: 12, y: 6 },
+      ],
+      {
+        dayMs: 24,
+        xDomain: [0, 24],
+      },
+    );
+
+    render(<ChartCalendarHeatmapSvg data={data} onDatumSelect={onDatumSelect} />);
+
+    expect(screen.getByRole("img", { name: "Chart calendar heatmap" })).toBeTruthy();
+    expect(document.querySelector("title")?.textContent).toContain("4");
+    fireEvent.click(document.querySelector("[data-chart-calendar-day='day-0']")!);
+
+    expect(onDatumSelect).toHaveBeenCalledWith(data.days[0]);
+  });
+
+  test("renders ridgeline groups and selects a group", () => {
+    const onGroupSelect = vi.fn();
+    const data = createChartRidgelineData(
+      [
+        { properties: { plan: "pro" }, x: 0, y: 1 },
+        { properties: { plan: "pro" }, x: 1, y: 2 },
+        { properties: { plan: "team" }, x: 2, y: 8 },
+      ],
+      {
+        bucketCount: 4,
+        groupBy: { property: "plan" },
+      },
+    );
+
+    render(<ChartRidgelineSvg data={data} onGroupSelect={onGroupSelect} />);
+
+    expect(screen.getByRole("img", { name: "Chart ridgeline" })).toBeTruthy();
+    fireEvent.click(document.querySelector("[data-chart-ridgeline-group='pro']")!);
+
+    expect(onGroupSelect).toHaveBeenCalledWith(data.groups[0]);
+  });
+
+  test("renders calendar heatmap and ridgeline empty states", () => {
+    render(
+      <>
+        <ChartCalendarHeatmapSvg data={[]} />
+        <ChartRidgelineSvg data={[]} />
+      </>,
+    );
+
+    expect(screen.getByText("No calendar heatmap data.")).toBeTruthy();
+    expect(screen.getByText("No ridgeline data.")).toBeTruthy();
   });
 
   test("renders box plot marks and selects a datum", () => {

@@ -255,6 +255,62 @@ export type ChartHeatmap<TProperties = Record<string, unknown>> = {
   };
 };
 
+export type ChartCalendarHeatmapDatum<TProperties = Record<string, unknown>> = {
+  date: Date;
+  day: number;
+  dayOfWeek: number;
+  firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+  id: string;
+  index: number;
+  lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+  metrics: ChartMetricRecord;
+  pointCount: number;
+  value: number | null;
+  week: number;
+  x0: number;
+  x1: number;
+};
+
+export type ChartCalendarHeatmapData<TProperties = Record<string, unknown>> = {
+  days: Array<ChartCalendarHeatmapDatum<TProperties>>;
+  summary: {
+    dayCount: number;
+    maxValue: number | null;
+    minValue: number | null;
+    pointCount: number;
+    xDomain: [number, number];
+  };
+};
+
+export type ChartRidgelineBucket = {
+  index: number;
+  pointCount: number;
+  value: number;
+  value0: number;
+  value1: number;
+  x: number;
+};
+
+export type ChartRidgelineDatum<_TProperties = Record<string, unknown>> = {
+  buckets: ChartRidgelineBucket[];
+  groupId: string;
+  groupLabel: string;
+  maxCount: number;
+  pointCount: number;
+};
+
+export type ChartRidgelineData<TProperties = Record<string, unknown>> = {
+  groups: Array<ChartRidgelineDatum<TProperties>>;
+  summary: {
+    bucketCount: number;
+    groupCount: number;
+    maxCount: number;
+    pointCount: number;
+    valueDomain: [number, number];
+    xDomain: [number, number] | null;
+  };
+};
+
 export type ChartPointSampling = "stride";
 
 export type ChartPointQuery = {

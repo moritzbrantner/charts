@@ -11,6 +11,8 @@ const stories: readonly VisualStory[] = [
   { id: "charts-quality--dense-trend", name: "dense-trend", responsive: true },
   { id: "charts-quality--gap-behaviors", name: "gap-behaviors", responsive: false },
   { id: "charts-quality--heatmap", name: "heatmap", responsive: false },
+  { id: "charts-quality--calendar-heatmap", name: "calendar-heatmap", responsive: false },
+  { id: "charts-quality--ridgeline", name: "ridgeline", responsive: false },
   {
     id: "charts-quality--box-plot",
     maxDiffPixelRatio: 0.03,

@@ -6,12 +6,14 @@ import {
   createChartDensityViewportSummary,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCalendarHeatmapData,
   createChartCirclePackLayout,
   createChartFlameGraphLayout,
   createChartFunnelData,
   createChartIcicleLayout,
   createChartIndentedTreeLayout,
   createGroupedChartRenderData,
+  createChartRidgelineData,
   createChartRenderData,
   createChartRadialTreeLayout,
   createChartSunburstLayout,
@@ -793,6 +795,125 @@ describe("@moritzbrantner/charts", () => {
         yDomain: [0, 10],
       }).cells,
     ).toHaveLength(2);
+  });
+
+  test("creates calendar heatmap days from source points", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", metrics: { revenue: 1 }, x: 1, y: 2 },
+        { id: "b", metrics: { revenue: 3 }, x: 2, y: 4 },
+        { id: "c", metrics: { revenue: 5 }, x: 25, y: 8 },
+      ],
+      {
+        dayMs: 24,
+        xDomain: [0, 72],
+      },
+    );
+
+    expect(data.days).toHaveLength(3);
+    expect(data.days.map((day) => day.pointCount)).toEqual([2, 1, 0]);
+    expect(data.days.map((day) => day.value)).toEqual([3, 8, null]);
+    expect(data.days[0]?.firstPoint?.id).toBe("a");
+    expect(data.days[0]?.lastPoint?.id).toBe("b");
+    expect(data.days[0]).toMatchObject({
+      metrics: { revenue: 4 },
+      x0: 0,
+      x1: 24,
+    });
+    expect(data.summary).toMatchObject({
+      dayCount: 3,
+      maxValue: 8,
+      minValue: 3,
+      pointCount: 3,
+      xDomain: [0, 72],
+    });
+  });
+
+  test("calendar heatmap can omit empty days and respects x domains", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", x: 1, y: 2 },
+        { id: "b", x: 25, y: 4 },
+        { id: "c", x: 49, y: 6 },
+      ],
+      {
+        dayMs: 24,
+        includeEmptyDays: false,
+        xDomain: [24, 48],
+      },
+    );
+
+    expect(data.days).toHaveLength(1);
+    expect(data.days[0]).toMatchObject({
+      pointCount: 1,
+      value: 4,
+      x0: 24,
+    });
+    expect(data.summary.pointCount).toBe(1);
+  });
+
+  test("calendar heatmap supports custom value accessors", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", metrics: { revenue: 2 }, x: 0, y: 100 },
+        { id: "b", metrics: { revenue: 6 }, x: 12, y: 200 },
+      ],
+      {
+        dayMs: 24,
+        valueAccessor: { metric: "revenue" },
+        xDomain: [0, 24],
+      },
+    );
+
+    expect(data.days[0]?.value).toBe(4);
+  });
+
+  test("creates ridgeline grouped histograms", () => {
+    const data = createChartRidgelineData(
+      [
+        { id: "a", properties: { plan: "pro" }, x: 0, y: 1 },
+        { id: "b", properties: { plan: "pro" }, x: 1, y: 3 },
+        { id: "c", properties: { plan: "team" }, x: 2, y: 9 },
+        { id: "d", properties: { plan: "team" }, x: 3, y: Number.NaN },
+      ],
+      {
+        bucketCount: 4,
+        groupBy: { property: "plan" },
+        valueDomain: [0, 10],
+        xDomain: [0, 2],
+      },
+    );
+
+    expect(data.groups.map((group) => group.groupLabel)).toEqual(["pro", "team"]);
+    expect(data.groups[0]?.buckets.map((bucket) => bucket.pointCount)).toEqual([1, 1, 0, 0]);
+    expect(data.groups[1]?.buckets.map((bucket) => bucket.pointCount)).toEqual([0, 0, 0, 1]);
+    expect(data.summary).toMatchObject({
+      bucketCount: 4,
+      groupCount: 2,
+      maxCount: 1,
+      pointCount: 3,
+      valueDomain: [0, 10],
+      xDomain: [0, 2],
+    });
+  });
+
+  test("ridgeline merges overflow groups into other", () => {
+    const data = createChartRidgelineData(
+      [
+        { properties: { plan: "a" }, x: 0, y: 1 },
+        { properties: { plan: "a" }, x: 1, y: 2 },
+        { properties: { plan: "b" }, x: 2, y: 3 },
+        { properties: { plan: "c" }, x: 3, y: 4 },
+      ],
+      {
+        bucketCount: 2,
+        groupBy: (point) => point.properties.plan,
+        maxGroups: 1,
+      },
+    );
+
+    expect(data.groups.map((group) => group.groupId)).toEqual(["a", "__other"]);
+    expect(data.groups.map((group) => group.pointCount)).toEqual([2, 2]);
   });
 
   test("creates grouped chart series and grouped render rows", () => {

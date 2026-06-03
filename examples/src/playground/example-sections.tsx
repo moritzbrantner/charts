@@ -25,6 +25,7 @@ import {
   ChartAnomalyMarkerList,
   ChartBackendStatus,
   ChartBoxPlotSvg,
+  ChartCalendarHeatmapSvg,
   ChartDerivedMetricCard,
   ChartHeatmapGrid,
   ChartHotBinRow,
@@ -32,6 +33,7 @@ import {
   ChartMetricCard,
   ChartMetricStrip,
   ChartPanel,
+  ChartRidgelineSvg,
   ChartSampleSparkline,
   ChartSeriesLegend,
   ChartThresholdMarker,
@@ -40,8 +42,10 @@ import {
   ChartYAxisRangeMenu,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCalendarHeatmapData,
   createChartDensityIndex,
   createChartDensityViewportSummary,
+  createChartRidgelineData,
   createChartRenderData,
   createCumulativeChartSeries,
   createDeltaChartSeries,
@@ -980,6 +984,29 @@ export function DistributionExamples({
       }),
     [activeRange.domain, index],
   );
+  const sourcePoints = useMemo(
+    () => index.getChartPoints({ maxPoints: 20_000, xDomain: activeRange.domain }).points,
+    [activeRange.domain, index],
+  );
+  const calendarHeatmap = useMemo(
+    () =>
+      createChartCalendarHeatmapData(sourcePoints, {
+        dayMs: 24,
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, sourcePoints],
+  );
+  const ridgeline = useMemo(
+    () =>
+      createChartRidgelineData(sourcePoints, {
+        bucketCount: 24,
+        groupBy: (point) => point.properties.plan,
+        maxGroups: 4,
+        valueAccessor: "y",
+        xDomain: activeRange.domain,
+      }),
+    [activeRange.domain, sourcePoints],
+  );
   const grouped = useMemo(
     () =>
       index.getGroupedChartSeries({
@@ -1045,7 +1072,8 @@ export function DistributionExamples({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">Distribution charts</h2>
           <p className="text-sm leading-6 text-muted-foreground">
-            Histogram, heatmap, grouped stacks, percentile bands, and box plots from the same index.
+            Histogram, heatmap, calendar heatmap, ridgeline, grouped stacks, percentile bands, and
+            box plots from the same index.
           </p>
         </div>
         <Badge variant="outline" className="w-fit rounded-full">
@@ -1078,6 +1106,17 @@ export function DistributionExamples({
             formatY={formatCompact}
             formatValue={(cell) => `${formatCompact(cell.pointCount)} points`}
           />
+        </ChartPanel>
+
+        <ChartPanel title="Calendar heatmap" description="Daily buckets across the active range.">
+          <ChartCalendarHeatmapSvg
+            data={calendarHeatmap}
+            formatValue={(day) => (day.value === null ? "n/a" : formatCompact(day.value))}
+          />
+        </ChartPanel>
+
+        <ChartPanel title="Ridgeline plot" description="Y-value distributions grouped by plan.">
+          <ChartRidgelineSvg data={ridgeline} formatValue={formatCompact} />
         </ChartPanel>
 
         <ChartPanel title="Stacked by plan" description="Point counts grouped by plan.">

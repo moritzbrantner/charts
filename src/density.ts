@@ -13,9 +13,11 @@ export {
 export {
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCalendarHeatmapData,
   createChartDensitySample,
   createChartDensityViewportSummary,
   createChartFunnelData,
+  createChartRidgelineData,
   createChartRenderData,
   createChartWaterfallData,
   createGroupedChartRenderData,
