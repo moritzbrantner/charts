@@ -84,6 +84,8 @@ const rows = createChartRenderData(series.samples, {
   dropped, or zero-filled.
 - Progressive backend: `createProgressiveChartDensityIndex` renders immediately
   through the hybrid JS backend and can warm the WASM index for later queries.
+- Worker backend: `createChartDensityWorkerIndex` constructs a WASM density
+  index in a module worker and serves async query results off the main thread.
 - Labels: `layoutChartLabels` and `ChartLabelOverlay` place annotations while
   avoiding collisions with chart marks and other labels.
 
@@ -91,6 +93,7 @@ const rows = createChartRenderData(series.samples, {
 
 - `createChartDensityIndex(points, options)` / `createChartSeriesIndex(points, options)`
 - `createProgressiveChartDensityIndex(points, options)`
+- `createChartDensityWorkerIndex(points, options, workerOptions)`
 - `index.getChartSeries(query)` / `index.getBinnedSeries(query)`
 - `createChartDensitySample(bin, valueMode)` / `createChartDensityViewportSummary(series)`
 - `createChartRenderData(samples, options)` / `getChartGapAnnotations(samples)`
@@ -604,6 +607,28 @@ native kernel immediately and can pay construction cost up front. Use
 `progressive` for interactive screens: the first render uses JavaScript, then
 queries switch to WASM after warmup.
 
+For large browser datasets where construction cost is visible, opt into worker
+warmup:
+
+```ts
+const index = createProgressiveChartDensityIndex(points, {
+  progressive: {
+    worker: true,
+  },
+});
+
+const workerIndex = await index.whenWorkerReady();
+const series = await workerIndex?.getChartSeries({
+  targetBinCount: 400,
+  xDomain: [0, 1_000_000],
+});
+```
+
+Worker indexes are async because browser workers cannot expose a synchronous
+object API. Function-based `filterPoint` options and function-based
+`valueAccessor` queries stay on the main-thread index; pass serializable data
+and object accessors such as `{ metric: "revenue" }` to the worker path.
+
 The WASM binary is embedded by `@moritzbrantner/viz-engine`, so consumers do not
 need a special `.wasm` asset loader for the package import.
 Benchmarks generally show histograms, heatmaps, and repeated packed series
@@ -632,7 +657,7 @@ data kernel, not a full visualization framework. Near-term kernel modules are:
 - percentile, histogram, and heatmap kernels
 - future contour and bin transforms
 - future stack and layout kernels
-- future worker-backed indexing for non-blocking construction
+- worker-backed indexing for non-blocking construction
 
 ## Examples app
 

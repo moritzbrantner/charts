@@ -10,6 +10,7 @@ export {
   createProgressiveChartDensityIndex,
   resolveChartDensityBackendPolicy,
 } from "./density/backend";
+export { createChartDensityWorkerIndex } from "./density/worker-client";
 export {
   createChartBandRenderData,
   createChartBoxPlotData,

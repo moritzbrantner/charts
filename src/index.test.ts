@@ -1,7 +1,8 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   createChartDensityIndex,
+  createChartDensityWorkerIndex,
   createChartDensitySample,
   createChartDensityViewportSummary,
   createChartBandRenderData,
@@ -1144,6 +1145,92 @@ describe("@moritzbrantner/charts", () => {
     expect(index.getChartSeries(query)).toEqual(firstSeries);
   });
 
+  test("builds a wasm-index in a worker and serves async density queries", async () => {
+    const points = Array.from({ length: 80 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1, revenue: pointIndex % 11 },
+      x: pointIndex,
+      y: pointIndex % 13,
+    }));
+    const query = {
+      includeEmptyBins: true,
+      targetBinCount: 8,
+      valueMode: "average" as const,
+      xDomain: [0, 79] as [number, number],
+    };
+    const workerIndex = createChartDensityWorkerIndex(
+      points,
+      {},
+      {
+        createWorker: () => new TestChartDensityWorker() as unknown as Worker,
+      },
+    );
+    const expected = createChartDensityIndex(points, { backend: "wasm-index" }).getChartSeries(
+      query,
+    );
+
+    expect(workerIndex).not.toBeNull();
+    await workerIndex?.whenReady();
+
+    expect(await workerIndex?.getBackendCapabilities()).toMatchObject({
+      backend: "wasm-index",
+      usesWasm: true,
+    });
+    expect(await workerIndex?.getChartSeries(query)).toEqual(expected);
+
+    workerIndex?.terminate();
+  });
+
+  test("can warm a worker-backed index progressively without blocking sync queries", async () => {
+    const scheduledWarmups: Array<() => void> = [];
+    const onWorkerReady = vi.fn();
+    const points = Array.from({ length: 120 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1 },
+      x: pointIndex,
+      y: pointIndex % 7,
+    }));
+    const index = createProgressiveChartDensityIndex(points, {
+      progressive: {
+        onWorkerReady,
+        scheduler(warmup) {
+          scheduledWarmups.push(warmup);
+        },
+        worker: {
+          createWorker: () => new TestChartDensityWorker() as unknown as Worker,
+        },
+      },
+    });
+
+    expect(index.getActiveBackend()).toBe("hybrid-js");
+    expect(scheduledWarmups).toHaveLength(1);
+
+    scheduledWarmups[0]?.();
+
+    expect(index.getProgressiveStatus()).toMatchObject({
+      activeBackend: "hybrid-js",
+      isWorkerBuilding: true,
+      workerReady: false,
+      wasmReady: false,
+    });
+
+    const workerIndex = await index.whenWorkerReady();
+
+    expect(workerIndex).not.toBeNull();
+    expect(index.getActiveBackend()).toBe("hybrid-js");
+    expect(index.getProgressiveStatus()).toMatchObject({
+      activeBackend: "hybrid-js",
+      isWorkerBuilding: false,
+      workerError: null,
+      workerReady: true,
+      wasmReady: false,
+    });
+    expect(onWorkerReady).toHaveBeenCalledTimes(1);
+    expect(await workerIndex?.getPointById("point-20")).toMatchObject({ y: 6 });
+
+    workerIndex?.terminate();
+  });
+
   test("can defer wasm-index construction until an interaction warms it manually", async () => {
     const index = createProgressiveChartDensityIndex(
       Array.from({ length: 50 }, (_, pointIndex) => ({
@@ -1199,6 +1286,115 @@ describe("@moritzbrantner/charts", () => {
     });
   });
 });
+
+class TestChartDensityWorker {
+  #index: ReturnType<typeof createChartDensityIndex> | null = null;
+  #listeners = new Map<string, Set<(event: MessageEvent) => void>>();
+
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    const listeners = this.#listeners.get(type) ?? new Set<(event: MessageEvent) => void>();
+
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  postMessage(message: {
+    method?: string;
+    options?: Parameters<typeof createChartDensityIndex>[1];
+    pointId?: string;
+    points?: Parameters<typeof createChartDensityIndex>[0];
+    query?: unknown;
+    requestId: number;
+    type: "build" | "dispose" | "query";
+  }) {
+    setTimeout(() => {
+      try {
+        if (message.type === "build") {
+          this.#index = createChartDensityIndex(message.points ?? [], {
+            ...message.options,
+            backend: "wasm-index",
+          });
+          this.#emit("message", { requestId: message.requestId, type: "built" });
+          return;
+        }
+
+        if (message.type === "dispose") {
+          this.#index = null;
+          return;
+        }
+
+        if (!this.#index) {
+          throw new Error("Worker index is not ready.");
+        }
+
+        this.#emit("message", {
+          requestId: message.requestId,
+          result: this.#query(message),
+          type: "result",
+        });
+      } catch (error) {
+        this.#emit("message", {
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            name: error instanceof Error ? error.name : undefined,
+          },
+          requestId: message.requestId,
+          type: "error",
+        });
+      }
+    }, 0);
+  }
+
+  terminate() {
+    this.#listeners.clear();
+    this.#index = null;
+  }
+
+  #emit(type: string, data: unknown) {
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener({ data } as MessageEvent);
+    }
+  }
+
+  #query(message: { method?: string; pointId?: string; query?: unknown }) {
+    switch (message.method) {
+      case "getBackendCapabilities":
+        return this.#index?.getBackendCapabilities?.();
+      case "getBinnedSeries":
+        return this.#index?.getBinnedSeries(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getBinnedSeries"]
+          >[0],
+        );
+      case "getChartSeries":
+        return this.#index?.getChartSeries(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getChartSeries"]
+          >[0],
+        );
+      case "getHeatmap":
+        return this.#index?.getHeatmap(
+          message.query as Parameters<ReturnType<typeof createChartDensityIndex>["getHeatmap"]>[0],
+        );
+      case "getHistogram":
+        return this.#index?.getHistogram(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getHistogram"]
+          >[0],
+        );
+      case "getPointById":
+        return this.#index?.getPointById(message.pointId ?? "");
+      case "getSeriesBounds":
+        return this.#index?.getSeriesBounds();
+      default:
+        throw new Error(`Unsupported worker method: ${message.method ?? "unknown"}`);
+    }
+  }
+}
 
 function publicChartSeries<TSeries extends { bins: Array<Record<string, unknown>> }>(
   series: TSeries,
