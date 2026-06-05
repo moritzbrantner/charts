@@ -13,6 +13,8 @@ const storyIds = [
   "charts-quality--grouped-stacked",
   "charts-quality--histogram",
   "charts-quality--heatmap",
+  "charts-quality--calendar-heatmap",
+  "charts-quality--ridgeline",
   "charts-quality--box-plot",
   "charts-quality--crowded-overlay",
   "charts-quality--range-selector",

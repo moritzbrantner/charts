@@ -319,6 +319,57 @@ type ChartHeatmap<TProperties = Record<string, unknown>> = {
         yDomain: [number, number];
     };
 };
+type ChartCalendarHeatmapDatum<TProperties = Record<string, unknown>> = {
+    date: Date;
+    day: number;
+    dayOfWeek: number;
+    firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+    id: string;
+    index: number;
+    lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+    metrics: ChartMetricRecord;
+    pointCount: number;
+    value: number | null;
+    week: number;
+    x0: number;
+    x1: number;
+};
+type ChartCalendarHeatmapData<TProperties = Record<string, unknown>> = {
+    days: Array<ChartCalendarHeatmapDatum<TProperties>>;
+    summary: {
+        dayCount: number;
+        maxValue: number | null;
+        minValue: number | null;
+        pointCount: number;
+        xDomain: [number, number];
+    };
+};
+type ChartRidgelineBucket = {
+    index: number;
+    pointCount: number;
+    value: number;
+    value0: number;
+    value1: number;
+    x: number;
+};
+type ChartRidgelineDatum<_TProperties = Record<string, unknown>> = {
+    buckets: ChartRidgelineBucket[];
+    groupId: string;
+    groupLabel: string;
+    maxCount: number;
+    pointCount: number;
+};
+type ChartRidgelineData<TProperties = Record<string, unknown>> = {
+    groups: Array<ChartRidgelineDatum<TProperties>>;
+    summary: {
+        bucketCount: number;
+        groupCount: number;
+        maxCount: number;
+        pointCount: number;
+        valueDomain: [number, number];
+        xDomain: [number, number] | null;
+    };
+};
 type ChartPointSampling = "stride";
 type ChartPointQuery = {
     maxPoints?: number;
@@ -553,8 +604,10 @@ type ChartDensityWarmupScheduler = (warmup: () => void) => void;
 type ChartDensityProgressiveOptions<TProperties = Record<string, unknown>> = {
     onError?: (error: unknown) => void;
     onReady?: (index: ChartDensityIndex<TProperties>) => void;
+    onWorkerReady?: (index: ChartDensityWorkerIndex<TProperties>) => void;
     scheduler?: ChartDensityWarmupScheduler;
     warmup?: "manual" | "scheduled";
+    worker?: boolean | ChartDensityWorkerOptions;
 };
 type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Omit<BinnedSeriesIndexOptions<TProperties>, "backend"> & {
     backend?: ChartDensityBackendPolicy;
@@ -564,14 +617,39 @@ type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Omit<Binn
 type ChartDensityProgressiveStatus = {
     activeBackend: BinnedSeriesBackend;
     isWarming: boolean;
+    isWorkerBuilding?: boolean;
+    workerError?: unknown | null;
+    workerReady?: boolean;
     wasmError: unknown | null;
     wasmReady: boolean;
 };
 type ProgressiveChartDensityIndex<TProperties = Record<string, unknown>> = ChartDensityIndex<TProperties> & {
     getActiveBackend(): BinnedSeriesBackend;
     getProgressiveStatus(): ChartDensityProgressiveStatus;
+    getWorkerIndex(): ChartDensityWorkerIndex<TProperties> | null;
+    warmWorkerIndex(): Promise<ChartDensityWorkerIndex<TProperties> | null>;
     warmWasmIndex(): Promise<ChartDensityIndex<TProperties>>;
+    whenWorkerReady(): Promise<ChartDensityWorkerIndex<TProperties> | null>;
     whenWasmReady(): Promise<ChartDensityIndex<TProperties>>;
+};
+type ChartDensityWorkerOptions = {
+    createWorker?: () => Worker;
+};
+type ChartDensityWorkerIndex<TProperties = Record<string, unknown>> = {
+    getBackendCapabilities(): Promise<ChartBackendCapabilities>;
+    getBinnedSeries(query: BinnedSeriesQuery): Promise<BinnedSeries<TProperties>>;
+    getChartSeries(query: ChartDensityQuery): Promise<ChartDensitySeries<TProperties>>;
+    getHeatmap(query: ChartHeatmapQuery<TProperties>): Promise<ChartHeatmap<TProperties>>;
+    getHistogram(query: ChartHistogramQuery<TProperties>): Promise<ChartHistogram<TProperties>>;
+    getPointById(pointId: string): Promise<IndexedChartSeriesPoint<TProperties> | null>;
+    getSeriesBounds(): Promise<{
+        maxX: number;
+        maxY: number;
+        minX: number;
+        minY: number;
+    } | null>;
+    terminate(): void;
+    whenReady(): Promise<ChartDensityWorkerIndex<TProperties>>;
 };
 type ChartDensityBackendPolicyInput = {
     hasPercentiles?: boolean;
@@ -588,6 +666,8 @@ declare function resolveChartDensityBackendPolicy({ hasPercentiles, operationKin
 declare function createChartDensityIndex<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: ChartDensityIndexOptions<TProperties>): ChartDensityIndex<TProperties>;
 declare function createProgressiveChartDensityIndex<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): ProgressiveChartDensityIndex<TProperties>;
 declare const createChartSeriesIndex: typeof createChartDensityIndex;
+
+declare function createChartDensityWorkerIndex<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend" | "progressive">, workerOptions?: ChartDensityWorkerOptions): ChartDensityWorkerIndex<TProperties> | null;
 
 declare function createChartDensitySample<TProperties = Record<string, unknown>>(bin: ChartDensityBin<TProperties>, valueMode?: ChartValueMode): ChartDensitySample<TProperties>;
 declare function createChartDensityViewportSummary<TProperties = Record<string, unknown>>(series: ChartDensitySeries<TProperties>): ChartDensityViewportSummary;
@@ -617,6 +697,23 @@ declare function createChartWaterfallData(data: readonly ChartWaterfallDatum[], 
     initialValue?: number;
 }): ChartWaterfallRow[];
 declare function createChartFunnelData(data: readonly ChartFunnelDatum[]): ChartFunnelRow[];
+declare function createChartCalendarHeatmapData<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>, options?: {
+    dayMs?: number;
+    includeEmptyDays?: boolean;
+    startOfDay?: (x: number) => number;
+    valueAccessor?: ChartPointValueAccessor<TProperties>;
+    xDomain?: [number, number];
+}): ChartCalendarHeatmapData<TProperties>;
+declare function createChartRidgelineData<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>, options: {
+    bucketCount: number;
+    groupBy: {
+        property: keyof TProperties & string;
+    } | ((point: IndexedChartSeriesPoint<TProperties>) => string);
+    maxGroups?: number;
+    valueAccessor?: ChartPointValueAccessor<TProperties>;
+    valueDomain?: [number, number];
+    xDomain?: [number, number];
+}): ChartRidgelineData<TProperties>;
 
 declare function createChartTreemapLayout<TPayload = unknown>(root: ChartHierarchyNode<TPayload>, options: {
     height: number;
@@ -1018,6 +1115,27 @@ type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
     xAxis?: ChartSvgAxisOptions | false;
     yAxis?: ChartSvgAxisOptions | false;
 };
+type ChartCalendarHeatmapSvgProps<TProperties = Record<string, unknown>> = {
+    ariaLabel?: string;
+    className?: string;
+    data: ChartCalendarHeatmapData<TProperties> | Array<ChartCalendarHeatmapDatum<TProperties>>;
+    formatDate?: (date: Date) => string;
+    formatValue?: (datum: ChartCalendarHeatmapDatum<TProperties>) => string;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
+    onDatumSelect?: (datum: ChartCalendarHeatmapDatum<TProperties>) => void;
+    showMonthLabels?: boolean;
+    showWeekdayLabels?: boolean;
+};
+type ChartRidgelineSvgProps<TProperties = Record<string, unknown>> = {
+    ariaLabel?: string;
+    className?: string;
+    data: ChartRidgelineData<TProperties> | Array<ChartRidgelineDatum<TProperties>>;
+    formatValue?: (value: number) => string;
+    legend?: ReactNode | readonly ChartSvgLegendItem[];
+    onGroupSelect?: (group: ChartRidgelineDatum<TProperties>) => void;
+    showGroupLabels?: boolean;
+    xAxis?: ChartSvgAxisOptions | false;
+};
 type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {
     ariaLabel?: string;
     className?: string;
@@ -1298,6 +1416,8 @@ declare function ChartThresholdMarker<TProperties = Record<string, unknown>>({ a
 declare function ChartAnomalyMarkerList<TProperties = Record<string, unknown>>({ anomalies, className, formatValue, onSelect, }: ChartAnomalyMarkerListProps<TProperties>): JSX.Element;
 
 declare function ChartHeatmapGrid<TProperties = Record<string, unknown>>({ ariaLabel, cells, className, formatValue, formatX, formatY, legend, onCellSelect, xAxis, yAxis, }: ChartHeatmapGridProps<TProperties>): JSX.Element;
+declare function ChartCalendarHeatmapSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatDate, formatValue, legend, onDatumSelect, showMonthLabels, showWeekdayLabels, }: ChartCalendarHeatmapSvgProps<TProperties>): JSX.Element;
+declare function ChartRidgelineSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatValue, legend, onGroupSelect, showGroupLabels, xAxis, }: ChartRidgelineSvgProps<TProperties>): JSX.Element;
 declare function ChartBoxPlotSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, data, formatValue, legend, onDatumSelect, showValueLabels, xAxis, yAxis, }: ChartBoxPlotSvgProps<TProperties>): JSX.Element;
 declare function ChartScatterSvg<TProperties = Record<string, unknown>>({ ariaLabel, className, formatValue, height, legend, onPointSelect, series, width, xAxis, xDomain, yAxis, yDomain, }: ChartScatterSvgProps<TProperties>): JSX.Element;
 declare function ChartWaterfallSvg({ ariaLabel, className, data, formatValue, height, legend, onDatumSelect, showValueLabels, width, xAxis, yAxis, }: ChartWaterfallSvgProps): JSX.Element;
@@ -1317,7 +1437,9 @@ declare function ChartValueModePreview<TProperties = Record<string, unknown>>({ 
 declare function useProgressiveChartDensity<TProperties = Record<string, unknown>>(points: readonly ChartSeriesPoint<TProperties>[], options?: Omit<ChartDensityIndexOptions<TProperties>, "backend">): {
     index: ProgressiveChartDensityIndex<TProperties>;
     status: ChartDensityProgressiveStatus;
+    warmWorkerNow: () => Promise<ChartDensityWorkerIndex<TProperties> | null>;
     warmWasmNow: () => Promise<void>;
+    workerIndex: ChartDensityWorkerIndex<TProperties> | null;
 };
 
 declare function useChartBinCount<TElement extends Element = HTMLDivElement>(options?: UseChartBinCountOptions): UseChartBinCountResult<TElement>;
@@ -1338,5 +1460,5 @@ declare function getNearestChartSample<TProperties>(samples: readonly ChartDensi
     isSampleSelectable?: (sample: ChartDensitySample<TProperties>) => boolean;
 }): ChartDensitySample<TProperties> | null;
 
-export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnimationMode, type ChartAnimationOptions, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, type ChartAxesTransform, type ChartAxisOrientation, type ChartAxisRange, type ChartAxisScale, type ChartAxisTransform, ChartAxisTransformMenu, type ChartAxisTransformMenuProps, type ChartAxisTransformStatus, type ChartBackendCapabilities, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartCirclePackNode, ChartCirclePackSvg, type ChartCirclePackSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBackendPolicy, type ChartDensityBackendPolicyInput, type ChartDensityBin, type ChartDensityCacheOptions, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, type ChartDomainDragPreview, type ChartDomainDragSelection, type ChartDomainDragUpdateMode, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartFlameGraphNode, ChartFlameGraphSvg, type ChartFlameGraphSvgProps, type ChartFunnelDatum, type ChartFunnelRow, ChartFunnelSvg, type ChartFunnelSvgProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHierarchyNode, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartIcicleNode, ChartIcicleSvg, type ChartIcicleSvgProps, type ChartIndentedTreeNode, ChartIndentedTreeSvg, type ChartIndentedTreeSvgProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, type ChartLegendItem, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPlaybackState, type ChartPointGroupAccessor, type ChartPointQuery, type ChartPointSampling, type ChartPointSeries, type ChartPointValueAccessor, type ChartRadialTreeNode, ChartRadialTreeSvg, type ChartRadialTreeSvgProps, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, type ChartScatterPoint, type ChartScatterQuery, type ChartScatterSeries, ChartScatterSvg, type ChartScatterSvgProps, ChartSeriesLegend, type ChartSeriesLegendProps, type ChartSeriesPoint, type ChartSunburstNode, ChartSunburstSvg, type ChartSunburstSvgProps, type ChartSvgAxisOptions, type ChartSvgLegendItem, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartTreeNode, ChartTreeSvg, type ChartTreeSvgProps, type ChartTreemapNode, ChartTreemapSvg, type ChartTreemapSvgProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, type ChartWaterfallDatum, type ChartWaterfallRow, ChartWaterfallSvg, type ChartWaterfallSvgProps, ChartWithLegend, type ChartWithLegendProps, ChartXAxisNavigationMenu, type ChartXAxisNavigationMenuProps, ChartYAxisRangeMenu, type ChartYAxisRangeMenuProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartDragDomainOptions, type UseChartDragDomainResult, type UseChartSeriesVisibilityOptions, type UseChartSeriesVisibilityResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartCirclePackLayout, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartFlameGraphLayout, createChartFunnelData, createChartIcicleLayout, createChartIndentedTreeLayout, createChartRadialTreeLayout, createChartRenderData, createChartSeriesIndex, createChartSunburstLayout, createChartTreeLayout, createChartTreemapLayout, createChartWaterfallData, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartAxisScaleDefinitions, getChartDataYBounds, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, getRechartsAnimationProps, layoutChartLabels, measureChartSeries, resolveChartAxisTransformStatus, resolveChartDensityBackendPolicy, useChartAnimatedDomain, useChartBinCount, useChartDragDomain, useChartPlaybackDomain, useChartSeriesVisibility, useChartWheelDomain, useProgressiveChartDensity };
+export { BinnedChart, type BinnedChartProps, type BinnedChartRenderContext, type BinnedSeriesBackend, CHART_VALUE_MODE_DEFINITIONS, type ChartAnimationMode, type ChartAnimationOptions, type ChartAnomalyAnnotation, ChartAnomalyMarkerList, type ChartAnomalyMarkerListProps, type ChartAnomalyOptions, type ChartAxesTransform, type ChartAxisOrientation, type ChartAxisRange, type ChartAxisScale, type ChartAxisTransform, ChartAxisTransformMenu, type ChartAxisTransformMenuProps, type ChartAxisTransformStatus, type ChartBackendCapabilities, ChartBackendStatus, type ChartBackendStatusProps, type ChartBandBoundary, type ChartBandRenderDatum, type ChartBoxPlotDatum, ChartBoxPlotSvg, type ChartBoxPlotSvgProps, type ChartCalendarHeatmapData, type ChartCalendarHeatmapDatum, ChartCalendarHeatmapSvg, type ChartCalendarHeatmapSvgProps, type ChartCirclePackNode, ChartCirclePackSvg, type ChartCirclePackSvgProps, type ChartDataLabelAnnotation, type ChartDataLabelObstacle, type ChartDeltaSeriesOptions, type ChartDensityBackend, type ChartDensityBackendPolicy, type ChartDensityBackendPolicyInput, type ChartDensityBin, type ChartDensityCacheOptions, type ChartDensityIndex, type ChartDensityIndexOptions, type ChartDensityProgressiveOptions, type ChartDensityProgressiveStatus, type ChartDensityQuery, type ChartDensitySample, type ChartDensitySeries, type ChartDensitySummary, type ChartDensityViewportSummary, type ChartDensityWarmupScheduler, type ChartDensityWorkerIndex, type ChartDensityWorkerOptions, ChartDerivedMetricCard, type ChartDerivedMetricCardProps, type ChartDerivedPoint, type ChartDomainDragPreview, type ChartDomainDragSelection, type ChartDomainDragUpdateMode, ChartDomainMinimap, type ChartDomainMinimapProps, type ChartFlameGraphNode, ChartFlameGraphSvg, type ChartFlameGraphSvgProps, type ChartFunnelDatum, type ChartFunnelRow, ChartFunnelSvg, type ChartFunnelSvgProps, type ChartGapAnnotation, type ChartGapBehavior, type ChartGroupedDensityGroup, type ChartGroupedDensityQuery, type ChartGroupedDensitySeries, type ChartHeatmap, type ChartHeatmapCell, ChartHeatmapGrid, type ChartHeatmapGridProps, type ChartHeatmapQuery, type ChartHierarchyNode, type ChartHistogram, type ChartHistogramBucket, type ChartHistogramQuery, ChartHotBinRow, type ChartHotBinRowProps, type ChartIcicleNode, ChartIcicleSvg, type ChartIcicleSvgProps, type ChartIndentedTreeNode, ChartIndentedTreeSvg, type ChartIndentedTreeSvgProps, type ChartLabelAnnotation, type ChartLabelLayoutOptions, type ChartLabelLeaderLine, type ChartLabelLine, type ChartLabelObstacle, ChartLabelOverlay, type ChartLabelOverlayProps, type ChartLabelPlacement, type ChartLabelRect, type ChartLegendItem, ChartMetricCard, type ChartMetricCardProps, type ChartMetricRecord, ChartMetricStrip, type ChartMetricStripProps, ChartPanel, type ChartPanelProps, type ChartPercentileMode, type ChartPlacedLabel, type ChartPlaybackState, type ChartPointGroupAccessor, type ChartPointQuery, type ChartPointSampling, type ChartPointSeries, type ChartPointValueAccessor, type ChartRadialTreeNode, ChartRadialTreeSvg, type ChartRadialTreeSvgProps, type ChartRange, ChartRangeSelector, type ChartRangeSelectorProps, type ChartRenderData, type ChartRenderDataOptions, type ChartRenderDatum, type ChartRidgelineBucket, type ChartRidgelineData, type ChartRidgelineDatum, ChartRidgelineSvg, type ChartRidgelineSvgProps, type ChartRollingSeriesOptions, type ChartRollingStatistic, type ChartSampleInteraction, ChartSampleInteractionOverlay, type ChartSampleInteractionOverlayProps, ChartSampleSparkline, type ChartSampleSparklineProps, type ChartSampleValueAccessor, type ChartScatterPoint, type ChartScatterQuery, type ChartScatterSeries, ChartScatterSvg, type ChartScatterSvgProps, ChartSeriesLegend, type ChartSeriesLegendProps, type ChartSeriesPoint, type ChartSunburstNode, ChartSunburstSvg, type ChartSunburstSvgProps, type ChartSvgAxisOptions, type ChartSvgLegendItem, type ChartThresholdAnnotation, ChartThresholdMarker, type ChartThresholdMarkerProps, type ChartTreeNode, ChartTreeSvg, type ChartTreeSvgProps, type ChartTreemapNode, ChartTreemapSvg, type ChartTreemapSvgProps, type ChartValueMode, type ChartValueModeDefinition, ChartValueModePreview, type ChartValueModePreviewProps, type ChartValueModeRenderer, ChartValueModeSelector, type ChartValueModeSelectorProps, type ChartWaterfallDatum, type ChartWaterfallRow, ChartWaterfallSvg, type ChartWaterfallSvgProps, ChartWithLegend, type ChartWithLegendProps, ChartXAxisNavigationMenu, type ChartXAxisNavigationMenuProps, ChartYAxisRangeMenu, type ChartYAxisRangeMenuProps, type IndexedChartSeriesPoint, type MeasuredChartSeries, type ProgressiveChartDensityIndex, type UseChartBinCountOptions, type UseChartBinCountResult, type UseChartDragDomainOptions, type UseChartDragDomainResult, type UseChartSeriesVisibilityOptions, type UseChartSeriesVisibilityResult, type UseChartWheelDomainOptions, type UseChartWheelDomainResult, createChartBandRenderData, createChartBoxPlotData, createChartCalendarHeatmapData, createChartCirclePackLayout, createChartDensityIndex, createChartDensitySample, createChartDensityViewportSummary, createChartDensityWorkerIndex, createChartFlameGraphLayout, createChartFunnelData, createChartIcicleLayout, createChartIndentedTreeLayout, createChartRadialTreeLayout, createChartRenderData, createChartRidgelineData, createChartSeriesIndex, createChartSunburstLayout, createChartTreeLayout, createChartTreemapLayout, createChartWaterfallData, createCumulativeChartSeries, createDeltaChartSeries, createGroupedChartRenderData, createProgressiveChartDensityIndex, createRollingChartSeries, doChartLabelRectsIntersect, getChartAnomalyAnnotations, getChartAxisScaleDefinitions, getChartDataYBounds, getChartGapAnnotations, getChartSampleValue, getChartSampleYBounds, getChartThresholdAnnotations, getChartValueModeDefinition, getChartValueModeDefinitions, getNearestChartSample, getRechartsAnimationProps, layoutChartLabels, measureChartSeries, resolveChartAxisTransformStatus, resolveChartDensityBackendPolicy, useChartAnimatedDomain, useChartBinCount, useChartDragDomain, useChartPlaybackDomain, useChartSeriesVisibility, useChartWheelDomain, useProgressiveChartDensity };
 ```

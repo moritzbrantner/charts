@@ -312,8 +312,10 @@ export function renderPlaygroundChart({
         );
       case "candle":
       case "bubble":
+      case "calendar-heatmap":
       case "funnel":
       case "heatmap":
+      case "ridgeline":
       case "scatter":
       case "sunburst":
       case "treemap":
@@ -325,7 +327,9 @@ export function renderPlaygroundChart({
   switch (chartType) {
     case "candle":
     case "bubble":
+    case "calendar-heatmap":
     case "funnel":
+    case "ridgeline":
     case "scatter":
     case "sunburst":
     case "treemap":
@@ -543,6 +547,7 @@ export function getPlaygroundYAxisDataKeys({
     case "area":
       return visibleSeriesIds.has(valueMode) ? [valueMode] : [];
     case "bubble":
+    case "calendar-heatmap":
     case "candle":
     case "circle-pack":
     case "flame-graph":
@@ -551,6 +556,7 @@ export function getPlaygroundYAxisDataKeys({
     case "icicle":
     case "indented-tree":
     case "radial-tree":
+    case "ridgeline":
     case "scatter":
     case "sunburst":
     case "tree":
@@ -630,6 +636,24 @@ export function createPlaygroundLegendItems({
           disabled: true,
           id: "heatmap",
           label: "Density",
+        },
+      ];
+    case "calendar-heatmap":
+      return [
+        {
+          color: "var(--chart-1)",
+          disabled: true,
+          id: "calendar-heatmap",
+          label: "Daily value",
+        },
+      ];
+    case "ridgeline":
+      return [
+        {
+          color: "var(--chart-1)",
+          disabled: true,
+          id: "ridgeline",
+          label: "Grouped distribution",
         },
       ];
     case "scatter":
@@ -772,11 +796,13 @@ export function getPlaygroundChartDescription(
     case "area":
     case "bar":
     case "bubble":
+    case "calendar-heatmap":
     case "candle":
     case "combo":
     case "heatmap":
     case "histogram":
     case "line":
+    case "ridgeline":
     case "scatter":
     case "stacked":
       return selectedDataset.description;

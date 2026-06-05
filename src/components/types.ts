@@ -3,6 +3,8 @@ import { type ChartContainer, type ChartConfig } from "@moritzbrantner/ui";
 import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "../analytics";
 import type {
   ChartBoxPlotDatum,
+  ChartCalendarHeatmapData,
+  ChartCalendarHeatmapDatum,
   ChartCirclePackNode,
   ChartDensityIndex,
   ChartDensityProgressiveStatus,
@@ -17,6 +19,8 @@ import type {
   ChartRadialTreeNode,
   ChartRenderData,
   ChartRenderDataOptions,
+  ChartRidgelineData,
+  ChartRidgelineDatum,
   ChartScatterSeries,
   ChartSunburstNode,
   ChartTreeNode,
@@ -377,6 +381,29 @@ export type ChartHeatmapGridProps<TProperties = Record<string, unknown>> = {
   onCellSelect?: (cell: ChartHeatmapCell<TProperties>) => void;
   xAxis?: ChartSvgAxisOptions | false;
   yAxis?: ChartSvgAxisOptions | false;
+};
+
+export type ChartCalendarHeatmapSvgProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  data: ChartCalendarHeatmapData<TProperties> | Array<ChartCalendarHeatmapDatum<TProperties>>;
+  formatDate?: (date: Date) => string;
+  formatValue?: (datum: ChartCalendarHeatmapDatum<TProperties>) => string;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
+  onDatumSelect?: (datum: ChartCalendarHeatmapDatum<TProperties>) => void;
+  showMonthLabels?: boolean;
+  showWeekdayLabels?: boolean;
+};
+
+export type ChartRidgelineSvgProps<TProperties = Record<string, unknown>> = {
+  ariaLabel?: string;
+  className?: string;
+  data: ChartRidgelineData<TProperties> | Array<ChartRidgelineDatum<TProperties>>;
+  formatValue?: (value: number) => string;
+  legend?: ReactNode | readonly ChartSvgLegendItem[];
+  onGroupSelect?: (group: ChartRidgelineDatum<TProperties>) => void;
+  showGroupLabels?: boolean;
+  xAxis?: ChartSvgAxisOptions | false;
 };
 
 export type ChartBoxPlotSvgProps<TProperties = Record<string, unknown>> = {

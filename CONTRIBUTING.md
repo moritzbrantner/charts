@@ -35,6 +35,30 @@ Run `bun run format` before committing formatting-only fixes.
 
 Always run `bun run lint` when a change touches Rust files.
 
+## Benchmark workflow
+
+Run the default large-data benchmark after changes to density indexes, backend
+routing, public result mapping, or viewport summaries:
+
+```sh
+bun run bench:large-data
+CHARTS_BENCH_FULL=1 bun run bench:large-data
+CHARTS_BENCH_JSON=test-results/bench-large-data.json bun run bench:large-data
+CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json bun run bench:large-data
+```
+
+The package scripts `bench:large-data:json`, `bench:large-data:full-json`, and
+`bench:large-data:profile` write the standard report paths under `test-results/`.
+Benchmark JSON includes raw `results`, backend `comparisons`, `slowBenchmarks`,
+`wasmRatioFailures`, and optional `profileResults`.
+
+Interpret backend comparisons by operation. `hybrid-js` can be faster for sorted
+public-wrapper chart queries because it avoids WASM result mapping overhead.
+`wasm-index` is expected to win on random or high-cardinality large-domain chart
+queries. Heatmap currently routes to the hybrid point store because public WASM
+heatmap mapping is slower. Treat `fail` comparison rows as regressions; treat
+`warn` rows as known gaps unless the ratio changes materially.
+
 ## Code organization
 
 Keep tests and stories colocated with the source they exercise. Unit tests should

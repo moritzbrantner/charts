@@ -16,6 +16,7 @@ import {
 } from "./point-store";
 import { createChartDensitySample } from "./render-data";
 import { clampInteger, normalizeChartDomain, scheduleChartDensityWarmup } from "./shared";
+import { createChartDensityWorkerIndex } from "./worker-client";
 
 import type { BinnedSeries, BinnedSeriesIndexOptions, BinnedSeriesQuery } from "../data-density";
 import type { StaticChartDensityIndexOptions } from "./shared";
@@ -27,6 +28,8 @@ import type {
   ChartDensityIndexOptions,
   ChartDensityQuery,
   ChartDensitySeries,
+  ChartDensityWorkerIndex,
+  ChartDensityWorkerOptions,
   ChartSeriesPoint,
   ProgressiveChartDensityIndex,
 } from "./types";
@@ -88,6 +91,11 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
   let wasmError: unknown | null = null;
   let isWarming = false;
   let warmupPromise: Promise<ChartDensityIndex<TProperties>> | null = null;
+  let workerIndex: ChartDensityWorkerIndex<TProperties> | null = null;
+  let workerError: unknown | null = null;
+  let workerReady = false;
+  let isWorkerBuilding = false;
+  let workerWarmupPromise: Promise<ChartDensityWorkerIndex<TProperties> | null> | null = null;
 
   const warmWasmIndex = () => {
     if (wasmIndex) {
@@ -125,9 +133,67 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
 
     return warmupPromise;
   };
+  const warmWorkerIndex = () => {
+    if (workerReady && workerIndex) {
+      return Promise.resolve(workerIndex);
+    }
+
+    if (workerWarmupPromise) {
+      return workerWarmupPromise;
+    }
+
+    const workerOptions = resolveProgressiveWorkerOptions(progressive?.worker);
+
+    if (!workerOptions) {
+      return Promise.resolve(null);
+    }
+
+    isWorkerBuilding = true;
+    workerError = null;
+
+    try {
+      workerIndex = createChartDensityWorkerIndex(points, indexOptions, workerOptions);
+    } catch (error) {
+      const workerBuildError = normalizeChartDensityWorkerError(error);
+
+      isWorkerBuilding = false;
+      workerError = workerBuildError;
+      progressive?.onError?.(workerBuildError);
+      return Promise.reject(workerBuildError);
+    }
+
+    if (!workerIndex) {
+      isWorkerBuilding = false;
+      return Promise.resolve(null);
+    }
+
+    workerWarmupPromise = workerIndex
+      .whenReady()
+      .then((readyIndex) => {
+        workerReady = true;
+        progressive?.onWorkerReady?.(readyIndex);
+
+        return readyIndex;
+      })
+      .catch((error: unknown) => {
+        workerError = error;
+        progressive?.onError?.(error);
+        throw error;
+      })
+      .finally(() => {
+        isWorkerBuilding = false;
+      });
+
+    return workerWarmupPromise;
+  };
 
   if (progressive?.warmup !== "manual") {
     scheduleChartDensityWarmup(progressive?.scheduler, () => {
+      if (progressive?.worker) {
+        void warmWorkerIndex().catch(() => undefined);
+        return;
+      }
+
       void warmWasmIndex().catch(() => undefined);
     });
   }
@@ -186,6 +252,9 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
       return {
         activeBackend,
         isWarming,
+        isWorkerBuilding,
+        workerError,
+        workerReady,
         wasmError,
         wasmReady: Boolean(wasmIndex),
       };
@@ -195,12 +264,36 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
       return activeIndex.getSeriesBounds();
     },
 
+    getWorkerIndex() {
+      return workerIndex;
+    },
+
+    warmWorkerIndex,
+
     warmWasmIndex,
+
+    whenWorkerReady() {
+      return warmWorkerIndex();
+    },
 
     whenWasmReady() {
       return warmWasmIndex();
     },
   };
+}
+
+function resolveProgressiveWorkerOptions(
+  options: boolean | ChartDensityWorkerOptions | undefined,
+): ChartDensityWorkerOptions | null {
+  if (!options) {
+    return null;
+  }
+
+  return options === true ? {} : options;
+}
+
+function normalizeChartDensityWorkerError(error: unknown) {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
@@ -214,7 +307,7 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
       ? createWasmChartDensityIndex(
           points,
           indexOptions as BinnedSeriesIndexOptions<TProperties>,
-          createHybridChartDensityIndex(points, indexOptions),
+          () => createHybridChartDensityIndex(points, indexOptions),
         )
       : createHybridChartDensityIndex(points, indexOptions);
 

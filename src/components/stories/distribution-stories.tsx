@@ -3,11 +3,15 @@ import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
 import {
   ChartBoxPlotSvg,
+  ChartCalendarHeatmapSvg,
   ChartHeatmapGrid,
+  ChartRidgelineSvg,
   ChartPanel,
   ChartScatterSvg,
+  createChartCalendarHeatmapData,
   createChartBoxPlotData,
   createChartDensityIndex,
+  createChartRidgelineData,
 } from "@moritzbrantner/charts";
 
 import { createTelemetryPoints } from "../../testing/chart-fixtures";
@@ -63,6 +67,57 @@ export function HeatmapStory() {
     <StoryFrame title="Heatmap">
       <ChartPanel title="Density heatmap" description="Normalized count by x/y cell.">
         <ChartHeatmapGrid cells={heatmap.cells} />
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
+export function CalendarHeatmapStory() {
+  const index = useMemo(() => createChartDensityIndex(createTelemetryPoints()), []);
+  const points = useMemo(
+    () => index.getChartPoints({ maxPoints: 20_000, xDomain: [0, 720] }).points,
+    [index],
+  );
+  const calendarHeatmap = useMemo(
+    () =>
+      createChartCalendarHeatmapData(points, {
+        dayMs: 24,
+        xDomain: [0, 720],
+      }),
+    [points],
+  );
+
+  return (
+    <StoryFrame title="Calendar heatmap">
+      <ChartPanel title="Daily activity" description="Daily average value and point counts.">
+        <ChartCalendarHeatmapSvg data={calendarHeatmap} />
+      </ChartPanel>
+    </StoryFrame>
+  );
+}
+
+export function RidgelineStory() {
+  const index = useMemo(() => createChartDensityIndex(createTelemetryPoints()), []);
+  const points = useMemo(
+    () => index.getChartPoints({ maxPoints: 20_000, xDomain: [0, 720] }).points,
+    [index],
+  );
+  const ridgeline = useMemo(
+    () =>
+      createChartRidgelineData(points, {
+        bucketCount: 24,
+        groupBy: (point) => point.properties.plan,
+        maxGroups: 4,
+        valueAccessor: "y",
+        xDomain: [0, 720],
+      }),
+    [points],
+  );
+
+  return (
+    <StoryFrame title="Ridgeline">
+      <ChartPanel title="Plan distributions" description="Grouped y-value distributions.">
+        <ChartRidgelineSvg data={ridgeline} />
       </ChartPanel>
     </StoryFrame>
   );

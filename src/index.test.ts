@@ -1,17 +1,20 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 
 import {
   createChartDensityIndex,
+  createChartDensityWorkerIndex,
   createChartDensitySample,
   createChartDensityViewportSummary,
   createChartBandRenderData,
   createChartBoxPlotData,
+  createChartCalendarHeatmapData,
   createChartCirclePackLayout,
   createChartFlameGraphLayout,
   createChartFunnelData,
   createChartIcicleLayout,
   createChartIndentedTreeLayout,
   createGroupedChartRenderData,
+  createChartRidgelineData,
   createChartRenderData,
   createChartRadialTreeLayout,
   createChartSunburstLayout,
@@ -23,6 +26,7 @@ import {
   getChartValueModeDefinition,
   getChartValueModeDefinitions,
   resolveChartDensityBackendPolicy,
+  type ChartHeatmapQuery,
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
@@ -723,6 +727,32 @@ describe("@moritzbrantner/charts", () => {
     }));
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
+    const heatmapQueries: Array<ChartHeatmapQuery<Record<string, unknown>>> = [
+      {
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        includeEmptyCells: false,
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+        yDomain: [-20, 20],
+      },
+    ];
 
     expect(wasm.getHistogram({ bucketCount: 7 })).toEqual(hybrid.getHistogram({ bucketCount: 7 }));
     expect(
@@ -742,23 +772,10 @@ describe("@moritzbrantner/charts", () => {
         xDomain: [10, 40],
       }),
     );
-    expect(
-      wasm.getHeatmap({
-        includeEmptyCells: false,
-        valueAccessor: { metric: "latency" },
-        xBinCount: 6,
-        xDomain: [0, 60],
-        yBinCount: 4,
-      }),
-    ).toEqual(
-      hybrid.getHeatmap({
-        includeEmptyCells: false,
-        valueAccessor: { metric: "latency" },
-        xBinCount: 6,
-        xDomain: [0, 60],
-        yBinCount: 4,
-      }),
-    );
+
+    for (const query of heatmapQueries) {
+      expect(wasm.getHeatmap(query)).toEqual(hybrid.getHeatmap(query));
+    }
   });
 
   test("creates normalized heatmap cells and can drop empty cells", () => {
@@ -793,6 +810,125 @@ describe("@moritzbrantner/charts", () => {
         yDomain: [0, 10],
       }).cells,
     ).toHaveLength(2);
+  });
+
+  test("creates calendar heatmap days from source points", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", metrics: { revenue: 1 }, x: 1, y: 2 },
+        { id: "b", metrics: { revenue: 3 }, x: 2, y: 4 },
+        { id: "c", metrics: { revenue: 5 }, x: 25, y: 8 },
+      ],
+      {
+        dayMs: 24,
+        xDomain: [0, 72],
+      },
+    );
+
+    expect(data.days).toHaveLength(3);
+    expect(data.days.map((day) => day.pointCount)).toEqual([2, 1, 0]);
+    expect(data.days.map((day) => day.value)).toEqual([3, 8, null]);
+    expect(data.days[0]?.firstPoint?.id).toBe("a");
+    expect(data.days[0]?.lastPoint?.id).toBe("b");
+    expect(data.days[0]).toMatchObject({
+      metrics: { revenue: 4 },
+      x0: 0,
+      x1: 24,
+    });
+    expect(data.summary).toMatchObject({
+      dayCount: 3,
+      maxValue: 8,
+      minValue: 3,
+      pointCount: 3,
+      xDomain: [0, 72],
+    });
+  });
+
+  test("calendar heatmap can omit empty days and respects x domains", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", x: 1, y: 2 },
+        { id: "b", x: 25, y: 4 },
+        { id: "c", x: 49, y: 6 },
+      ],
+      {
+        dayMs: 24,
+        includeEmptyDays: false,
+        xDomain: [24, 48],
+      },
+    );
+
+    expect(data.days).toHaveLength(1);
+    expect(data.days[0]).toMatchObject({
+      pointCount: 1,
+      value: 4,
+      x0: 24,
+    });
+    expect(data.summary.pointCount).toBe(1);
+  });
+
+  test("calendar heatmap supports custom value accessors", () => {
+    const data = createChartCalendarHeatmapData(
+      [
+        { id: "a", metrics: { revenue: 2 }, x: 0, y: 100 },
+        { id: "b", metrics: { revenue: 6 }, x: 12, y: 200 },
+      ],
+      {
+        dayMs: 24,
+        valueAccessor: { metric: "revenue" },
+        xDomain: [0, 24],
+      },
+    );
+
+    expect(data.days[0]?.value).toBe(4);
+  });
+
+  test("creates ridgeline grouped histograms", () => {
+    const data = createChartRidgelineData(
+      [
+        { id: "a", properties: { plan: "pro" }, x: 0, y: 1 },
+        { id: "b", properties: { plan: "pro" }, x: 1, y: 3 },
+        { id: "c", properties: { plan: "team" }, x: 2, y: 9 },
+        { id: "d", properties: { plan: "team" }, x: 3, y: Number.NaN },
+      ],
+      {
+        bucketCount: 4,
+        groupBy: { property: "plan" },
+        valueDomain: [0, 10],
+        xDomain: [0, 2],
+      },
+    );
+
+    expect(data.groups.map((group) => group.groupLabel)).toEqual(["pro", "team"]);
+    expect(data.groups[0]?.buckets.map((bucket) => bucket.pointCount)).toEqual([1, 1, 0, 0]);
+    expect(data.groups[1]?.buckets.map((bucket) => bucket.pointCount)).toEqual([0, 0, 0, 1]);
+    expect(data.summary).toMatchObject({
+      bucketCount: 4,
+      groupCount: 2,
+      maxCount: 1,
+      pointCount: 3,
+      valueDomain: [0, 10],
+      xDomain: [0, 2],
+    });
+  });
+
+  test("ridgeline merges overflow groups into other", () => {
+    const data = createChartRidgelineData(
+      [
+        { properties: { plan: "a" }, x: 0, y: 1 },
+        { properties: { plan: "a" }, x: 1, y: 2 },
+        { properties: { plan: "b" }, x: 2, y: 3 },
+        { properties: { plan: "c" }, x: 3, y: 4 },
+      ],
+      {
+        bucketCount: 2,
+        groupBy: (point) => point.properties.plan,
+        maxGroups: 1,
+      },
+    );
+
+    expect(data.groups.map((group) => group.groupId)).toEqual(["a", "__other"]);
+    expect(data.groups.map((group) => group.pointCount)).toEqual([2, 2]);
   });
 
   test("creates grouped chart series and grouped render rows", () => {
@@ -1002,6 +1138,14 @@ describe("@moritzbrantner/charts", () => {
       xDomain: [0, 200] as [number, number],
     };
     const firstSeries = index.getChartSeries(query);
+    const heatmapQuery = {
+      includeEmptyCells: false,
+      xBinCount: 8,
+      xDomain: [0, 200] as [number, number],
+      yBinCount: 4,
+      yDomain: [0, 16] as [number, number],
+    };
+    const firstHeatmap = index.getHeatmap(heatmapQuery);
 
     expect(index.getProgressiveStatus()).toMatchObject({
       activeBackend: "hybrid-js",
@@ -1009,6 +1153,7 @@ describe("@moritzbrantner/charts", () => {
       wasmReady: false,
     });
     expect(firstSeries.summary.pointCount).toBe(200);
+    expect(firstHeatmap.summary.pointCount).toBe(200);
     expect(scheduledWarmups).toHaveLength(1);
 
     scheduledWarmups[0]?.();
@@ -1021,6 +1166,93 @@ describe("@moritzbrantner/charts", () => {
       wasmReady: true,
     });
     expect(index.getChartSeries(query)).toEqual(firstSeries);
+    expect(index.getHeatmap(heatmapQuery)).toEqual(firstHeatmap);
+  });
+
+  test("builds a wasm-index in a worker and serves async density queries", async () => {
+    const points = Array.from({ length: 80 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1, revenue: pointIndex % 11 },
+      x: pointIndex,
+      y: pointIndex % 13,
+    }));
+    const query = {
+      includeEmptyBins: true,
+      targetBinCount: 8,
+      valueMode: "average" as const,
+      xDomain: [0, 79] as [number, number],
+    };
+    const workerIndex = createChartDensityWorkerIndex(
+      points,
+      {},
+      {
+        createWorker: () => new TestChartDensityWorker() as unknown as Worker,
+      },
+    );
+    const expected = createChartDensityIndex(points, { backend: "wasm-index" }).getChartSeries(
+      query,
+    );
+
+    expect(workerIndex).not.toBeNull();
+    await workerIndex?.whenReady();
+
+    expect(await workerIndex?.getBackendCapabilities()).toMatchObject({
+      backend: "wasm-index",
+      usesWasm: true,
+    });
+    expect(await workerIndex?.getChartSeries(query)).toEqual(expected);
+
+    workerIndex?.terminate();
+  });
+
+  test("can warm a worker-backed index progressively without blocking sync queries", async () => {
+    const scheduledWarmups: Array<() => void> = [];
+    const onWorkerReady = vi.fn();
+    const points = Array.from({ length: 120 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1 },
+      x: pointIndex,
+      y: pointIndex % 7,
+    }));
+    const index = createProgressiveChartDensityIndex(points, {
+      progressive: {
+        onWorkerReady,
+        scheduler(warmup) {
+          scheduledWarmups.push(warmup);
+        },
+        worker: {
+          createWorker: () => new TestChartDensityWorker() as unknown as Worker,
+        },
+      },
+    });
+
+    expect(index.getActiveBackend()).toBe("hybrid-js");
+    expect(scheduledWarmups).toHaveLength(1);
+
+    scheduledWarmups[0]?.();
+
+    expect(index.getProgressiveStatus()).toMatchObject({
+      activeBackend: "hybrid-js",
+      isWorkerBuilding: true,
+      workerReady: false,
+      wasmReady: false,
+    });
+
+    const workerIndex = await index.whenWorkerReady();
+
+    expect(workerIndex).not.toBeNull();
+    expect(index.getActiveBackend()).toBe("hybrid-js");
+    expect(index.getProgressiveStatus()).toMatchObject({
+      activeBackend: "hybrid-js",
+      isWorkerBuilding: false,
+      workerError: null,
+      workerReady: true,
+      wasmReady: false,
+    });
+    expect(onWorkerReady).toHaveBeenCalledTimes(1);
+    expect(await workerIndex?.getPointById("point-20")).toMatchObject({ y: 6 });
+
+    workerIndex?.terminate();
   });
 
   test("can defer wasm-index construction until an interaction warms it manually", async () => {
@@ -1078,6 +1310,115 @@ describe("@moritzbrantner/charts", () => {
     });
   });
 });
+
+class TestChartDensityWorker {
+  #index: ReturnType<typeof createChartDensityIndex> | null = null;
+  #listeners = new Map<string, Set<(event: MessageEvent) => void>>();
+
+  addEventListener(type: string, listener: (event: MessageEvent) => void) {
+    const listeners = this.#listeners.get(type) ?? new Set<(event: MessageEvent) => void>();
+
+    listeners.add(listener);
+    this.#listeners.set(type, listeners);
+  }
+
+  removeEventListener(type: string, listener: (event: MessageEvent) => void) {
+    this.#listeners.get(type)?.delete(listener);
+  }
+
+  postMessage(message: {
+    method?: string;
+    options?: Parameters<typeof createChartDensityIndex>[1];
+    pointId?: string;
+    points?: Parameters<typeof createChartDensityIndex>[0];
+    query?: unknown;
+    requestId: number;
+    type: "build" | "dispose" | "query";
+  }) {
+    setTimeout(() => {
+      try {
+        if (message.type === "build") {
+          this.#index = createChartDensityIndex(message.points ?? [], {
+            ...message.options,
+            backend: "wasm-index",
+          });
+          this.#emit("message", { requestId: message.requestId, type: "built" });
+          return;
+        }
+
+        if (message.type === "dispose") {
+          this.#index = null;
+          return;
+        }
+
+        if (!this.#index) {
+          throw new Error("Worker index is not ready.");
+        }
+
+        this.#emit("message", {
+          requestId: message.requestId,
+          result: this.#query(message),
+          type: "result",
+        });
+      } catch (error) {
+        this.#emit("message", {
+          error: {
+            message: error instanceof Error ? error.message : String(error),
+            name: error instanceof Error ? error.name : undefined,
+          },
+          requestId: message.requestId,
+          type: "error",
+        });
+      }
+    }, 0);
+  }
+
+  terminate() {
+    this.#listeners.clear();
+    this.#index = null;
+  }
+
+  #emit(type: string, data: unknown) {
+    for (const listener of this.#listeners.get(type) ?? []) {
+      listener({ data } as MessageEvent);
+    }
+  }
+
+  #query(message: { method?: string; pointId?: string; query?: unknown }) {
+    switch (message.method) {
+      case "getBackendCapabilities":
+        return this.#index?.getBackendCapabilities?.();
+      case "getBinnedSeries":
+        return this.#index?.getBinnedSeries(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getBinnedSeries"]
+          >[0],
+        );
+      case "getChartSeries":
+        return this.#index?.getChartSeries(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getChartSeries"]
+          >[0],
+        );
+      case "getHeatmap":
+        return this.#index?.getHeatmap(
+          message.query as Parameters<ReturnType<typeof createChartDensityIndex>["getHeatmap"]>[0],
+        );
+      case "getHistogram":
+        return this.#index?.getHistogram(
+          message.query as Parameters<
+            ReturnType<typeof createChartDensityIndex>["getHistogram"]
+          >[0],
+        );
+      case "getPointById":
+        return this.#index?.getPointById(message.pointId ?? "");
+      case "getSeriesBounds":
+        return this.#index?.getSeriesBounds();
+      default:
+        throw new Error(`Unsupported worker method: ${message.method ?? "unknown"}`);
+    }
+  }
+}
 
 function publicChartSeries<TSeries extends { bins: Array<Record<string, unknown>> }>(
   series: TSeries,

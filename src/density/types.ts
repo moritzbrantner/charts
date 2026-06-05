@@ -255,6 +255,62 @@ export type ChartHeatmap<TProperties = Record<string, unknown>> = {
   };
 };
 
+export type ChartCalendarHeatmapDatum<TProperties = Record<string, unknown>> = {
+  date: Date;
+  day: number;
+  dayOfWeek: number;
+  firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+  id: string;
+  index: number;
+  lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+  metrics: ChartMetricRecord;
+  pointCount: number;
+  value: number | null;
+  week: number;
+  x0: number;
+  x1: number;
+};
+
+export type ChartCalendarHeatmapData<TProperties = Record<string, unknown>> = {
+  days: Array<ChartCalendarHeatmapDatum<TProperties>>;
+  summary: {
+    dayCount: number;
+    maxValue: number | null;
+    minValue: number | null;
+    pointCount: number;
+    xDomain: [number, number];
+  };
+};
+
+export type ChartRidgelineBucket = {
+  index: number;
+  pointCount: number;
+  value: number;
+  value0: number;
+  value1: number;
+  x: number;
+};
+
+export type ChartRidgelineDatum<_TProperties = Record<string, unknown>> = {
+  buckets: ChartRidgelineBucket[];
+  groupId: string;
+  groupLabel: string;
+  maxCount: number;
+  pointCount: number;
+};
+
+export type ChartRidgelineData<TProperties = Record<string, unknown>> = {
+  groups: Array<ChartRidgelineDatum<TProperties>>;
+  summary: {
+    bucketCount: number;
+    groupCount: number;
+    maxCount: number;
+    pointCount: number;
+    valueDomain: [number, number];
+    xDomain: [number, number] | null;
+  };
+};
+
 export type ChartPointSampling = "stride";
 
 export type ChartPointQuery = {
@@ -525,8 +581,10 @@ export type ChartDensityWarmupScheduler = (warmup: () => void) => void;
 export type ChartDensityProgressiveOptions<TProperties = Record<string, unknown>> = {
   onError?: (error: unknown) => void;
   onReady?: (index: ChartDensityIndex<TProperties>) => void;
+  onWorkerReady?: (index: ChartDensityWorkerIndex<TProperties>) => void;
   scheduler?: ChartDensityWarmupScheduler;
   warmup?: "manual" | "scheduled";
+  worker?: boolean | ChartDensityWorkerOptions;
 };
 
 export type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Omit<
@@ -541,6 +599,9 @@ export type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Om
 export type ChartDensityProgressiveStatus = {
   activeBackend: BinnedSeriesBackend;
   isWarming: boolean;
+  isWorkerBuilding?: boolean;
+  workerError?: unknown | null;
+  workerReady?: boolean;
   wasmError: unknown | null;
   wasmReady: boolean;
 };
@@ -549,9 +610,33 @@ export type ProgressiveChartDensityIndex<TProperties = Record<string, unknown>> 
   ChartDensityIndex<TProperties> & {
     getActiveBackend(): BinnedSeriesBackend;
     getProgressiveStatus(): ChartDensityProgressiveStatus;
+    getWorkerIndex(): ChartDensityWorkerIndex<TProperties> | null;
+    warmWorkerIndex(): Promise<ChartDensityWorkerIndex<TProperties> | null>;
     warmWasmIndex(): Promise<ChartDensityIndex<TProperties>>;
+    whenWorkerReady(): Promise<ChartDensityWorkerIndex<TProperties> | null>;
     whenWasmReady(): Promise<ChartDensityIndex<TProperties>>;
   };
+
+export type ChartDensityWorkerOptions = {
+  createWorker?: () => Worker;
+};
+
+export type ChartDensityWorkerIndex<TProperties = Record<string, unknown>> = {
+  getBackendCapabilities(): Promise<ChartBackendCapabilities>;
+  getBinnedSeries(query: BinnedSeriesQuery): Promise<BinnedSeries<TProperties>>;
+  getChartSeries(query: ChartDensityQuery): Promise<ChartDensitySeries<TProperties>>;
+  getHeatmap(query: ChartHeatmapQuery<TProperties>): Promise<ChartHeatmap<TProperties>>;
+  getHistogram(query: ChartHistogramQuery<TProperties>): Promise<ChartHistogram<TProperties>>;
+  getPointById(pointId: string): Promise<IndexedChartSeriesPoint<TProperties> | null>;
+  getSeriesBounds(): Promise<{
+    maxX: number;
+    maxY: number;
+    minX: number;
+    minY: number;
+  } | null>;
+  terminate(): void;
+  whenReady(): Promise<ChartDensityWorkerIndex<TProperties>>;
+};
 
 export type ChartDensityBackendPolicyInput = {
   hasPercentiles?: boolean;

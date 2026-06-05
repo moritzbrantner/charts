@@ -1,13 +1,22 @@
-import { createDensityViewportSummary } from "../data-density";
+import { collectDensityMetricKeys, createDensityViewportSummary } from "../data-density";
 
 import { normalizeGroupKey } from "./layouts";
-import { normalizeNumericValue } from "./shared";
+import {
+  clampInteger,
+  createZeroMetricRecord,
+  isFiniteNumber,
+  normalizeChartDomain,
+  normalizeChartMetrics,
+  normalizeNumericValue,
+} from "./shared";
 
 import type { ChartDerivedPoint } from "../analytics";
 import type {
   ChartBandBoundary,
   ChartBandRenderDatum,
   ChartBoxPlotDatum,
+  ChartCalendarHeatmapData,
+  ChartCalendarHeatmapDatum,
   ChartDensityBin,
   ChartDensitySample,
   ChartDensitySeries,
@@ -17,12 +26,18 @@ import type {
   ChartGapAnnotation,
   ChartGapBehavior,
   ChartGroupedDensitySeries,
+  ChartPointValueAccessor,
   ChartRenderData,
   ChartRenderDataOptions,
   ChartRenderDatum,
+  ChartRidgelineBucket,
+  ChartRidgelineData,
+  ChartRidgelineDatum,
+  ChartSeriesPoint,
   ChartValueMode,
   ChartWaterfallDatum,
   ChartWaterfallRow,
+  IndexedChartSeriesPoint,
 } from "./types";
 
 export function createChartDensitySample<TProperties = Record<string, unknown>>(
@@ -358,6 +373,217 @@ export function createChartFunnelData(data: readonly ChartFunnelDatum[]): ChartF
   });
 }
 
+export function createChartCalendarHeatmapData<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>,
+  options: {
+    dayMs?: number;
+    includeEmptyDays?: boolean;
+    startOfDay?: (x: number) => number;
+    valueAccessor?: ChartPointValueAccessor<TProperties>;
+    xDomain?: [number, number];
+  } = {},
+): ChartCalendarHeatmapData<TProperties> {
+  const rawDayMs = options.dayMs;
+  const dayMs = Number.isFinite(rawDayMs) && rawDayMs && rawDayMs > 0 ? rawDayMs : 86_400_000;
+  const valueAccessor = options.valueAccessor ?? "y";
+  const normalizedPoints = normalizeChartSeriesPoints(points);
+  const xDomain = options.xDomain ? normalizeChartDomain(options.xDomain) : null;
+  const selectedPoints = xDomain
+    ? normalizedPoints.filter((point) => point.x >= xDomain[0] && point.x <= xDomain[1])
+    : normalizedPoints;
+  const startOfDay = options.startOfDay ?? ((x: number) => Math.floor(x / dayMs) * dayMs);
+  const pointDayStarts = selectedPoints.map((point) => startOfDay(point.x)).filter(isFiniteNumber);
+  const includeEmptyDays = options.includeEmptyDays ?? Boolean(xDomain);
+  const firstDayStart =
+    xDomain !== null
+      ? startOfDay(xDomain[0])
+      : pointDayStarts.length > 0
+        ? Math.min(...pointDayStarts)
+        : 0;
+  const lastDayStart =
+    xDomain !== null
+      ? startOfDay(Math.max(xDomain[0], xDomain[1] - dayMs * 1e-9))
+      : pointDayStarts.length > 0
+        ? Math.max(...pointDayStarts)
+        : firstDayStart;
+  const metricKeys = collectDensityMetricKeys(selectedPoints.map((point) => point.metrics));
+  const dayLookup = new Map<number, MutableCalendarHeatmapDatum<TProperties>>();
+
+  if (includeEmptyDays) {
+    const dayCount = Math.max(0, Math.floor((lastDayStart - firstDayStart) / dayMs) + 1);
+
+    for (let index = 0; index < dayCount; index += 1) {
+      const x0 = firstDayStart + index * dayMs;
+
+      dayLookup.set(x0, createCalendarHeatmapDatum(index, x0, dayMs, firstDayStart, metricKeys));
+    }
+  }
+
+  for (const point of selectedPoints) {
+    const dayStart = startOfDay(point.x);
+
+    if (!Number.isFinite(dayStart)) {
+      continue;
+    }
+
+    let datum = dayLookup.get(dayStart);
+
+    if (!datum) {
+      datum = createCalendarHeatmapDatum(
+        dayLookup.size,
+        dayStart,
+        dayMs,
+        firstDayStart,
+        metricKeys,
+      );
+      dayLookup.set(dayStart, datum);
+    }
+
+    datum.firstPoint ??= point;
+    datum.lastPoint = point;
+    datum.pointCount += 1;
+
+    const value = getChartPointAccessorValue(point, valueAccessor);
+
+    if (value !== null) {
+      datum.valueSum += value;
+      datum.valueCount += 1;
+      datum.value = datum.valueSum / datum.valueCount;
+    }
+
+    for (const metricKey of metricKeys) {
+      datum.metrics[metricKey] += point.metrics[metricKey] ?? 0;
+    }
+  }
+
+  const days = Array.from(dayLookup.values())
+    .sort((left, right) => left.x0 - right.x0)
+    .map(({ valueCount: _valueCount, valueSum: _valueSum, ...datum }, index) => ({
+      ...datum,
+      index,
+    }));
+  const values = days.map((day) => day.value).filter(isFiniteNumber);
+
+  return {
+    days,
+    summary: {
+      dayCount: days.length,
+      maxValue: values.length > 0 ? Math.max(...values) : null,
+      minValue: values.length > 0 ? Math.min(...values) : null,
+      pointCount: days.reduce((total, day) => total + day.pointCount, 0),
+      xDomain: xDomain ?? [
+        days[0]?.x0 ?? firstDayStart,
+        days[days.length - 1]?.x1 ?? firstDayStart,
+      ],
+    },
+  };
+}
+
+export function createChartRidgelineData<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>,
+  options: {
+    bucketCount: number;
+    groupBy:
+      | { property: keyof TProperties & string }
+      | ((point: IndexedChartSeriesPoint<TProperties>) => string);
+    maxGroups?: number;
+    valueAccessor?: ChartPointValueAccessor<TProperties>;
+    valueDomain?: [number, number];
+    xDomain?: [number, number];
+  },
+): ChartRidgelineData<TProperties> {
+  const bucketCount = clampInteger(options.bucketCount, 1, 1_000);
+  const valueAccessor = options.valueAccessor ?? "y";
+  const xDomain = options.xDomain ? normalizeChartDomain(options.xDomain) : null;
+  const selectedPoints = normalizeChartSeriesPoints(points).filter((point) =>
+    xDomain ? point.x >= xDomain[0] && point.x <= xDomain[1] : true,
+  );
+  const valuedPoints = selectedPoints
+    .map((point) => ({ point, value: getChartPointAccessorValue(point, valueAccessor) }))
+    .filter((item): item is { point: IndexedChartSeriesPoint<TProperties>; value: number } =>
+      isFiniteNumber(item.value),
+    );
+  const valueDomain = normalizeChartDomain(
+    options.valueDomain ?? getFiniteValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0],
+  );
+  const groups = new Map<
+    string,
+    {
+      key: string;
+      label: string;
+      points: Array<{ point: IndexedChartSeriesPoint<TProperties>; value: number }>;
+    }
+  >();
+
+  for (const item of valuedPoints) {
+    if (item.value < valueDomain[0] || item.value > valueDomain[1]) {
+      continue;
+    }
+
+    const rawGroup = getRidgelineGroupValue(item.point, options.groupBy);
+    const label =
+      rawGroup === null || rawGroup === undefined || rawGroup === "" ? "Unknown" : rawGroup;
+    const key = normalizeGroupKey(String(label));
+    const group = groups.get(key) ?? {
+      key,
+      label: String(label),
+      points: [],
+    };
+
+    group.points.push(item);
+    groups.set(key, group);
+  }
+
+  const sortedGroups = Array.from(groups.values()).sort(
+    (left, right) =>
+      right.points.length - left.points.length || left.label.localeCompare(right.label),
+  );
+  const maxGroups = options.maxGroups ? clampInteger(options.maxGroups, 1, 1_000) : null;
+  const grouped =
+    maxGroups !== null && sortedGroups.length > maxGroups
+      ? [
+          ...sortedGroups.slice(0, maxGroups),
+          {
+            key: "__other",
+            label: "Other",
+            points: sortedGroups.slice(maxGroups).flatMap((group) => group.points),
+          },
+        ]
+      : sortedGroups;
+  const ridgelines = grouped.map((group): ChartRidgelineDatum<TProperties> => {
+    const buckets = createRidgelineBuckets(bucketCount, valueDomain);
+
+    for (const item of group.points) {
+      const bucket = buckets[getChartBucketIndex(item.value, valueDomain, bucketCount)];
+
+      if (bucket) {
+        bucket.pointCount += 1;
+      }
+    }
+
+    return {
+      buckets,
+      groupId: group.key,
+      groupLabel: group.label,
+      maxCount: buckets.reduce((max, bucket) => Math.max(max, bucket.pointCount), 0),
+      pointCount: group.points.length,
+    };
+  });
+  const maxCount = ridgelines.reduce((max, group) => Math.max(max, group.maxCount), 0);
+
+  return {
+    groups: ridgelines,
+    summary: {
+      bucketCount,
+      groupCount: ridgelines.length,
+      maxCount,
+      pointCount: ridgelines.reduce((total, group) => total + group.pointCount, 0),
+      valueDomain,
+      xDomain,
+    },
+  };
+}
+
 function applyDerivedRenderValues<TProperties>(
   row: ChartRenderDatum<TProperties>,
   sample: ChartDensitySample<TProperties>,
@@ -473,4 +699,142 @@ function normalizeBandRange(
   }
 
   return lowerValue <= upperValue ? [lowerValue, upperValue] : [upperValue, lowerValue];
+}
+
+type MutableCalendarHeatmapDatum<TProperties> = ChartCalendarHeatmapDatum<TProperties> & {
+  valueCount: number;
+  valueSum: number;
+};
+
+function createCalendarHeatmapDatum<TProperties>(
+  index: number,
+  x0: number,
+  dayMs: number,
+  firstDayStart: number,
+  metricKeys: string[],
+): MutableCalendarHeatmapDatum<TProperties> {
+  const day = Math.floor(x0 / dayMs);
+  const firstDay = Math.floor(firstDayStart / dayMs);
+  const date = new Date(x0);
+
+  return {
+    date,
+    day,
+    dayOfWeek: dayMs === 86_400_000 ? date.getUTCDay() : modulo(day, 7),
+    firstPoint: null,
+    id: `day-${x0}`,
+    index,
+    lastPoint: null,
+    metrics: createZeroMetricRecord(metricKeys),
+    pointCount: 0,
+    value: null,
+    valueCount: 0,
+    valueSum: 0,
+    week: Math.floor((day - firstDay) / 7),
+    x0,
+    x1: x0 + dayMs,
+  };
+}
+
+function createRidgelineBuckets(
+  bucketCount: number,
+  valueDomain: [number, number],
+): ChartRidgelineBucket[] {
+  const span = valueDomain[1] - valueDomain[0];
+  const bucketWidth = span === 0 ? 0 : span / bucketCount;
+
+  return Array.from({ length: bucketCount }, (_, index) => {
+    const value0 = valueDomain[0] + index * bucketWidth;
+    const value1 = index === bucketCount - 1 ? valueDomain[1] : value0 + bucketWidth;
+    const value = bucketWidth === 0 ? valueDomain[0] : value0 + bucketWidth / 2;
+
+    return {
+      index,
+      pointCount: 0,
+      value,
+      value0,
+      value1,
+      x: value,
+    };
+  });
+}
+
+function normalizeChartSeriesPoints<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>,
+): Array<IndexedChartSeriesPoint<TProperties>> {
+  return points
+    .map(
+      (point, index): IndexedChartSeriesPoint<TProperties> => ({
+        id: String(point.id ?? index),
+        label: point.label ?? "",
+        metrics: normalizeChartMetrics(point.metrics),
+        properties: point.properties ?? ({} as TProperties),
+        x: point.x,
+        y: point.y,
+      }),
+    )
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
+    .sort((left, right) => left.x - right.x);
+}
+
+function getChartPointAccessorValue<TProperties>(
+  point: IndexedChartSeriesPoint<TProperties>,
+  accessor: ChartPointValueAccessor<TProperties>,
+): number | null {
+  if (typeof accessor === "function") {
+    return normalizeNumericValue(accessor(point));
+  }
+
+  if (typeof accessor === "object") {
+    return normalizeNumericValue(point.metrics[accessor.metric]);
+  }
+
+  return normalizeNumericValue(point[accessor]);
+}
+
+function getRidgelineGroupValue<TProperties>(
+  point: IndexedChartSeriesPoint<TProperties>,
+  accessor:
+    | { property: keyof TProperties & string }
+    | ((point: IndexedChartSeriesPoint<TProperties>) => string),
+) {
+  if (typeof accessor === "function") {
+    return accessor(point);
+  }
+
+  const properties = point.properties as Record<string, unknown>;
+  const value = properties[accessor.property];
+
+  return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function getFiniteValueDomain(values: number[]): [number, number] | null {
+  const finiteValues = values.filter(isFiniteNumber);
+
+  if (finiteValues.length === 0) {
+    return null;
+  }
+
+  return [Math.min(...finiteValues), Math.max(...finiteValues)];
+}
+
+function getChartBucketIndex(value: number, domain: [number, number], bucketCount: number) {
+  const span = domain[1] - domain[0];
+
+  if (span === 0) {
+    return 0;
+  }
+
+  if (value === domain[1]) {
+    return bucketCount - 1;
+  }
+
+  return Math.min(
+    bucketCount - 1,
+    Math.max(0, Math.floor(((value - domain[0]) / span) * bucketCount)),
+  );
+}
+
+function modulo(value: number, divisor: number) {
+  return ((value % divisor) + divisor) % divisor;
 }

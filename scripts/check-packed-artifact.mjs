@@ -37,6 +37,7 @@ try {
   assertFile(path.join(packageDir, "package.json"));
   assertFile(path.join(packageDir, "dist", "index.js"));
   assertFile(path.join(packageDir, "dist", "index.d.ts"));
+  assertFile(path.join(packageDir, "dist", "worker.js"));
 
   const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 
