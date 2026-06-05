@@ -26,6 +26,7 @@ import {
   getChartValueModeDefinition,
   getChartValueModeDefinitions,
   resolveChartDensityBackendPolicy,
+  type ChartHeatmapQuery,
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
@@ -726,6 +727,32 @@ describe("@moritzbrantner/charts", () => {
     }));
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
+    const heatmapQueries: Array<ChartHeatmapQuery<Record<string, unknown>>> = [
+      {
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        includeEmptyCells: false,
+        valueAccessor: { metric: "latency" },
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+      },
+      {
+        xBinCount: 6,
+        xDomain: [0, 60],
+        yBinCount: 4,
+        yDomain: [-20, 20],
+      },
+    ];
 
     expect(wasm.getHistogram({ bucketCount: 7 })).toEqual(hybrid.getHistogram({ bucketCount: 7 }));
     expect(
@@ -745,23 +772,10 @@ describe("@moritzbrantner/charts", () => {
         xDomain: [10, 40],
       }),
     );
-    expect(
-      wasm.getHeatmap({
-        includeEmptyCells: false,
-        valueAccessor: { metric: "latency" },
-        xBinCount: 6,
-        xDomain: [0, 60],
-        yBinCount: 4,
-      }),
-    ).toEqual(
-      hybrid.getHeatmap({
-        includeEmptyCells: false,
-        valueAccessor: { metric: "latency" },
-        xBinCount: 6,
-        xDomain: [0, 60],
-        yBinCount: 4,
-      }),
-    );
+
+    for (const query of heatmapQueries) {
+      expect(wasm.getHeatmap(query)).toEqual(hybrid.getHeatmap(query));
+    }
   });
 
   test("creates normalized heatmap cells and can drop empty cells", () => {
@@ -1124,6 +1138,14 @@ describe("@moritzbrantner/charts", () => {
       xDomain: [0, 200] as [number, number],
     };
     const firstSeries = index.getChartSeries(query);
+    const heatmapQuery = {
+      includeEmptyCells: false,
+      xBinCount: 8,
+      xDomain: [0, 200] as [number, number],
+      yBinCount: 4,
+      yDomain: [0, 16] as [number, number],
+    };
+    const firstHeatmap = index.getHeatmap(heatmapQuery);
 
     expect(index.getProgressiveStatus()).toMatchObject({
       activeBackend: "hybrid-js",
@@ -1131,6 +1153,7 @@ describe("@moritzbrantner/charts", () => {
       wasmReady: false,
     });
     expect(firstSeries.summary.pointCount).toBe(200);
+    expect(firstHeatmap.summary.pointCount).toBe(200);
     expect(scheduledWarmups).toHaveLength(1);
 
     scheduledWarmups[0]?.();
@@ -1143,6 +1166,7 @@ describe("@moritzbrantner/charts", () => {
       wasmReady: true,
     });
     expect(index.getChartSeries(query)).toEqual(firstSeries);
+    expect(index.getHeatmap(heatmapQuery)).toEqual(firstHeatmap);
   });
 
   test("builds a wasm-index in a worker and serves async density queries", async () => {

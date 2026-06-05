@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,8 +19,13 @@ const {
 
 const results = [];
 const runFullMatrix = process.env.CHARTS_BENCH_FULL === "1";
+const profileBenchmarks = process.env.CHARTS_BENCH_PROFILE === "1";
 const seriesSizes = runFullMatrix ? [10_000, 100_000, 500_000] : [10_000, 100_000];
 const repeatedQueryCount = runFullMatrix ? 30 : 8;
+
+if (profileBenchmarks) {
+  globalThis.__CHARTS_BENCH_PROFILE_RESULTS__ = [];
+}
 
 results.push(
   benchmark("chart.wasm.module.load", () => {
@@ -177,6 +182,27 @@ for (const size of seriesSizes) {
       );
     }),
   );
+  results.push(
+    benchmark(`${baseName}.heatmap.after-warmup`, () => {
+      assertHeatmap(
+        index.getHeatmap({
+          xBinCount: 100,
+          xDomain: [0, size - 1],
+          yBinCount: 50,
+        }),
+      );
+    }),
+  );
+  results.push(
+    benchmark(`${baseName}.histogram.after-warmup`, () => {
+      assertHistogram(
+        index.getHistogram({
+          bucketCount: 200,
+          xDomain: [0, size - 1],
+        }),
+      );
+    }),
+  );
 }
 
 const maxDurationMs = 3_000;
@@ -193,11 +219,28 @@ const slowBenchmarks = results.filter(
   (result) =>
     result.kind !== "memory" && failNames.has(result.name) && result.durationMs > maxDurationMs,
 );
-const wasmRatioFailures = readWasmRatioFailures(results);
+const comparisons = createBenchmarkComparisons(results);
+const wasmRatioFailures = readWasmRatioFailures(comparisons);
+const profileResults = readProfileResults();
+writeJsonReport({
+  comparisons,
+  profileResults,
+  repeatedQueryCount,
+  results,
+  runFullMatrix,
+  slowBenchmarks,
+  wasmRatioFailures,
+});
 
 for (const result of results) {
   const suffix = result.kind === "memory" ? "MB heap delta" : "ms";
   console.log(`${result.name}: ${result.durationMs.toFixed(1)}${suffix}`);
+}
+
+if (profileBenchmarks) {
+  for (const result of profileResults) {
+    console.log(`${result.name}: ${result.durationMs.toFixed(3)}ms profile`);
+  }
 }
 
 if (!runFullMatrix) {
@@ -216,9 +259,12 @@ if (slowBenchmarks.length > 0) {
 }
 
 if (wasmRatioFailures.length > 0) {
-  const message = `@moritzbrantner/charts WASM benchmarks missed speedup targets: ${wasmRatioFailures.join(
-    ", ",
-  )}`;
+  const message = `@moritzbrantner/charts WASM benchmarks missed speedup targets: ${wasmRatioFailures
+    .map(
+      (failure) =>
+        `${failure.wasmName} (${failure.speedup.toFixed(2)}x, target ${failure.targetSpeedup.toFixed(2)}x)`,
+    )
+    .join(", ")}`;
 
   if (process.env.CHARTS_BENCH_ENFORCE_WASM_RATIO === "1") {
     console.error(message);
@@ -377,36 +423,83 @@ function assertViewportSummary(summary, series) {
   }
 }
 
-function readWasmRatioFailures(benchmarkResults) {
-  const failures = [];
-  const requiredSpeedup = 1.5;
-  const pairs = [
-    [
-      "chart.100k.sorted.3metrics.hybrid-js.query.full",
-      "chart.100k.sorted.3metrics.wasm-index.query.full",
-    ],
-    [
-      "chart.100k.sorted.3metrics.hybrid-js.query.repeated",
-      "chart.100k.sorted.3metrics.wasm-index.query.repeated",
-    ],
-  ];
+function createBenchmarkComparisons(benchmarkResults) {
+  return [
+    createComparison(benchmarkResults, {
+      hybridName: "chart.100k.sorted.3metrics.hybrid-js.query.full",
+      targetSpeedup: 1,
+      type: "known-non-goal",
+      wasmName: "chart.100k.sorted.3metrics.wasm-index.query.full",
+      warnBelowTarget: true,
+    }),
+    createComparison(benchmarkResults, {
+      hybridName: "chart.100k.sorted.3metrics.hybrid-js.query.repeated",
+      targetSpeedup: 1,
+      type: "known-non-goal",
+      wasmName: "chart.100k.sorted.3metrics.wasm-index.query.repeated",
+      warnBelowTarget: true,
+    }),
+    createComparison(benchmarkResults, {
+      hybridName: "chart.100k.random.3metrics.hybrid-js.query.full",
+      minimumSpeedup: 1.2,
+      targetSpeedup: 1.5,
+      type: "wasm-expected-win",
+      wasmName: "chart.100k.random.3metrics.wasm-index.query.full",
+    }),
+    createComparison(benchmarkResults, {
+      hybridName: "chart.500k.random.3metrics.hybrid-js.query.full",
+      minimumSpeedup: 1.2,
+      targetSpeedup: 1.5,
+      type: "wasm-expected-win",
+      wasmName: "chart.500k.random.3metrics.wasm-index.query.full",
+    }),
+    createComparison(benchmarkResults, {
+      hybridName: "chart.500k.random.3metrics.hybrid-js.query.repeated",
+      minimumSpeedup: 1.45,
+      targetSpeedup: 1.5,
+      type: "wasm-expected-win",
+      wasmName: "chart.500k.random.3metrics.wasm-index.query.repeated",
+    }),
+    createComparison(benchmarkResults, {
+      hybridName: "chart.100k.sorted.12metrics.hybrid-js.heatmap",
+      targetSpeedup: 0.8,
+      type: "wasm-routed-heatmap",
+      wasmName: "chart.100k.sorted.12metrics.wasm-index.heatmap",
+    }),
+  ].filter(Boolean);
+}
 
-  for (const [hybridName, wasmName] of pairs) {
-    const hybrid = benchmarkResults.find((result) => result.name === hybridName);
-    const wasm = benchmarkResults.find((result) => result.name === wasmName);
+function createComparison(
+  benchmarkResults,
+  { hybridName, minimumSpeedup, targetSpeedup, type, wasmName, warnBelowTarget = false },
+) {
+  const hybrid = benchmarkResults.find((result) => result.name === hybridName);
+  const wasm = benchmarkResults.find((result) => result.name === wasmName);
 
-    if (!hybrid || !wasm || hybrid.kind === "memory" || wasm.kind === "memory") {
-      continue;
-    }
-
-    const speedup = hybrid.durationMs / Math.max(wasm.durationMs, 0.001);
-
-    if (speedup < requiredSpeedup) {
-      failures.push(`${wasmName} (${speedup.toFixed(2)}x)`);
-    }
+  if (!hybrid || !wasm || hybrid.kind === "memory" || wasm.kind === "memory") {
+    return null;
   }
 
-  return failures;
+  const speedup = hybrid.durationMs / Math.max(wasm.durationMs, 0.001);
+  const regressionFloor = minimumSpeedup ?? targetSpeedup;
+  const passed = speedup >= targetSpeedup;
+  const aboveRegressionFloor = speedup >= regressionFloor;
+
+  return {
+    hybridDurationMs: hybrid.durationMs,
+    hybridName,
+    minimumSpeedup: regressionFloor,
+    speedup,
+    status: passed ? "pass" : warnBelowTarget || aboveRegressionFloor ? "warn" : "fail",
+    targetSpeedup,
+    type,
+    wasmDurationMs: wasm.durationMs,
+    wasmName,
+  };
+}
+
+function readWasmRatioFailures(comparisons) {
+  return comparisons.filter((comparison) => comparison.status === "fail");
 }
 
 function formatSize(size) {
@@ -419,4 +512,59 @@ function formatSize(size) {
 
 function readMemoryMb() {
   return typeof process.memoryUsage === "function" ? process.memoryUsage().heapUsed / 1_048_576 : 0;
+}
+
+function writeJsonReport({
+  comparisons,
+  profileResults,
+  repeatedQueryCount,
+  results: benchmarkResults,
+  runFullMatrix,
+  slowBenchmarks,
+  wasmRatioFailures,
+}) {
+  const jsonPath = process.env.CHARTS_BENCH_JSON;
+
+  if (!jsonPath) {
+    return;
+  }
+
+  const resolvedPath = path.resolve(process.cwd(), jsonPath);
+  mkdirSync(path.dirname(resolvedPath), { recursive: true });
+  writeFileSync(
+    resolvedPath,
+    `${JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        comparisons,
+        repeatedQueryCount,
+        results: benchmarkResults.map((result) => ({
+          durationMs: result.durationMs,
+          kind: result.kind,
+          name: result.name,
+          unit: result.kind === "memory" ? "MB heap delta" : "ms",
+        })),
+        runFullMatrix,
+        slowBenchmarks: slowBenchmarks.map((result) => result.name),
+        wasmRatioFailures,
+        ...(profileBenchmarks ? { profileResults } : {}),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+function readProfileResults() {
+  if (!profileBenchmarks) {
+    return [];
+  }
+
+  return Array.isArray(globalThis.__CHARTS_BENCH_PROFILE_RESULTS__)
+    ? globalThis.__CHARTS_BENCH_PROFILE_RESULTS__.map((result) => ({
+        durationMs: result.durationMs,
+        name: result.name,
+        unit: "ms",
+      }))
+    : [];
 }

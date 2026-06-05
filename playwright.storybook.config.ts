@@ -8,14 +8,14 @@ export default defineConfig({
   testDir: ".",
   testMatch: "src/**/*.storybook.spec.ts",
   use: {
-    baseURL: "http://127.0.0.1:6007",
+    baseURL: "http://127.0.0.1:6009",
     trace: "on-first-retry",
   },
   webServer: {
-    command: "bunx storybook dev --host 127.0.0.1 --port 6007 --ci",
+    command: "bunx storybook dev --host 127.0.0.1 --port 6009 --ci",
     reuseExistingServer: false,
     timeout: 120_000,
-    url: "http://127.0.0.1:6007",
+    url: "http://127.0.0.1:6009",
   },
   projects: [
     {

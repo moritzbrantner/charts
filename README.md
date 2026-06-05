@@ -591,21 +591,25 @@ measurement on some platforms.
 ## Progressive strategy
 
 By default, `createChartDensityIndex` renders immediately from `hybrid-js`, warms
-a `wasm-index` in an idle slot, then serves later queries from the WASM backend.
-Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force one backend.
+a `wasm-index` in an idle slot, then uses method-level routing for later queries.
+Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force the wrapper
+construction policy.
 
 The `wasm-index` backend is provided by `@moritzbrantner/viz-engine`. It owns
 compact numeric arrays for sorted x/y values and metric columns, and currently
-accelerates binning, percentiles, histograms, and heatmaps. Grouped series,
-render-row shaping, gap annotations, React controls, label layout, and derived
-analytics stay in TypeScript so the public API remains renderer-agnostic and
-easy to compose.
+accelerates binning, percentiles, and histograms. Heatmap queries currently route
+to the hybrid point-store implementation because public WASM heatmap result
+mapping is slower in the large-data benchmark. Grouped series, render-row
+shaping, gap annotations, React controls, label layout, and derived analytics
+stay in TypeScript so the public API remains renderer-agnostic and easy to
+compose.
 
 Use `hybrid-js` when you need the smallest runtime surface or are running in an
 environment that does not allow WebAssembly. Use `wasm-index` when you want the
 native kernel immediately and can pay construction cost up front. Use
 `progressive` for interactive screens: the first render uses JavaScript, then
-queries switch to WASM after warmup.
+chart-series queries can use WASM after warmup while heatmap and unsupported
+operations continue through the hybrid fallback.
 
 For large browser datasets where construction cost is visible, opt into worker
 warmup:
@@ -631,8 +635,9 @@ and object accessors such as `{ metric: "revenue" }` to the worker path.
 
 The WASM binary is embedded by `@moritzbrantner/viz-engine`, so consumers do not
 need a special `.wasm` asset loader for the package import.
-Benchmarks generally show histograms, heatmaps, and repeated packed series
-queries as the primary WASM win cases.
+Benchmarks generally show random or high-cardinality large-domain chart queries
+and histograms as the primary WASM win cases. Sorted public-wrapper chart queries
+can be faster in `hybrid-js` because they avoid WASM result mapping overhead.
 
 Each index may expose `getBackendCapabilities()` for runtime inspection:
 
@@ -710,6 +715,34 @@ generated site.
 - `bun run pack:check`
 - `bun run test:e2e`
 - `bun run build && bun run bench:large-data`
+
+## Benchmark interpretation
+
+Large-data benchmarks are intentionally diagnostic, not a promise that one
+backend is always faster. `hybrid-js` is often faster for sorted public-wrapper
+chart queries because it avoids mapping WASM results back into public objects.
+`wasm-index` is expected to win on random or high-cardinality large-domain chart
+queries, percentile-heavy chart work, and competitive histogram cases. Heatmap
+currently routes through the hybrid point store because the mapped public WASM
+heatmap result is slower.
+
+Useful commands:
+
+```sh
+bun run bench:large-data
+CHARTS_BENCH_FULL=1 bun run bench:large-data
+CHARTS_BENCH_JSON=test-results/bench-large-data.json bun run bench:large-data
+CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json bun run bench:large-data
+bun run bench:large-data:json
+bun run bench:large-data:full-json
+bun run bench:large-data:profile
+```
+
+The JSON report includes raw `results`, structured backend `comparisons`,
+`slowBenchmarks`, and `wasmRatioFailures`. Profiling adds `profileResults` with
+construction, query-core, and public mapping timings. Treat `fail` comparisons as
+actionable regressions. Treat `warn` comparisons as tracked known gaps unless the
+ratio moves sharply against the documented backend behavior.
 
 ## Releases
 

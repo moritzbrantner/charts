@@ -307,7 +307,7 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
       ? createWasmChartDensityIndex(
           points,
           indexOptions as BinnedSeriesIndexOptions<TProperties>,
-          createHybridChartDensityIndex(points, indexOptions),
+          () => createHybridChartDensityIndex(points, indexOptions),
         )
       : createHybridChartDensityIndex(points, indexOptions);
 
