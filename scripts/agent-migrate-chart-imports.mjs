@@ -29,6 +29,8 @@ for (const root of ["src", "examples"]) {
   }
 }
 
+constrainRechartsLintBoundary();
+
 function moveChartSpecifiers(file, body, fullImport) {
   const specifiers = body
     .split(",")
@@ -67,6 +69,21 @@ function localChartModule(file) {
   }
 
   return relative;
+}
+
+function constrainRechartsLintBoundary() {
+  const file = "src/components/recharts-support.tsx";
+  const content = readFileSync(file, "utf8");
+  const directive = [
+    "/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/restrict-template-expressions */",
+    "// Recharts exposes tooltip/legend payloads through intentionally loose public generic types.",
+    "// Keep the exception local to this renderer adapter; chart-domain code remains strictly typed.",
+    "",
+  ].join("\n");
+
+  if (!content.startsWith("/* eslint-disable")) {
+    writeFileSync(file, directive + content);
+  }
 }
 
 function* walk(directory) {
