@@ -19,7 +19,7 @@ Start narrow, then widen:
 2. `bun run check-types`, `bun run lint`, and `bun run format:check`.
 3. `bun run test`.
 4. `bun run build` and `bun run pack:check`.
-5. For Rust/WASM changes, run `bun run build:wasm` to refresh the committed kernel, then `bun run wasm:check`.
+5. Only when Rust/WASM source changes, run `bun run build:wasm` to refresh the committed kernel, then `bun run wasm:check`; ordinary TypeScript/React work should not pay the WASM rebuild cost.
 6. Use `bun run verify` for the broad repository gate.
 
 Publication and version bumps are release work, not ordinary feature development.
