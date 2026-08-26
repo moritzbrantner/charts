@@ -71,10 +71,7 @@ async function loadGeneratedModule(): Promise<GeneratedChartsWasmModule> {
   // Keep the generated wasm-pack module out of the ordinary TypeScript dependency graph.
   // Release/browser builds copy it to dist/wasm. Development can remain JS-only.
   const moduleUrl = new URL("./wasm/charts_density_wasm.js", import.meta.url).href;
-  const dynamicImport = new Function("specifier", "return import(specifier)") as (
-    specifier: string,
-  ) => Promise<GeneratedChartsWasmModule>;
-  const module = await dynamicImport(moduleUrl);
+  const module = (await import(/* @vite-ignore */ moduleUrl)) as GeneratedChartsWasmModule;
   await module.default?.();
   return module;
 }
