@@ -29,7 +29,9 @@ jobs:
           toolchain: stable
 
       - name: Apply migration edits
-        run: node scripts/agent-bootstrap.mjs
+        run: |
+          node scripts/agent-bootstrap.mjs
+          node scripts/agent-migrate-chart-imports.mjs
 
       - name: Refresh JavaScript lockfile
         run: bun install
@@ -45,9 +47,11 @@ jobs:
           bunx prettier --write
           package.json README.md .github/workflows/ci.yml
           src/core.ts src/react.ts src/view-state.ts src/view-state.test.ts
+          src/components/recharts-support.tsx src/components.ts
           src/wasm-kernel.ts src/wasm-runtime.ts src/wasm-runtime.test.ts
           src/wasm-index.ts src/wasm/generated.ts src/density/backend.ts src/density/worker.ts
           scripts/build-wasm.mjs scripts/check-wasm-source.mjs scripts/benchmark-large-data.mjs
+          src examples
 
       - name: Check WASM source sync
         run: bun run wasm:source-check
@@ -78,7 +82,7 @@ jobs:
 
       - name: Commit implementation
         run: |
-          rm scripts/agent-bootstrap.mjs .github/workflows/agent-bootstrap.yml
+          rm scripts/agent-bootstrap.mjs scripts/agent-migrate-chart-imports.mjs .github/workflows/agent-bootstrap.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
