@@ -53,6 +53,12 @@ jobs:
           scripts/build-wasm.mjs scripts/check-wasm-source.mjs scripts/benchmark-large-data.mjs
           src examples
 
+      - name: Apply mechanical lint fixes
+        run: bunx eslint . --fix || true
+
+      - name: Reformat lint-fixed files
+        run: bunx prettier --write src examples
+
       - name: Check WASM source sync
         run: bun run wasm:source-check
 
