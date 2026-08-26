@@ -1,0 +1,90 @@
+name: Agent charts finalizer
+
+on:
+  push:
+    branches:
+      - agent/conventions-wasm-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: contains(github.event.head_commit.message, 'Run charts finalizer')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Tighten package and style boundaries
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          packageJson.files = ['dist', 'component-sources.css'];
+          packageJson.exports['./component-sources.css'] = './component-sources.css';
+          packageJson.scripts.build = 'tsup src/index.ts --format esm --dts --clean --out-dir dist && tsup src/core.ts src/react.ts src/wasm-runtime.ts --format esm --dts --clean=false --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false';
+          fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
+
+          const stylesPath = 'examples/src/styles.css';
+          let styles = fs.readFileSync(stylesPath, 'utf8');
+          if (!styles.includes('@moritzbrantner/ui/component-sources.css')) {
+            styles = styles.replace(
+              '@import "@moritzbrantner/ui/atlas/styles.css";\n',
+              '@import "@moritzbrantner/ui/atlas/styles.css";\n@import "@moritzbrantner/ui/component-sources.css";\n',
+            );
+          }
+          fs.writeFileSync(stylesPath, styles);
+
+          const readmePath = 'README.md';
+          let readme = fs.readFileSync(readmePath, 'utf8');
+          const installMarker = 'The package is published to public npm.\n';
+          const styleText = `The package is published to public npm.\n\nFor React chart components, import the shared UI theme and both component-source contracts once in the consuming application:\n\n\`\`\`css\n@import "@moritzbrantner/ui/atlas/styles.css";\n@import "@moritzbrantner/ui/component-sources.css";\n@import "@moritzbrantner/charts/component-sources.css";\n\`\`\`\n`;
+          if (!readme.includes('@moritzbrantner/charts/component-sources.css')) {
+            readme = readme.replace(installMarker, styleText);
+          }
+          fs.writeFileSync(readmePath, readme);
+          NODE
+
+          cat > component-sources.css <<'CSS'
+          @source "./dist/**/*.js";
+          CSS
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Format package changes
+        run: bunx prettier --write package.json README.md examples/src/styles.css component-sources.css
+
+      - name: Refresh root API report
+        run: |
+          bun run build
+          rm etc/charts.api.md
+          bun run api:check || test -f etc/charts.api.md
+
+      - name: Validate package boundaries
+        run: |
+          bun run wasm:source-check
+          bun run check-types
+          bun run lint
+          bun run format:check
+          bun run test
+          bun run docs:check
+          bun run api:check
+          bun run pack:check
+          bun run build:examples
+
+      - name: Commit finalized package changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A ':!.github/workflows/agent-finalize.yml'
+          git commit -m "Finalize charts package boundaries"
+          git push origin HEAD:agent/conventions-wasm-boundary
