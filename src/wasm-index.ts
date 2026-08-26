@@ -7,7 +7,7 @@ import {
 } from "./data-density";
 import { createChartDensitySample } from "./density/render-data";
 import { clampInteger, normalizeChartDomain } from "./density/shared";
-import { getLoadedChartWasmKernel } from "./wasm-kernel";
+import { getLoadedChartWasmKernel, loadChartWasmKernel } from "./wasm-kernel";
 
 import type {
   ChartBackendCapabilities,
@@ -34,9 +34,11 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
   options: BinnedSeriesIndexOptions<TProperties>,
   createFallbackIndex: () => ChartDensityIndex<TProperties>,
 ): ChartDensityIndex<TProperties> {
-  const kernel = getLoadedChartWasmKernel();
-  if (!kernel) {
-    return createFallbackIndex();
+  // Loading is intentionally asynchronous so importing @moritzbrantner/charts/core remains
+  // server-safe and ordinary development never requires a WASM artifact. Until the local
+  // kernel is ready, this index is behaviorally identical to the JS correctness baseline.
+  if (!getLoadedChartWasmKernel()) {
+    void loadChartWasmKernel().catch(() => undefined);
   }
 
   const normalizedPoints = normalizeWasmPoints(points, options);
@@ -50,15 +52,30 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
 
   return {
     getBackendCapabilities() {
+      if (!getLoadedChartWasmKernel()) {
+        return (
+          readFallbackIndex().getBackendCapabilities?.() ?? {
+            backend: "hybrid-js",
+            supportsGroupedSeries: true,
+            supportsHeatmap: true,
+            supportsHistogram: true,
+            supportsPercentiles: true,
+            usesWasm: false,
+          }
+        );
+      }
       return WASM_CAPABILITIES;
     },
 
     getBinnedSeries(query) {
+      if (!getLoadedChartWasmKernel()) {
+        return readFallbackIndex().getBinnedSeries(query);
+      }
       return createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
     },
 
     getChartSeries(query) {
-      if (requiresPercentileFallback(query)) {
+      if (!getLoadedChartWasmKernel() || requiresPercentileFallback(query)) {
         return readFallbackIndex().getChartSeries(query);
       }
 
