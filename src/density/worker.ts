@@ -1,3 +1,4 @@
+import { enableChartWasm } from "../wasm-runtime";
 import { createChartDensityIndex } from "./backend";
 import {
   serializeChartDensityWorkerError,
@@ -8,6 +9,8 @@ import {
 import type { ChartDensityIndex } from "./types";
 
 let activeIndex: ChartDensityIndex | null = null;
+
+enableChartWasm();
 
 globalThis.addEventListener("message", (event: MessageEvent<ChartDensityWorkerRequest>) => {
   const message = event.data;
