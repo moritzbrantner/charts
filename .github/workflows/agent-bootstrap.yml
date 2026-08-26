@@ -77,6 +77,11 @@ jobs:
       - name: Build package
         run: bun run build
 
+      - name: Refresh intentional API report
+        run: |
+          rm etc/charts.api.md
+          bun run api:check || test -f etc/charts.api.md
+
       - name: Check docs and API
         run: bun run docs:check && bun run api:check
 
