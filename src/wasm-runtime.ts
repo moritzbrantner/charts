@@ -117,15 +117,18 @@ function readExports(instance: WebAssembly.Instance): RawChartWasmExports {
   return exports as RawChartWasmExports;
 }
 
-function decodeBase64(value: string): Uint8Array {
+function decodeBase64(value: string): ArrayBuffer {
   const bufferConstructor = (globalThis as {
     Buffer?: { from(input: string, encoding: "base64"): Uint8Array };
   }).Buffer;
+  const bytes = bufferConstructor
+    ? Uint8Array.from(bufferConstructor.from(value, "base64"))
+    : decodeBrowserBase64(value);
 
-  if (bufferConstructor) {
-    return Uint8Array.from(bufferConstructor.from(value, "base64"));
-  }
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
 
+function decodeBrowserBase64(value: string): Uint8Array {
   const binary = globalThis.atob(value);
   const bytes = new Uint8Array(binary.length);
 
