@@ -193,12 +193,12 @@ function createBins<TProperties>(
   const endIndex = upperBoundByX(points, xDomain[1]);
 
   for (let pointIndex = startIndex; pointIndex < endIndex; pointIndex += 1) {
-    const point = points[pointIndex]!;
+    const point = points[pointIndex];
     const binIndex = Math.min(
       binCount - 1,
       Math.max(0, Math.floor((point.x - xDomain[0]) / binWidth)),
     );
-    const metrics = bins[binIndex]!.metrics;
+    const metrics = bins[binIndex].metrics;
 
     for (const metricKey of metricKeys) {
       metrics[metricKey] += point.metrics[metricKey] ?? 0;
@@ -241,20 +241,23 @@ function readSeriesBounds<TProperties>(points: Array<IndexedChartSeriesPoint<TPr
   }
 
   return {
-    maxX: points[points.length - 1]!.x,
+    maxX: points[points.length - 1].x,
     maxY,
-    minX: points[0]!.x,
+    minX: points[0].x,
     minY,
   };
 }
 
-function lowerBoundByX<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties>>, x: number) {
+function lowerBoundByX<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  x: number,
+) {
   let low = 0;
   let high = points.length;
 
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
-    if (points[middle]!.x < x) {
+    if (points[middle].x < x) {
       low = middle + 1;
     } else {
       high = middle;
@@ -264,13 +267,16 @@ function lowerBoundByX<TProperties>(points: Array<IndexedChartSeriesPoint<TPrope
   return low;
 }
 
-function upperBoundByX<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties>>, x: number) {
+function upperBoundByX<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  x: number,
+) {
   let low = 0;
   let high = points.length;
 
   while (low < high) {
     const middle = Math.floor((low + high) / 2);
-    if (points[middle]!.x <= x) {
+    if (points[middle].x <= x) {
       low = middle + 1;
     } else {
       high = middle;

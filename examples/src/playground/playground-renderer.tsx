@@ -1,4 +1,3 @@
-import { ChartTooltip, ChartTooltipContent } from "@moritzbrantner/ui";
 import {
   Area,
   AreaChart,
@@ -12,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 
+import { ChartTooltip, ChartTooltipContent } from "@moritzbrantner/charts";
 import {
   ChartAxisTransformMenu,
   ChartLabelOverlay,

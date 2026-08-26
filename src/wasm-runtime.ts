@@ -77,11 +77,7 @@ export function isChartWasmEnabled(): boolean {
   return hasChartWasmKernel();
 }
 
-function createNativeIndex(
-  wasm: RawChartWasmExports,
-  x: Float64Array,
-  y: Float64Array,
-): number {
+function createNativeIndex(wasm: RawChartWasmExports, x: Float64Array, y: Float64Array): number {
   if (x.length !== y.length) {
     throw new Error("Chart WASM x/y arrays must have equal lengths.");
   }
@@ -118,9 +114,11 @@ function readExports(instance: WebAssembly.Instance): RawChartWasmExports {
 }
 
 function decodeBase64(value: string): ArrayBuffer {
-  const bufferConstructor = (globalThis as {
-    Buffer?: { from(input: string, encoding: "base64"): Uint8Array };
-  }).Buffer;
+  const bufferConstructor = (
+    globalThis as {
+      Buffer?: { from(input: string, encoding: "base64"): Uint8Array };
+    }
+  ).Buffer;
   const bytes = bufferConstructor
     ? Uint8Array.from(bufferConstructor.from(value, "base64"))
     : decodeBrowserBase64(value);

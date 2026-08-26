@@ -1,15 +1,8 @@
-import {
-  ActionMenu,
-  Button,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ContextActionMenu,
-  copyText,
-} from "@moritzbrantner/ui";
+import { ActionMenu, Button, ContextActionMenu, copyText } from "@moritzbrantner/ui";
 import { useCallback, useMemo, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@moritzbrantner/charts";
 import {
   ChartDomainMinimap,
   ChartHotBinRow,

@@ -598,24 +598,24 @@ describe("@moritzbrantner/charts", () => {
     }
   });
 
-  test("resolves auto backend policy conservatively", () => {
+  test("routes only supported high-volume chart queries toward WASM", () => {
     expect(
       resolveChartDensityBackendPolicy({
         operationKind: "chart",
         pointCount: 200_000,
         requestedModes: ["average"],
       }),
-    ).toBe("hybrid-js");
+    ).toBe("wasm-index");
     expect(
       resolveChartDensityBackendPolicy({
         hasPercentiles: true,
         operationKind: "chart",
         pointCount: 200_000,
       }),
-    ).toBe("wasm-index");
+    ).toBe("hybrid-js");
   });
 
-  test("serves WASM series through the external viz-engine backend", () => {
+  test("keeps the explicit WASM route correct before optional acceleration is enabled", () => {
     const points = Array.from({ length: 48 }, (_, pointIndex) => ({
       id: `point-${pointIndex}`,
       metrics: Object.fromEntries(
@@ -650,7 +650,7 @@ describe("@moritzbrantner/charts", () => {
 
     expect(wasmIndex.getBackendCapabilities?.()).toMatchObject({
       backend: "wasm-index",
-      usesWasm: true,
+      usesWasm: false,
     });
     expect(wasmIndex.getBinnedSeries(binnedQuery)).toEqual(
       hybridIndex.getBinnedSeries(binnedQuery),
@@ -1198,7 +1198,7 @@ describe("@moritzbrantner/charts", () => {
 
     expect(await workerIndex?.getBackendCapabilities()).toMatchObject({
       backend: "wasm-index",
-      usesWasm: true,
+      usesWasm: false,
     });
     expect(await workerIndex?.getChartSeries(query)).toEqual(expected);
 
@@ -1294,8 +1294,8 @@ describe("@moritzbrantner/charts", () => {
     });
     expect(wasm.getBackendCapabilities?.()).toMatchObject({
       backend: "wasm-index",
-      supportsGroupedSeries: false,
-      usesWasm: true,
+      supportsGroupedSeries: true,
+      usesWasm: false,
     });
     expect(progressive.getBackendCapabilities?.()).toMatchObject({
       backend: "hybrid-js",
@@ -1306,7 +1306,7 @@ describe("@moritzbrantner/charts", () => {
 
     expect(progressive.getBackendCapabilities?.()).toMatchObject({
       backend: "wasm-index",
-      usesWasm: true,
+      usesWasm: false,
     });
   });
 });

@@ -65,7 +65,14 @@ function readDomain(value: string | null): [number, number] | null {
 
 function readCsv(value: string | null): string[] {
   return value
-    ? [...new Set(value.split(",").map((item) => item.trim()).filter(Boolean))].sort()
+    ? [
+        ...new Set(
+          value
+            .split(",")
+            .map((item) => item.trim())
+            .filter(Boolean),
+        ),
+      ].sort()
     : [];
 }
 

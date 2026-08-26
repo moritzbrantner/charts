@@ -1,4 +1,4 @@
-import { type ChartContainer, type ChartConfig } from "@moritzbrantner/ui";
+import { type ChartContainer, type ChartConfig } from "./recharts-support";
 
 import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "../analytics";
 import type {

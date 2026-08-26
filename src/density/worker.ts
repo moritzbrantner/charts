@@ -1,4 +1,5 @@
 import { enableChartWasm } from "../wasm-runtime";
+
 import { createChartDensityIndex } from "./backend";
 import {
   serializeChartDensityWorkerError,

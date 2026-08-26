@@ -1,4 +1,4 @@
-import { ChartContainer, type ChartConfig } from "@moritzbrantner/ui";
+import { ChartContainer, type ChartConfig } from "../recharts-support";
 
 import type { ChartRange } from "@moritzbrantner/charts";
 import type { ReactNode } from "react";

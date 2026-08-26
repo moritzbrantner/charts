@@ -1,11 +1,4 @@
-import {
-  Badge,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@moritzbrantner/ui";
+import { Badge, ToggleGroup, ToggleGroupItem } from "@moritzbrantner/ui";
 import { useMemo, useState } from "react";
 import {
   Area,
@@ -20,6 +13,9 @@ import {
 } from "recharts";
 
 import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
   BinnedChart,
   CHART_VALUE_MODE_DEFINITIONS,
   ChartAnomalyMarkerList,

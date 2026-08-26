@@ -1,7 +1,8 @@
-import { Badge, ChartContainer, ContextActionMenu } from "@moritzbrantner/ui";
+import { Badge, ContextActionMenu } from "@moritzbrantner/ui";
 import { useCallback, useMemo, useState } from "react";
 
 import {
+  ChartContainer,
   ChartCirclePackSvg,
   ChartCalendarHeatmapSvg,
   ChartDomainMinimap,

@@ -6,7 +6,6 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  ChartContainer,
   Checkbox,
   Item,
   ItemContent,
@@ -24,6 +23,7 @@ import {
   useChartWheelDomain,
 } from "./hooks";
 import { ChartDomainMinimap } from "./interactive";
+import { ChartContainer } from "./recharts-support";
 import {
   clamp,
   formatCompactNumber,

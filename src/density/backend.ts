@@ -43,7 +43,7 @@ export function resolveChartDensityBackendPolicy({
   const percentileRequested =
     hasPercentiles || requestedModes.some((mode) => isChartPercentileMode(mode));
 
-  if (operationKind === "chart" && percentileRequested && pointCount >= 200_000) {
+  if (operationKind === "chart" && !percentileRequested && pointCount >= 200_000) {
     return "wasm-index";
   }
 

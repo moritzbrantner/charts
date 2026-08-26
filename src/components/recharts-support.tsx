@@ -1,3 +1,6 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/restrict-template-expressions */
+// Recharts exposes tooltip/legend payloads through intentionally loose public generic types.
+// Keep the exception local to this renderer adapter; chart-domain code remains strictly typed.
 "use client";
 
 import { cn } from "@moritzbrantner/ui/lib/cn";
@@ -7,6 +10,7 @@ import {
   ResponsiveContainer as RechartsResponsiveContainer,
   Tooltip as RechartsTooltip,
 } from "recharts";
+
 import type {
   DefaultLegendContentProps,
   DefaultTooltipContentProps,

@@ -1,6 +1,7 @@
-import { Button, ChartContainer } from "@moritzbrantner/ui";
+import { Button } from "@moritzbrantner/ui";
 import { Bar, BarChart, Line, LineChart } from "recharts";
 
+import { ChartContainer } from "./recharts-support";
 import { createPreviewData, joinClassNames } from "./shared";
 
 import type { ChartValueModePreviewProps } from "./types";

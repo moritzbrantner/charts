@@ -23,11 +23,23 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
+    },
+    "./wasm": {
+      "types": "./dist/wasm-runtime.d.ts",
+      "import": "./dist/wasm-runtime.js"
     }
   },
   "dependencies": {
     "@chenglou/pretext": "0.0.7",
-    "@moritzbrantner/ui": "^0.9.1"
+    "@moritzbrantner/ui": "^1.0.0"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -58,7 +70,6 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.6.0",
     "jsdom": "^26.1.0",
-    "@moritzbrantner/viz-engine": "^0.2.0",
     "prettier": "^3.8.3",
     "publint": "^0.3.21",
     "react": "^19.2.0",
@@ -85,10 +96,10 @@
     "bench:large-data:full-json": "CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:json": "CHARTS_BENCH_JSON=test-results/bench-large-data.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:profile": "CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json node ./scripts/benchmark-large-data.mjs",
-    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false",
+    "build": "tsup src/index.ts src/core.ts src/react.ts src/wasm-runtime.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false",
     "build:examples": "vite build --outDir ../dist-examples --emptyOutDir",
     "build:storybook": "storybook build --output-dir storybook-static",
-    "build:wasm": "echo \"WASM backend is provided by @moritzbrantner/viz-engine\"",
+    "build:wasm": "node ./scripts/build-wasm.mjs",
     "changeset": "changeset",
     "check-types": "tsc --noEmit",
     "dev": "vite",
@@ -103,7 +114,7 @@
     "storybook": "storybook dev -p 6006",
     "test": "vitest run",
     "test:browser": "bun run test:e2e && bun run test:visual && bun run test:storybook",
-    "test:wasm": "vitest run src/index.test.ts",
+    "test:wasm": "vitest run src/wasm-runtime.test.ts",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:storybook": "playwright test -c playwright.storybook.config.ts",
@@ -111,7 +122,9 @@
     "test:visual": "playwright test -c playwright.visual.config.ts",
     "quality:pages": "bun run test:unlighthouse",
     "version-packages": "changeset version",
-    "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
-    "verify:release": "bun run verify && bun run bench:large-data"
+    "verify": "bun run wasm:source-check && bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
+    "verify:release": "bun run verify && bun run bench:large-data",
+    "wasm:source-check": "node ./scripts/check-wasm-source.mjs",
+    "wasm:check": "bun run wasm:source-check && cargo test --manifest-path crates/charts-density-wasm/Cargo.toml --locked && bun run test:wasm"
   }
 }
