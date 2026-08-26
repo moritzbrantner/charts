@@ -5,6 +5,7 @@ export * from "./components/chrome";
 export * from "./components/labels-overlay";
 export * from "./components/selectors";
 export * from "./components/interactive";
+export * from "./components/recharts-support";
 export * from "./components/svg-basic";
 export * from "./components/svg-hierarchy";
 export * from "./components/value-preview";

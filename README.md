@@ -27,6 +27,14 @@ bun add @moritzbrantner/charts react react-dom recharts
 
 The package is published to public npm.
 
+For React chart components, import the shared UI theme and both component-source contracts once in the consuming application:
+
+```css
+@import "@moritzbrantner/ui/atlas/styles.css";
+@import "@moritzbrantner/ui/component-sources.css";
+@import "@moritzbrantner/charts/component-sources.css";
+```
+
 ## Support matrix
 
 | Dependency | Supported range             | Notes                                                         |
@@ -35,6 +43,33 @@ The package is published to public npm.
 | React DOM  | `^19.0.0`                   | Required for examples and React control rendering.            |
 | Recharts   | `^3.0.0`                    | Used by the bundled chart components and examples.            |
 | TypeScript | Repository compiler version | Public types are checked from the generated package artifact. |
+
+## Package boundaries
+
+The package keeps chart computation separate from interactive React rendering:
+
+- `@moritzbrantner/charts/core` contains chart data processing, layouts, labels, and
+  shareable view-state codecs without importing React. Prefer this entrypoint in server-rendered
+  code, workers, scripts, and non-React consumers.
+- `@moritzbrantner/charts/react` adds React controls, hooks, and renderer composition. In Next.js,
+  keep this import behind the smallest client boundary that actually needs interaction.
+- `@moritzbrantner/charts/wasm` exposes the optional owned Rust/WASM numeric kernel. Calling
+  `enableChartWasm()` accelerates supported high-volume binning; unsupported operations and
+  environments continue through the TypeScript implementation.
+- The root entrypoint remains available for backwards compatibility.
+
+Routing remains application-owned. The package can encode durable view state, but it does not
+depend on Next.js or any router.
+
+## Shareable and accessible data views
+
+Use `encodeChartViewState` and `decodeChartViewState` from the core entrypoint to map durable,
+non-sensitive chart state to URL query parameters. Applications decide when and how to synchronize
+those parameters with their router.
+
+Charts should not be the only representation of important values. `createChartRenderData(...).rows`
+is the structured fallback contract for a table, `DataGrid`, export, or other non-visual
+representation alongside an interactive chart.
 
 ## API stability
 
@@ -83,7 +118,8 @@ const rows = createChartRenderData(series.samples, {
 - Gap behavior: empty bins can be preserved, connected with annotations,
   dropped, or zero-filled.
 - Progressive backend: `createProgressiveChartDensityIndex` renders immediately
-  through the hybrid JS backend and can warm the WASM index for later queries.
+  through the hybrid JS backend. When the owned kernel is enabled, supported numeric binning can
+  use WASM while unsupported operations remain on the TypeScript implementation.
 - Worker backend: `createChartDensityWorkerIndex` constructs a WASM density
   index in a module worker and serves async query results off the main thread.
 - Labels: `layoutChartLabels` and `ChartLabelOverlay` place annotations while

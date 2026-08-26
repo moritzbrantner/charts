@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const distEntry = path.join(packageRoot, "dist", "index.js");
+const wasmEntry = path.join(packageRoot, "dist", "wasm-runtime.js");
 
 if (!existsSync(distEntry)) {
   console.error("@moritzbrantner/charts benchmark requires dist/. Run `bun run build` first.");
@@ -16,6 +17,11 @@ const {
   createChartDensityViewportSummary,
   createProgressiveChartDensityIndex,
 } = await import(distEntry);
+const { enableChartWasm } = await import(wasmEntry);
+
+if (!enableChartWasm()) {
+  throw new Error("Chart benchmark requires the committed owned WASM kernel.");
+}
 
 const results = [];
 const runFullMatrix = process.env.CHARTS_BENCH_FULL === "1";
@@ -443,28 +449,32 @@ function createBenchmarkComparisons(benchmarkResults) {
       hybridName: "chart.100k.random.3metrics.hybrid-js.query.full",
       minimumSpeedup: 1.2,
       targetSpeedup: 1.5,
-      type: "wasm-expected-win",
+      type: "wasm-candidate",
       wasmName: "chart.100k.random.3metrics.wasm-index.query.full",
+      warnBelowTarget: true,
     }),
     createComparison(benchmarkResults, {
       hybridName: "chart.500k.random.3metrics.hybrid-js.query.full",
       minimumSpeedup: 1.2,
       targetSpeedup: 1.5,
-      type: "wasm-expected-win",
+      type: "wasm-candidate",
       wasmName: "chart.500k.random.3metrics.wasm-index.query.full",
+      warnBelowTarget: true,
     }),
     createComparison(benchmarkResults, {
       hybridName: "chart.500k.random.3metrics.hybrid-js.query.repeated",
       minimumSpeedup: 1.45,
       targetSpeedup: 1.5,
-      type: "wasm-expected-win",
+      type: "wasm-candidate",
       wasmName: "chart.500k.random.3metrics.wasm-index.query.repeated",
+      warnBelowTarget: true,
     }),
     createComparison(benchmarkResults, {
       hybridName: "chart.100k.sorted.12metrics.hybrid-js.heatmap",
       targetSpeedup: 0.8,
-      type: "wasm-routed-heatmap",
+      type: "wasm-fallback-operation",
       wasmName: "chart.100k.sorted.12metrics.wasm-index.heatmap",
+      warnBelowTarget: true,
     }),
   ].filter(Boolean);
 }

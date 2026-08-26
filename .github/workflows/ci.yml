@@ -60,9 +60,6 @@ jobs:
             crates/charts-density-wasm/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('crates/charts-density-wasm/Cargo.lock') }}
 
-      - name: Install wasm-pack
-        run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
-
       - name: Cache Bun install cache
         uses: actions/cache@v5.0.5
         with:
@@ -74,8 +71,11 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Build WASM
-        run: bun run build:wasm
+      - name: Check WASM source sync
+        run: bun run wasm:source-check
+
+      - name: Check Rust kernel
+        run: cargo test --manifest-path crates/charts-density-wasm/Cargo.toml --locked
 
       - name: Check types
         run: bun run check-types
@@ -126,9 +126,6 @@ jobs:
             ~/.cargo/git/db/
             crates/charts-density-wasm/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('crates/charts-density-wasm/Cargo.lock') }}
-
-      - name: Install wasm-pack
-        run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
         uses: actions/cache@v5.0.5
@@ -181,9 +178,6 @@ jobs:
             ~/.cargo/git/db/
             crates/charts-density-wasm/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('crates/charts-density-wasm/Cargo.lock') }}
-
-      - name: Install wasm-pack
-        run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
         uses: actions/cache@v5.0.5
@@ -288,9 +282,6 @@ jobs:
             ~/.cargo/git/db/
             crates/charts-density-wasm/target/
           key: ${{ runner.os }}-cargo-${{ hashFiles('crates/charts-density-wasm/Cargo.lock') }}
-
-      - name: Install wasm-pack
-        run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
 
       - name: Cache Bun install cache
         uses: actions/cache@v5.0.5
