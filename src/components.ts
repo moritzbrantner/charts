@@ -2,6 +2,7 @@ export * from "./components/types";
 export * from "./components/axis";
 export * from "./components/animation";
 export * from "./components/chrome";
+export * from "./components/density-table";
 export * from "./components/labels-overlay";
 export * from "./components/selectors";
 export * from "./components/interactive";
