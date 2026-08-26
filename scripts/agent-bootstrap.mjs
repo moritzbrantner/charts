@@ -88,6 +88,24 @@ function patchTests() {
     '    expect(wasmIndex.getBackendCapabilities?.()).toMatchObject({\n      backend: "wasm-index",\n      usesWasm: false,\n    });\n',
     path,
   );
+  content = replaceOnce(
+    content,
+    '    expect(await workerIndex?.getBackendCapabilities()).toMatchObject({\n      backend: "wasm-index",\n      usesWasm: true,\n    });\n',
+    '    expect(await workerIndex?.getBackendCapabilities()).toMatchObject({\n      backend: "wasm-index",\n      usesWasm: false,\n    });\n',
+    path,
+  );
+  content = replaceOnce(
+    content,
+    '    expect(wasm.getBackendCapabilities?.()).toMatchObject({\n      backend: "wasm-index",\n      supportsGroupedSeries: false,\n      usesWasm: true,\n    });\n',
+    '    expect(wasm.getBackendCapabilities?.()).toMatchObject({\n      backend: "wasm-index",\n      supportsGroupedSeries: true,\n      usesWasm: false,\n    });\n',
+    path,
+  );
+  content = replaceOnce(
+    content,
+    '    expect(progressive.getBackendCapabilities?.()).toMatchObject({\n      backend: "wasm-index",\n      usesWasm: true,\n    });\n',
+    '    expect(progressive.getBackendCapabilities?.()).toMatchObject({\n      backend: "wasm-index",\n      usesWasm: false,\n    });\n',
+    path,
+  );
   write(path, content);
 }
 
