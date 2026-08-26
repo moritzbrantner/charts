@@ -6,7 +6,7 @@ const MAX: usize = 3;
 const FIRST: usize = 4;
 const LAST: usize = 5;
 
-struct DensityIndex {
+pub struct DensityIndex {
     x: Vec<f64>,
     y: Vec<f64>,
 }
