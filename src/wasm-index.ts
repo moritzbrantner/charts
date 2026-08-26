@@ -14,8 +14,10 @@ import type {
   ChartDensityBin,
   ChartDensityIndex,
   ChartDensityQuery,
+  ChartDensitySample,
   ChartDensitySeries,
   ChartMetricRecord,
+  ChartPercentileMode,
   ChartSeriesPoint,
   IndexedChartSeriesPoint,
 } from "./density";
@@ -25,8 +27,18 @@ const WASM_CAPABILITIES: ChartBackendCapabilities = {
   supportsGroupedSeries: false,
   supportsHeatmap: false,
   supportsHistogram: false,
-  supportsPercentiles: false,
+  supportsPercentiles: true,
   usesWasm: true,
+};
+
+const PERCENTILE_QUANTILES: Record<ChartPercentileMode, number> = {
+  p10: 0.1,
+  p25: 0.25,
+  p50: 0.5,
+  p75: 0.75,
+  p90: 0.9,
+  p95: 0.95,
+  p99: 0.99,
 };
 
 export function createWasmChartDensityIndex<TProperties = Record<string, unknown>>(
@@ -75,13 +87,14 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
     },
 
     getChartSeries(query) {
-      if (!getLoadedChartWasmKernel() || requiresPercentileFallback(query)) {
+      if (!getLoadedChartWasmKernel()) {
         return readFallbackIndex().getChartSeries(query);
       }
 
       const valueMode = query.valueMode ?? "average";
       const series = createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
+      populateWasmPercentiles(samples, normalizedPoints, query);
 
       return {
         bins: series.bins,
@@ -191,6 +204,56 @@ function createWasmBinnedSeries<TProperties>(
   };
 }
 
+function populateWasmPercentiles<TProperties>(
+  samples: Array<ChartDensitySample<TProperties>>,
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  query: ChartDensityQuery,
+) {
+  const requested = new Set<ChartPercentileMode>(query.percentiles ?? []);
+  if (query.valueMode && isPercentileMode(query.valueMode)) {
+    requested.add(query.valueMode);
+  }
+  if (requested.size === 0) {
+    return;
+  }
+
+  const kernel = getLoadedChartWasmKernel();
+  if (!kernel) {
+    return;
+  }
+
+  const xDomain = normalizeChartDomain(query.xDomain);
+  const binCount = clampInteger(query.targetBinCount, 1, 100_000);
+  const width = (xDomain[1] - xDomain[0]) / binCount;
+  const valuesByBin: number[][] = Array.from({ length: binCount }, () => []);
+
+  for (const point of points) {
+    if (point.x < xDomain[0] || point.x > xDomain[1]) {
+      continue;
+    }
+    const binIndex = Math.min(
+      binCount - 1,
+      Math.max(0, Math.floor((point.x - xDomain[0]) / width)),
+    );
+    valuesByBin[binIndex]!.push(point.y);
+  }
+
+  for (const sample of samples) {
+    const values = valuesByBin[sample.index] ?? [];
+    if (values.length === 0) {
+      continue;
+    }
+    const typedValues = Float64Array.from(values);
+    for (const mode of requested) {
+      const value = kernel.percentile(typedValues, PERCENTILE_QUANTILES[mode]);
+      sample[mode] = Number.isFinite(value) ? value : null;
+      if (query.valueMode === mode) {
+        sample.y = sample[mode];
+      }
+    }
+  }
+}
+
 function normalizeWasmPoints<TProperties>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties>,
@@ -241,6 +304,6 @@ function createSeriesBounds<TProperties>(points: Array<IndexedChartSeriesPoint<T
   return { maxX, maxY, minX, minY };
 }
 
-function requiresPercentileFallback(query: ChartDensityQuery) {
-  return Boolean(query.percentiles?.length || (query.valueMode && query.valueMode.startsWith("p")));
+function isPercentileMode(value: string): value is ChartPercentileMode {
+  return value in PERCENTILE_QUANTILES;
 }
