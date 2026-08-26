@@ -27,6 +27,14 @@ bun add @moritzbrantner/charts react react-dom recharts
 
 The package is published to public npm.
 
+For React chart components, import the shared UI theme and both component-source contracts once in the consuming application:
+
+```css
+@import "@moritzbrantner/ui/atlas/styles.css";
+@import "@moritzbrantner/ui/component-sources.css";
+@import "@moritzbrantner/charts/component-sources.css";
+```
+
 ## Support matrix
 
 | Dependency | Supported range             | Notes                                                         |
