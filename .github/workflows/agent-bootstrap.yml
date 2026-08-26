@@ -1,0 +1,86 @@
+name: Agent charts migration bootstrap
+
+on:
+  push:
+    branches:
+      - agent/conventions-wasm-boundary
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    if: contains(github.event.head_commit.message, 'charts migration bootstrap')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Apply migration edits
+        run: node scripts/agent-bootstrap.mjs
+
+      - name: Refresh JavaScript lockfile
+        run: bun install
+
+      - name: Format Rust
+        run: cargo fmt --manifest-path crates/charts-density-wasm/Cargo.toml
+
+      - name: Build owned WASM kernel
+        run: bun run build:wasm
+
+      - name: Format changed frontend files
+        run: >-
+          bunx prettier --write
+          package.json README.md .github/workflows/ci.yml
+          src/core.ts src/react.ts src/view-state.ts src/view-state.test.ts
+          src/wasm-kernel.ts src/wasm-runtime.ts src/wasm-runtime.test.ts
+          src/wasm-index.ts src/wasm/generated.ts src/density/backend.ts src/density/worker.ts
+          scripts/build-wasm.mjs scripts/check-wasm-source.mjs scripts/benchmark-large-data.mjs
+
+      - name: Check WASM source sync
+        run: bun run wasm:source-check
+
+      - name: Test Rust kernel
+        run: cargo test --manifest-path crates/charts-density-wasm/Cargo.toml --locked
+
+      - name: Check types
+        run: bun run check-types
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun run test
+
+      - name: Build package
+        run: bun run build
+
+      - name: Check docs and API
+        run: bun run docs:check && bun run api:check
+
+      - name: Check packed artifact
+        run: bun run pack:check
+
+      - name: Build examples
+        run: bun run build:examples
+
+      - name: Commit implementation
+        run: |
+          rm scripts/agent-bootstrap.mjs .github/workflows/agent-bootstrap.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Align charts with convention and WASM boundaries"
+          git push origin HEAD:agent/conventions-wasm-boundary
