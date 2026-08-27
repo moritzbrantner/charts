@@ -152,10 +152,14 @@ function createWasmBinnedSeries<TProperties>(
   const xDomain = normalizeChartDomain(query.xDomain);
   const targetBinCount = clampInteger(query.targetBinCount, 1, 100_000);
   const numericBins = kernel.aggregateDensityBins(x, y, xDomain, targetBinCount);
-  const metadata = numericBins.map(() => ({
-    firstPoint: null as IndexedChartSeriesPoint<TProperties> | null,
-    lastPoint: null as IndexedChartSeriesPoint<TProperties> | null,
-    metrics: Object.fromEntries(metricKeys.map((key) => [key, 0])) as ChartMetricRecord,
+  const metadata = numericBins.map<{
+    firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+    lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+    metrics: ChartMetricRecord;
+  }>(() => ({
+    firstPoint: null,
+    lastPoint: null,
+    metrics: Object.fromEntries(metricKeys.map((key) => [key, 0])),
   }));
   const width = (xDomain[1] - xDomain[0]) / targetBinCount;
 
@@ -167,7 +171,7 @@ function createWasmBinnedSeries<TProperties>(
       targetBinCount - 1,
       Math.max(0, Math.floor((point.x - xDomain[0]) / width)),
     );
-    const bin = metadata[binIndex]!;
+    const bin = metadata[binIndex];
     bin.firstPoint ??= point;
     bin.lastPoint = point;
     for (const key of metricKeys) {
@@ -177,11 +181,11 @@ function createWasmBinnedSeries<TProperties>(
 
   const bins: Array<ChartDensityBin<TProperties>> = numericBins.map((bin, index) => ({
     averageY: bin.averageY,
-    firstPoint: metadata[index]!.firstPoint,
+    firstPoint: metadata[index].firstPoint,
     index: bin.index,
-    lastPoint: metadata[index]!.lastPoint,
+    lastPoint: metadata[index].lastPoint,
     maxY: bin.maxY,
-    metrics: metadata[index]!.metrics,
+    metrics: metadata[index].metrics,
     minY: bin.minY,
     pointCount: bin.pointCount,
     sumY: bin.sumY,
@@ -235,7 +239,7 @@ function populateWasmPercentiles<TProperties>(
       binCount - 1,
       Math.max(0, Math.floor((point.x - xDomain[0]) / width)),
     );
-    valuesByBin[binIndex]!.push(point.y);
+    valuesByBin[binIndex].push(point.y);
   }
 
   for (const sample of samples) {
@@ -261,7 +265,7 @@ function normalizeWasmPoints<TProperties>(
   const normalized: Array<IndexedChartSeriesPoint<TProperties>> = [];
 
   for (let index = 0; index < points.length; index += 1) {
-    const point = points[index]!;
+    const point = points[index];
     const next: IndexedChartSeriesPoint<TProperties> = {
       id: String(point.id ?? index),
       label: point.label ?? "",
