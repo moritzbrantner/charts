@@ -1,157 +1,110 @@
 import {
-  createVizDensityIndex,
-  type VizDensityBin,
-  type VizDensityIndex,
-  type VizDensitySample,
-  type VizHeatmap,
-  type VizHeatmapCell,
-  type VizHistogram,
-  type VizHistogramBucket,
-  type VizPointValueAccessor,
-  type VizSeriesPoint,
-} from "@moritzbrantner/viz-engine";
-
-import { createPointStoreHeatmap, type ChartPointStore } from "./density/point-store";
-
-import {
   collectDensityMetricKeys,
+  normalizeDensityMetrics,
   sumDensityMetrics,
   type BinnedSeries,
   type BinnedSeriesIndexOptions,
 } from "./data-density";
+import { createChartDensitySample } from "./density/render-data";
+import { clampInteger, normalizeChartDomain } from "./density/shared";
+import { getLoadedChartWasmKernel, loadChartWasmKernel } from "./wasm-kernel";
 
 import type {
   ChartBackendCapabilities,
+  ChartDensityBin,
   ChartDensityIndex,
   ChartDensityQuery,
   ChartDensitySample,
   ChartDensitySeries,
-  ChartHeatmap,
-  ChartHeatmapCell,
-  ChartHistogram,
-  ChartHistogramBucket,
   ChartMetricRecord,
   ChartPercentileMode,
-  ChartPointValueAccessor,
   ChartSeriesPoint,
-  ChartValueMode,
   IndexedChartSeriesPoint,
 } from "./density";
-
-type VizChartsPoint<TProperties> = VizSeriesPoint<TProperties> & {
-  id: string;
-  label: string;
-  metrics: ChartMetricRecord;
-  properties: TProperties;
-};
-
-type WasmProfileRow = {
-  durationMs: number;
-  name: string;
-};
-
-type WasmBenchGlobal = typeof globalThis & {
-  __CHARTS_BENCH_PROFILE_RESULTS__?: WasmProfileRow[];
-};
 
 const WASM_CAPABILITIES: ChartBackendCapabilities = {
   backend: "wasm-index",
   supportsGroupedSeries: false,
-  supportsHeatmap: true,
-  supportsHistogram: true,
+  supportsHeatmap: false,
+  supportsHistogram: false,
   supportsPercentiles: true,
   usesWasm: true,
 };
 
-const CHART_PERCENTILES: readonly ChartPercentileMode[] = [
-  "p10",
-  "p25",
-  "p50",
-  "p75",
-  "p90",
-  "p95",
-  "p99",
-];
-
-const WASM_BENCH_PROFILE_ENABLED = readProcessEnv("CHARTS_BENCH_PROFILE") === "1";
-const WASM_HEATMAP_DIRECT_ENABLED = readProcessEnv("CHARTS_BENCH_WASM_HEATMAP") === "1";
+const PERCENTILE_QUANTILES: Record<ChartPercentileMode, number> = {
+  p10: 0.1,
+  p25: 0.25,
+  p50: 0.5,
+  p75: 0.75,
+  p90: 0.9,
+  p95: 0.95,
+  p99: 0.99,
+};
 
 export function createWasmChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties>,
   createFallbackIndex: () => ChartDensityIndex<TProperties>,
 ): ChartDensityIndex<TProperties> {
-  const normalizedPoints = profileWasm("wasm.normalize-points", () =>
-    normalizeWasmPoints(points, options),
-  );
-  const metricKeys = profileWasm("wasm.collect-metric-keys", () => {
-    const metrics = new Array<ChartMetricRecord>(normalizedPoints.length);
+  // Loading is intentionally asynchronous so importing @moritzbrantner/charts/core remains
+  // server-safe and ordinary development never requires a WASM artifact. Until the local
+  // kernel is ready, this index is behaviorally identical to the JS correctness baseline.
+  if (!getLoadedChartWasmKernel()) {
+    void loadChartWasmKernel().catch(() => undefined);
+  }
 
-    for (let index = 0; index < normalizedPoints.length; index += 1) {
-      metrics[index] = normalizedPoints[index]!.metrics;
-    }
-
-    return collectDensityMetricKeys(metrics);
-  });
-  const vizIndex = profileWasm("wasm.create-viz-index", () =>
-    createVizDensityIndex(normalizedPoints, { backend: "wasm" }),
-  );
-  const pointLookup = profileWasm("wasm.create-point-lookup", () => {
-    const lookup = new Map<
-      string,
-      IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties>
-    >();
-
-    for (const point of normalizedPoints) {
-      lookup.set(point.id, point);
-    }
-
-    return lookup;
-  });
-  const heatmapStore = profileWasm("wasm.create-heatmap-point-store", () =>
-    createWasmPointStore(normalizedPoints, metricKeys, pointLookup),
-  );
-  const bounds = profileWasm("wasm.create-bounds", () => createSeriesBounds(normalizedPoints));
+  const normalizedPoints = normalizeWasmPoints(points, options);
+  const x = Float64Array.from(normalizedPoints, (point) => point.x);
+  const y = Float64Array.from(normalizedPoints, (point) => point.y);
+  const pointLookup = new Map(normalizedPoints.map((point) => [point.id, point]));
+  const metricKeys = collectDensityMetricKeys(normalizedPoints.map((point) => point.metrics));
+  const bounds = createSeriesBounds(normalizedPoints);
   let fallbackIndex: ChartDensityIndex<TProperties> | null = null;
-  const readFallbackIndex = () => {
-    fallbackIndex ??= createFallbackIndex();
-
-    return fallbackIndex;
-  };
+  const readFallbackIndex = () => (fallbackIndex ??= createFallbackIndex());
 
   return {
     getBackendCapabilities() {
+      if (!getLoadedChartWasmKernel()) {
+        return (
+          readFallbackIndex().getBackendCapabilities?.() ?? {
+            backend: "hybrid-js",
+            supportsGroupedSeries: true,
+            supportsHeatmap: true,
+            supportsHistogram: true,
+            supportsPercentiles: true,
+            usesWasm: false,
+          }
+        );
+      }
       return WASM_CAPABILITIES;
     },
 
     getBinnedSeries(query) {
-      const result = vizIndex.getBinnedSeries(query);
-
-      return mapBinnedSeries(
-        result.bins,
-        metricKeys,
-        normalizedPoints,
-        normalizeChartDomain(query.xDomain),
-      );
+      if (!getLoadedChartWasmKernel()) {
+        return readFallbackIndex().getBinnedSeries(query);
+      }
+      return createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
     },
 
     getChartSeries(query) {
-      const valueMode = query.valueMode ?? "average";
-      const wasmQuery = {
-        ...query,
-        percentiles: resolveRequestedPercentiles(query, valueMode),
-        valueMode,
-      };
-
-      if (WASM_BENCH_PROFILE_ENABLED) {
-        const result = profileWasm("wasm.query-core", () => vizIndex.getChartSeries(wasmQuery));
-
-        return profileWasm("wasm.map-result", () =>
-          mapChartSeries(result, normalizedPoints, metricKeys),
-        );
+      if (!getLoadedChartWasmKernel()) {
+        return readFallbackIndex().getChartSeries(query);
       }
 
-      return mapChartSeries(vizIndex.getChartSeries(wasmQuery), normalizedPoints, metricKeys);
+      const valueMode = query.valueMode ?? "average";
+      const series = createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
+      const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
+      populateWasmPercentiles(samples, normalizedPoints, query);
+
+      return {
+        bins: series.bins,
+        samples,
+        summary: {
+          ...series.summary,
+          sampleCount: samples.length,
+          valueMode,
+        },
+      } satisfies ChartDensitySeries<TProperties>;
     },
 
     getChartPoints(query) {
@@ -163,47 +116,11 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
     },
 
     getHeatmap(query) {
-      const valueAccessor = toVizValueAccessor(query.valueAccessor);
-
-      // WASM heatmap currently loses to the point-store implementation after public result
-      // mapping, so the wrapper routes heatmap to hybrid until benchmark evidence changes.
-      if (!WASM_HEATMAP_DIRECT_ENABLED || (query.valueAccessor && !valueAccessor)) {
-        return createPointStoreHeatmap(heatmapStore, query);
-      }
-
-      if (WASM_BENCH_PROFILE_ENABLED) {
-        const result = profileWasm("wasm.query-core", () =>
-          vizIndex.getHeatmap(omitUndefined({ ...query, valueAccessor })),
-        );
-
-        return profileWasm("wasm.map-result", () => mapHeatmap(result, normalizedPoints));
-      }
-
-      return mapHeatmap(
-        vizIndex.getHeatmap(omitUndefined({ ...query, valueAccessor })),
-        normalizedPoints,
-      );
+      return readFallbackIndex().getHeatmap(query);
     },
 
     getHistogram(query) {
-      const valueAccessor = toVizValueAccessor(query.valueAccessor);
-
-      if (query.valueAccessor && !valueAccessor) {
-        return readFallbackIndex().getHistogram(query);
-      }
-
-      if (WASM_BENCH_PROFILE_ENABLED) {
-        const result = profileWasm("wasm.query-core", () =>
-          vizIndex.getHistogram(omitUndefined({ ...query, valueAccessor })),
-        );
-
-        return profileWasm("wasm.map-result", () => mapHistogram(result, normalizedPoints));
-      }
-
-      return mapHistogram(
-        vizIndex.getHistogram(omitUndefined({ ...query, valueAccessor })),
-        normalizedPoints,
-      );
+      return readFallbackIndex().getHistogram(query);
     },
 
     getPointById(pointId) {
@@ -220,368 +137,154 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
   };
 }
 
+function createWasmBinnedSeries<TProperties>(
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  x: Float64Array,
+  y: Float64Array,
+  metricKeys: string[],
+  query: { includeEmptyBins?: boolean; targetBinCount: number; xDomain: [number, number] },
+): BinnedSeries<TProperties> {
+  const kernel = getLoadedChartWasmKernel();
+  if (!kernel) {
+    throw new Error("charts WASM kernel is not loaded");
+  }
+
+  const xDomain = normalizeChartDomain(query.xDomain);
+  const targetBinCount = clampInteger(query.targetBinCount, 1, 100_000);
+  const numericBins = kernel.aggregateDensityBins(x, y, xDomain, targetBinCount);
+  const metadata = numericBins.map(() => ({
+    firstPoint: null as IndexedChartSeriesPoint<TProperties> | null,
+    lastPoint: null as IndexedChartSeriesPoint<TProperties> | null,
+    metrics: Object.fromEntries(metricKeys.map((key) => [key, 0])) as ChartMetricRecord,
+  }));
+  const width = (xDomain[1] - xDomain[0]) / targetBinCount;
+
+  for (const point of points) {
+    if (point.x < xDomain[0] || point.x > xDomain[1]) {
+      continue;
+    }
+    const binIndex = Math.min(
+      targetBinCount - 1,
+      Math.max(0, Math.floor((point.x - xDomain[0]) / width)),
+    );
+    const bin = metadata[binIndex]!;
+    bin.firstPoint ??= point;
+    bin.lastPoint = point;
+    for (const key of metricKeys) {
+      bin.metrics[key] = (bin.metrics[key] ?? 0) + (point.metrics[key] ?? 0);
+    }
+  }
+
+  const bins: Array<ChartDensityBin<TProperties>> = numericBins.map((bin, index) => ({
+    averageY: bin.averageY,
+    firstPoint: metadata[index]!.firstPoint,
+    index: bin.index,
+    lastPoint: metadata[index]!.lastPoint,
+    maxY: bin.maxY,
+    metrics: metadata[index]!.metrics,
+    minY: bin.minY,
+    pointCount: bin.pointCount,
+    sumY: bin.sumY,
+    x0: bin.x0,
+    x1: bin.x1,
+  }));
+  const visibleBins = query.includeEmptyBins ? bins : bins.filter((bin) => bin.pointCount > 0);
+
+  return {
+    bins: visibleBins,
+    summary: {
+      binCount: visibleBins.length,
+      metrics: sumDensityMetrics(
+        visibleBins.map((bin) => bin.metrics),
+        metricKeys,
+      ),
+      pointCount: visibleBins.reduce((total, bin) => total + bin.pointCount, 0),
+      xDomain,
+    },
+  };
+}
+
+function populateWasmPercentiles<TProperties>(
+  samples: Array<ChartDensitySample<TProperties>>,
+  points: Array<IndexedChartSeriesPoint<TProperties>>,
+  query: ChartDensityQuery,
+) {
+  const requested = new Set<ChartPercentileMode>(query.percentiles ?? []);
+  if (query.valueMode && isPercentileMode(query.valueMode)) {
+    requested.add(query.valueMode);
+  }
+  if (requested.size === 0) {
+    return;
+  }
+
+  const kernel = getLoadedChartWasmKernel();
+  if (!kernel) {
+    return;
+  }
+
+  const xDomain = normalizeChartDomain(query.xDomain);
+  const binCount = clampInteger(query.targetBinCount, 1, 100_000);
+  const width = (xDomain[1] - xDomain[0]) / binCount;
+  const valuesByBin: number[][] = Array.from({ length: binCount }, () => []);
+
+  for (const point of points) {
+    if (point.x < xDomain[0] || point.x > xDomain[1]) {
+      continue;
+    }
+    const binIndex = Math.min(
+      binCount - 1,
+      Math.max(0, Math.floor((point.x - xDomain[0]) / width)),
+    );
+    valuesByBin[binIndex]!.push(point.y);
+  }
+
+  for (const sample of samples) {
+    const values = valuesByBin[sample.index] ?? [];
+    if (values.length === 0) {
+      continue;
+    }
+    const typedValues = Float64Array.from(values);
+    for (const mode of requested) {
+      const value = kernel.percentile(typedValues, PERCENTILE_QUANTILES[mode]);
+      sample[mode] = Number.isFinite(value) ? value : null;
+      if (query.valueMode === mode) {
+        sample.y = sample[mode];
+      }
+    }
+  }
+}
+
 function normalizeWasmPoints<TProperties>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties>,
-): Array<IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties>> {
-  const normalizedPoints: Array<
-    IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties>
-  > = [];
+): Array<IndexedChartSeriesPoint<TProperties>> {
+  const normalized: Array<IndexedChartSeriesPoint<TProperties>> = [];
 
   for (let index = 0; index < points.length; index += 1) {
     const point = points[index]!;
-    const normalizedPoint: IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties> = {
+    const next: IndexedChartSeriesPoint<TProperties> = {
       id: String(point.id ?? index),
       label: point.label ?? "",
-      metrics: normalizeWasmMetrics(point.metrics),
+      metrics: normalizeDensityMetrics(point.metrics),
       properties: point.properties ?? ({} as TProperties),
       x: point.x,
       y: point.y,
     };
 
     if (
-      Number.isFinite(normalizedPoint.x) &&
-      Number.isFinite(normalizedPoint.y) &&
-      (options.filterPoint?.(normalizedPoint) ?? true)
+      Number.isFinite(next.x) &&
+      Number.isFinite(next.y) &&
+      (options.filterPoint?.(next) ?? true)
     ) {
-      normalizedPoints.push(normalizedPoint);
+      normalized.push(next);
     }
   }
 
-  return normalizedPoints;
+  normalized.sort((left, right) => left.x - right.x);
+  return normalized;
 }
 
-function createWasmPointStore<TProperties>(
-  points: Array<IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties>>,
-  metricKeys: string[],
-  pointLookup: Map<string, IndexedChartSeriesPoint<TProperties> & VizChartsPoint<TProperties>>,
-): ChartPointStore<TProperties> {
-  return {
-    metricKeys,
-    pointLookup,
-    points: [...points].sort((left, right) => left.x - right.x),
-  };
-}
-
-function mapBinnedSeries<TProperties>(
-  bins: Array<VizDensityBin<TProperties>>,
-  metricKeys: string[],
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-  xDomain: [number, number],
-): BinnedSeries<TProperties> {
-  const mappedBins = new Array<ReturnType<typeof mapBin<TProperties>>>(bins.length);
-
-  for (let index = 0; index < bins.length; index += 1) {
-    mappedBins[index] = mapBin(bins[index]!, normalizedPoints);
-  }
-
-  return {
-    bins: mappedBins,
-    summary: {
-      binCount: mappedBins.length,
-      metrics: sumDensityMetrics(
-        mappedBins.map((bin) => bin.metrics),
-        metricKeys,
-      ),
-      pointCount: mappedBins.reduce((total, bin) => total + bin.pointCount, 0),
-      xDomain,
-    },
-  };
-}
-
-function mapChartSeries<TProperties>(
-  series: ReturnType<VizDensityIndex<TProperties>["getChartSeries"]>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-  metricKeys: string[],
-): ChartDensitySeries<TProperties> {
-  const bins = profileWasm("wasm.map-bins", () => {
-    const mappedBins = new Array<ReturnType<typeof mapBin<TProperties>>>(series.bins.length);
-
-    for (let index = 0; index < series.bins.length; index += 1) {
-      mappedBins[index] = mapBin(series.bins[index]!, normalizedPoints);
-    }
-
-    return mappedBins;
-  });
-  const samples = profileWasm("wasm.map-samples", () => {
-    const mappedSamples = new Array<ChartDensitySample<TProperties>>(series.samples.length);
-
-    for (let index = 0; index < series.samples.length; index += 1) {
-      mappedSamples[index] = mapSample(series.samples[index]!, normalizedPoints);
-    }
-
-    return mappedSamples;
-  });
-  const metrics = profileWasm("wasm.normalize-metrics", () =>
-    withZeroMetricKeys(normalizeVizMetrics(series.summary.metrics), metricKeys),
-  );
-
-  return {
-    bins,
-    samples,
-    summary: {
-      binCount: series.summary.binCount,
-      metrics,
-      pointCount: series.summary.pointCount,
-      sampleCount: series.summary.sampleCount,
-      valueMode: series.summary.valueMode,
-      xDomain: series.summary.xDomain,
-    },
-  };
-}
-
-function mapHistogram<TProperties>(
-  histogram: VizHistogram<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-): ChartHistogram<TProperties> {
-  const buckets = profileWasm("wasm.map-bins", () => {
-    const mappedBuckets = new Array<ReturnType<typeof mapHistogramBucket<TProperties>>>(
-      histogram.buckets.length,
-    );
-
-    for (let index = 0; index < histogram.buckets.length; index += 1) {
-      mappedBuckets[index] = mapHistogramBucket(
-        histogram.buckets[index]!,
-        normalizedPoints,
-        histogram.summary,
-      );
-    }
-
-    return mappedBuckets;
-  });
-  const metrics = profileWasm("wasm.normalize-metrics", () =>
-    normalizeVizMetrics(histogram.summary.metrics),
-  );
-
-  return {
-    buckets,
-    summary: {
-      ...histogram.summary,
-      metrics,
-      xDomain: histogram.summary.xDomain ?? null,
-    },
-  };
-}
-
-function mapHeatmap<TProperties>(
-  heatmap: VizHeatmap<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-): ChartHeatmap<TProperties> {
-  const cells = profileWasm("wasm.map-bins", () => {
-    const mappedCells = new Array<ReturnType<typeof mapHeatmapCell<TProperties>>>(
-      heatmap.cells.length,
-    );
-
-    for (let index = 0; index < heatmap.cells.length; index += 1) {
-      mappedCells[index] = mapHeatmapCell(heatmap.cells[index]!, normalizedPoints);
-    }
-
-    return mappedCells;
-  });
-  const metrics = profileWasm("wasm.normalize-metrics", () =>
-    normalizeVizMetrics(heatmap.summary.metrics),
-  );
-
-  return {
-    cells,
-    summary: {
-      ...heatmap.summary,
-      metrics,
-    },
-  };
-}
-
-function mapBin<TProperties>(
-  bin: VizDensityBin<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-) {
-  const mappedBin = {
-    averageY: bin.averageY ?? null,
-    firstPoint: pointBySourceIndex(normalizedPoints, bin.firstPointIndex),
-    index: bin.index,
-    lastPoint: pointBySourceIndex(normalizedPoints, bin.lastPointIndex),
-    maxY: bin.maxY ?? null,
-    metrics: normalizeVizMetrics(bin.metrics),
-    minY: bin.minY ?? null,
-    pointCount: bin.pointCount,
-    sumY: bin.sumY,
-    x0: bin.x0,
-    x1: bin.x1,
-  };
-
-  for (const percentile of CHART_PERCENTILES) {
-    const value = bin[percentile];
-
-    if (bin.pointCount > 0 && value != null) {
-      (mappedBin as typeof mappedBin & Partial<Record<ChartPercentileMode, number | null>>)[
-        percentile
-      ] = value;
-    }
-  }
-
-  return mappedBin;
-}
-
-function mapSample<TProperties>(
-  sample: VizDensitySample<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-): ChartDensitySample<TProperties> {
-  return {
-    averageY: sample.averageY ?? null,
-    firstPoint: pointBySourceIndex(normalizedPoints, sample.firstPointIndex),
-    index: sample.index,
-    lastPoint: pointBySourceIndex(normalizedPoints, sample.lastPointIndex),
-    maxY: sample.maxY ?? null,
-    metrics: normalizeVizMetrics(sample.metrics),
-    minY: sample.minY ?? null,
-    p10: sample.p10 ?? null,
-    p25: sample.p25 ?? null,
-    p50: sample.p50 ?? null,
-    p75: sample.p75 ?? null,
-    p90: sample.p90 ?? null,
-    p95: sample.p95 ?? null,
-    p99: sample.p99 ?? null,
-    pointCount: sample.pointCount,
-    sumY: sample.sumY,
-    x: sample.x,
-    x0: sample.x0,
-    x1: sample.x1,
-    y: sample.y ?? null,
-  };
-}
-
-function mapHistogramBucket<TProperties>(
-  bucket: VizHistogramBucket<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-  summary: VizHistogram<TProperties>["summary"],
-): ChartHistogramBucket<TProperties> & { sumValue: number } {
-  const bucketWidth = getBinWidth(summary.valueDomain, summary.bucketCount);
-  const value0 = summary.valueDomain[0] + bucket.index * bucketWidth;
-
-  return {
-    averageValue: bucket.averageValue ?? null,
-    firstPoint: pointBySourceIndex(normalizedPoints, bucket.firstPointIndex),
-    index: bucket.index,
-    lastPoint: pointBySourceIndex(normalizedPoints, bucket.lastPointIndex),
-    maxValue: bucket.maxValue ?? null,
-    metrics: normalizeVizMetrics(bucket.metrics),
-    minValue: bucket.minValue ?? null,
-    pointCount: bucket.pointCount,
-    sumValue: bucket.sumValue,
-    value: summary.valueDomain[0] + (bucket.index + 0.5) * bucketWidth,
-    value0,
-    value1:
-      bucket.index === summary.bucketCount - 1
-        ? summary.valueDomain[1]
-        : summary.valueDomain[0] + (bucket.index + 1) * bucketWidth,
-  };
-}
-
-function mapHeatmapCell<TProperties>(
-  cell: VizHeatmapCell<TProperties>,
-  normalizedPoints: Array<IndexedChartSeriesPoint<TProperties>>,
-): ChartHeatmapCell<TProperties> & { sumValue: number } {
-  return {
-    averageValue: cell.averageValue ?? null,
-    firstPoint: pointBySourceIndex(normalizedPoints, cell.firstPointIndex),
-    index: cell.index,
-    lastPoint: pointBySourceIndex(normalizedPoints, cell.lastPointIndex),
-    metrics: normalizeVizMetrics(cell.metrics),
-    pointCount: cell.pointCount,
-    sumValue: cell.sumValue,
-    value: cell.value,
-    x: cell.x,
-    x0: cell.x0,
-    x1: cell.x1,
-    xIndex: cell.xIndex,
-    y: cell.y,
-    y0: cell.y0,
-    y1: cell.y1,
-    yIndex: cell.yIndex,
-  };
-}
-
-function pointBySourceIndex<TProperties>(
-  points: Array<IndexedChartSeriesPoint<TProperties>>,
-  sourceIndex: number | null | undefined,
-) {
-  return sourceIndex == null ? null : (points[sourceIndex] ?? null);
-}
-
-function normalizeWasmMetrics(metrics: ChartMetricRecord | undefined): ChartMetricRecord {
-  if (!metrics) {
-    return {};
-  }
-
-  const normalizedMetrics: ChartMetricRecord = {};
-
-  for (const [metricKey, value] of Object.entries(metrics)) {
-    if (Number.isFinite(value)) {
-      normalizedMetrics[metricKey] = value;
-    }
-  }
-
-  return normalizedMetrics;
-}
-
-function normalizeVizMetrics(metrics: ChartMetricRecord | Map<string, number>): ChartMetricRecord {
-  if (!(metrics instanceof Map)) {
-    return metrics;
-  }
-
-  const normalizedMetrics: ChartMetricRecord = {};
-
-  for (const [metricKey, value] of metrics) {
-    normalizedMetrics[metricKey] = value;
-  }
-
-  return normalizedMetrics;
-}
-
-function withZeroMetricKeys(metrics: ChartMetricRecord, metricKeys: string[]): ChartMetricRecord {
-  let hasMissingMetric = false;
-
-  for (const metricKey of metricKeys) {
-    if (!(metricKey in metrics)) {
-      hasMissingMetric = true;
-      break;
-    }
-  }
-
-  if (!hasMissingMetric) {
-    return metrics;
-  }
-
-  const normalizedMetrics: ChartMetricRecord = {};
-
-  for (const metricKey of metricKeys) {
-    normalizedMetrics[metricKey] = metrics[metricKey] ?? 0;
-  }
-
-  for (const [metricKey, value] of Object.entries(metrics)) {
-    normalizedMetrics[metricKey] = value;
-  }
-
-  return normalizedMetrics;
-}
-
-function omitUndefined<T extends Record<string, unknown>>(value: T): T {
-  return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T;
-}
-
-function getBinWidth(domain: [number, number], binCount: number) {
-  const span = domain[1] - domain[0];
-
-  return span > 0 ? span / binCount : 1;
-}
-
-function normalizeChartDomain(domain: [number, number]): [number, number] {
-  return domain[0] <= domain[1] ? domain : [domain[1], domain[0]];
-}
-
-function createSeriesBounds<TProperties>(
-  points: Array<IndexedChartSeriesPoint<TProperties>>,
-): ReturnType<ChartDensityIndex<TProperties>["getSeriesBounds"]> {
+function createSeriesBounds<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties>>) {
   if (points.length === 0) {
     return null;
   }
@@ -601,65 +304,6 @@ function createSeriesBounds<TProperties>(
   return { maxX, maxY, minX, minY };
 }
 
-function toVizValueAccessor<TProperties>(
-  accessor: ChartPointValueAccessor<TProperties> | undefined,
-): VizPointValueAccessor | undefined {
-  if (!accessor) {
-    return undefined;
-  }
-
-  if (typeof accessor === "function") {
-    return undefined;
-  }
-
-  if (typeof accessor === "object") {
-    return { metric: accessor.metric };
-  }
-
-  return accessor;
-}
-
-function resolveRequestedPercentiles(
-  query: Pick<ChartDensityQuery, "percentiles">,
-  valueMode: ChartValueMode,
-): ChartPercentileMode[] {
-  const percentiles = new Set<ChartPercentileMode>(query.percentiles ?? []);
-
-  if (isChartPercentileMode(valueMode)) {
-    percentiles.add(valueMode);
-  }
-
-  return Array.from(percentiles);
-}
-
-function isChartPercentileMode(valueMode: ChartValueMode): valueMode is ChartPercentileMode {
-  return (CHART_PERCENTILES as readonly ChartValueMode[]).includes(valueMode);
-}
-
-function profileWasm<TResult>(name: string, run: () => TResult): TResult {
-  if (!WASM_BENCH_PROFILE_ENABLED) {
-    return run();
-  }
-
-  const startedAt = performance.now();
-
-  try {
-    return run();
-  } finally {
-    const benchGlobal = globalThis as WasmBenchGlobal;
-
-    benchGlobal.__CHARTS_BENCH_PROFILE_RESULTS__ ??= [];
-    benchGlobal.__CHARTS_BENCH_PROFILE_RESULTS__.push({
-      durationMs: performance.now() - startedAt,
-      name,
-    });
-  }
-}
-
-function readProcessEnv(name: string): string | undefined {
-  if (typeof process === "undefined") {
-    return undefined;
-  }
-
-  return process.env[name];
+function isPercentileMode(value: string): value is ChartPercentileMode {
+  return value in PERCENTILE_QUANTILES;
 }

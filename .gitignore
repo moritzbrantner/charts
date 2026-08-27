@@ -12,6 +12,7 @@ temp/
 coverage/
 .unlighthouse/
 crates/**/target/
+src/wasm/generated/
 playwright-report/
 test-results/
 storybook-static/

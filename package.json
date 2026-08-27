@@ -23,6 +23,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./react": {
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js"
     }
   },
   "dependencies": {
@@ -85,10 +93,10 @@
     "bench:large-data:full-json": "CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:json": "CHARTS_BENCH_JSON=test-results/bench-large-data.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:profile": "CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json node ./scripts/benchmark-large-data.mjs",
-    "build": "tsup src/index.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false",
+    "build": "tsup src/index.ts src/core.ts src/react.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false && node ./scripts/copy-wasm.mjs",
     "build:examples": "vite build --outDir ../dist-examples --emptyOutDir",
     "build:storybook": "storybook build --output-dir storybook-static",
-    "build:wasm": "echo \"WASM backend is provided by @moritzbrantner/viz-engine\"",
+    "build:wasm": "wasm-pack build crates/charts-density-wasm --target web --release --out-dir ../../src/wasm/generated --out-name charts_density_wasm",
     "changeset": "changeset",
     "check-types": "tsc --noEmit",
     "dev": "vite",
@@ -98,12 +106,12 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
-    "prepack": "bun run build",
+    "prepack": "bun run build:wasm && bun run build",
     "release": "changeset publish",
     "storybook": "storybook dev -p 6006",
     "test": "vitest run",
     "test:browser": "bun run test:e2e && bun run test:visual && bun run test:storybook",
-    "test:wasm": "vitest run src/index.test.ts",
+    "test:wasm": "cargo test --manifest-path crates/charts-density-wasm/Cargo.toml",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:storybook": "playwright test -c playwright.storybook.config.ts",
@@ -112,6 +120,6 @@
     "quality:pages": "bun run test:unlighthouse",
     "version-packages": "changeset version",
     "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
-    "verify:release": "bun run verify && bun run bench:large-data"
+    "verify:release": "bun run verify && bun run test:wasm && bun run bench:large-data"
   }
 }
