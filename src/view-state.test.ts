@@ -19,7 +19,18 @@ describe("chart view state", () => {
     });
   });
 
+  test("round-trips hidden series IDs containing commas", () => {
+    const encoded = encodeChartViewState({
+      hiddenSeriesIds: ["north,america", "emea"],
+    });
+
+    expect(encoded.getAll("chart.hidden")).toEqual(["emea", "north,america"]);
+    expect(decodeChartViewState(encoded)).toEqual({
+      hiddenSeriesIds: ["emea", "north,america"],
+    });
+  });
+
   test("ignores malformed state instead of inventing values", () => {
-    expect(decodeChartViewState("chart.domain=a,b&chart.value=median&chart.hidden=,,")).toEqual({});
+    expect(decodeChartViewState("chart.domain=a,b&chart.value=median&chart.hidden=")).toEqual({});
   });
 });
