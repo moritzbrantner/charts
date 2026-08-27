@@ -23,6 +23,7 @@ export default tseslint.config(
       "docs/",
       "node_modules/",
       "playwright-report/",
+      "src/wasm/generated/",
       ".unlighthouse/",
       "test-results/",
       "storybook-static/",
