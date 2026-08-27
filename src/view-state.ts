@@ -20,7 +20,9 @@ export function encodeChartViewState(state: ChartViewState): URLSearchParams {
   }
 
   if (state.hiddenSeriesIds?.length) {
-    params.set(HIDDEN_SERIES_KEY, [...new Set(state.hiddenSeriesIds)].sort().join(","));
+    for (const seriesId of [...new Set(state.hiddenSeriesIds)].sort()) {
+      params.append(HIDDEN_SERIES_KEY, seriesId);
+    }
   }
 
   if (state.selectedPointId) {
@@ -37,7 +39,7 @@ export function encodeChartViewState(state: ChartViewState): URLSearchParams {
 export function decodeChartViewState(input: URLSearchParams | string): ChartViewState {
   const params = typeof input === "string" ? new URLSearchParams(input) : input;
   const domain = readDomain(params.get(DOMAIN_KEY));
-  const hiddenSeriesIds = readCsv(params.get(HIDDEN_SERIES_KEY));
+  const hiddenSeriesIds = readRepeatedValues(params.getAll(HIDDEN_SERIES_KEY));
   const selectedPointId = params.get(SELECTED_POINT_KEY);
   const valueMode = readValueMode(params.get(VALUE_MODE_KEY));
 
@@ -63,17 +65,8 @@ function readDomain(value: string | null): [number, number] | null {
   return [left, right];
 }
 
-function readCsv(value: string | null): string[] {
-  return value
-    ? [
-        ...new Set(
-          value
-            .split(",")
-            .map((item) => item.trim())
-            .filter(Boolean),
-        ),
-      ].sort()
-    : [];
+function readRepeatedValues(values: readonly string[]): string[] {
+  return [...new Set(values.filter(Boolean))].sort();
 }
 
 function readValueMode(value: string | null): ChartValueMode | null {
