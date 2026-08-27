@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 type PackageJson = {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
   exports?: Record<string, { import?: string; types?: string } | string>;
 };
 
@@ -35,5 +37,14 @@ describe("package entrypoint boundaries", () => {
 
     expect(wasmIndex).not.toContain("@moritzbrantner/viz-engine");
     expect(core).not.toContain("@moritzbrantner/viz-engine");
+  });
+
+  test("does not install viz-engine", () => {
+    const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as PackageJson;
+    const lockfile = readFileSync(resolve("bun.lock"), "utf8");
+
+    expect(packageJson.dependencies?.["@moritzbrantner/viz-engine"]).toBeUndefined();
+    expect(packageJson.devDependencies?.["@moritzbrantner/viz-engine"]).toBeUndefined();
+    expect(lockfile).not.toContain("@moritzbrantner/viz-engine");
   });
 });
