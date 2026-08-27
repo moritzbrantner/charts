@@ -30,7 +30,8 @@ export function decodeChartViewState(input: string | URLSearchParams): ChartView
   const params = typeof input === "string" ? new URLSearchParams(input) : input;
   const state: ChartViewState = {};
   const domain = parseDomain(params.get("domain"));
-  const hidden = params.get("hidden")
+  const hidden = params
+    .get("hidden")
     ?.split(",")
     .map((value) => value.trim())
     .filter(Boolean);
