@@ -1,4 +1,4 @@
-import { Button, ChartContainer } from "@moritzbrantner/ui";
+import { Button, ChartContainer } from "../internal/ui-primitives";
 import { Bar, BarChart, Line, LineChart } from "recharts";
 
 import { createPreviewData, joinClassNames } from "./shared";

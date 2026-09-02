@@ -12,7 +12,7 @@ import {
   ItemContent,
   ItemDescription,
   ItemTitle,
-} from "@moritzbrantner/ui";
+} from "../internal/ui-primitives";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createChartRenderData } from "../density";

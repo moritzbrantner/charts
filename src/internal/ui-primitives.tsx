@@ -20,7 +20,13 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
 };
 
-export function Button({ className, size = "default", type = "button", variant = "default", ...props }: ButtonProps) {
+export function Button({
+  className,
+  size = "default",
+  type = "button",
+  variant = "default",
+  ...props
+}: ButtonProps) {
   return (
     <button
       className={cn(
@@ -29,7 +35,8 @@ export function Button({ className, size = "default", type = "button", variant =
         variant === "destructive" && "bg-destructive text-white hover:bg-destructive/90",
         variant === "ghost" && "hover:bg-accent hover:text-accent-foreground",
         variant === "link" && "text-primary underline-offset-4 hover:underline",
-        variant === "outline" && "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
+        variant === "outline" &&
+          "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
         variant === "secondary" && "bg-secondary text-secondary-foreground hover:bg-secondary/80",
         size === "default" && "h-9 px-4 py-2",
         size === "sm" && "h-8 rounded-md px-3 text-xs",
@@ -44,7 +51,11 @@ export function Button({ className, size = "default", type = "button", variant =
   );
 }
 
-export function Input({ className, type = "text", ...props }: InputHTMLAttributes<HTMLInputElement>) {
+export function Input({
+  className,
+  type = "text",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       className={cn(
@@ -113,10 +124,25 @@ type ToggleGroupProps = HTMLAttributes<HTMLDivElement> & {
   value?: string;
 };
 
-export function ToggleGroup({ children, className, disabled = false, onValueChange, size: _size, type: _type, value, ...props }: ToggleGroupProps) {
+export function ToggleGroup({
+  children,
+  className,
+  disabled = false,
+  onValueChange,
+  size: _size,
+  type: _type,
+  value,
+  ...props
+}: ToggleGroupProps) {
   return (
     <ToggleGroupContext.Provider value={{ disabled, onValueChange, value }}>
-      <div className={cn("inline-flex items-center rounded-md border border-border bg-background p-0.5", className)} {...props}>
+      <div
+        className={cn(
+          "inline-flex items-center rounded-md border border-border bg-background p-0.5",
+          className,
+        )}
+        {...props}
+      >
         {children}
       </div>
     </ToggleGroupContext.Provider>
@@ -127,7 +153,14 @@ type ToggleGroupItemProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "value
   value: string;
 };
 
-export function ToggleGroupItem({ children, className, disabled, onClick, value, ...props }: ToggleGroupItemProps) {
+export function ToggleGroupItem({
+  children,
+  className,
+  disabled,
+  onClick,
+  value,
+  ...props
+}: ToggleGroupItemProps) {
   const group = useContext(ToggleGroupContext);
   const pressed = group.value === value;
 
@@ -175,7 +208,15 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("rounded-xl border border-border bg-card text-card-foreground shadow-sm", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        className,
+      )}
+      {...props}
+    />
+  );
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
@@ -198,7 +239,10 @@ export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return <div className={cn("flex items-center p-6 pt-0", className)} {...props} />;
 }
 
-type CheckboxProps = Omit<InputHTMLAttributes<HTMLInputElement>, "checked" | "onChange" | "type"> & {
+type CheckboxProps = Omit<
+  InputHTMLAttributes<HTMLInputElement>,
+  "checked" | "onChange" | "type"
+> & {
   checked?: boolean | "indeterminate";
   onCheckedChange?: (checked: boolean) => void;
 };
@@ -256,7 +300,13 @@ export type ChartContainerProps = Omit<HTMLAttributes<HTMLDivElement>, "children
   config: ChartConfig;
 };
 
-export function ChartContainer({ children, className, config, style, ...props }: ChartContainerProps) {
+export function ChartContainer({
+  children,
+  className,
+  config,
+  style,
+  ...props
+}: ChartContainerProps) {
   const chartVariables: Record<string, string> = {};
 
   for (const [key, entry] of Object.entries(config)) {

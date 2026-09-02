@@ -1,4 +1,4 @@
-import { Button } from "@moritzbrantner/ui";
+import { Button } from "../internal/ui-primitives";
 import { useState } from "react";
 
 import {

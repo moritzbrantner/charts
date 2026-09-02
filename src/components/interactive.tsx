@@ -1,4 +1,4 @@
-import { Button, Item, ItemContent, ItemDescription, ItemTitle } from "@moritzbrantner/ui";
+import { Button, Item, ItemContent, ItemDescription, ItemTitle } from "../internal/ui-primitives";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePlotArea } from "recharts";
 

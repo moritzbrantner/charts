@@ -1,3 +1,4 @@
+export { ChartContainer, type ChartConfig } from "./internal/ui-primitives";
 export * from "./components/types";
 export * from "./components/axis";
 export * from "./components/animation";
