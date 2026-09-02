@@ -99,7 +99,9 @@ pub fn percentile(values: &[f64], quantile: f64) -> Result<f64, JsValue> {
     }
 
     let weight = position - lower as f64;
-    Ok(finite[lower] * (1.0 - weight) + finite[upper] * weight)
+    // Keep the arithmetic order identical to the TypeScript correctness baseline so
+    // differential parity is bit-for-bit stable instead of differing at machine epsilon.
+    Ok(finite[lower] + (finite[upper] - finite[lower]) * weight)
 }
 
 #[cfg(test)]
@@ -110,5 +112,23 @@ mod tests {
     fn percentile_interpolates() {
         let value = percentile(&[1.0, 2.0, 3.0, 4.0], 0.5).unwrap();
         assert_eq!(value, 2.5);
+    }
+
+    #[test]
+    fn percentile_matches_js_interpolation_order() {
+        let values = [
+            -9.99292788975378,
+            -8.786348636508595,
+            -3.1402410771695273,
+            0.9148611651613017,
+            5.730800598311313,
+        ];
+        let value = percentile(&values, 0.25).unwrap();
+        let position = (values.len() - 1) as f64 * 0.25;
+        let lower = position.floor() as usize;
+        let upper = position.ceil() as usize;
+        let expected = values[lower] + (values[upper] - values[lower]) * (position - lower as f64);
+
+        assert_eq!(value, expected);
     }
 }
