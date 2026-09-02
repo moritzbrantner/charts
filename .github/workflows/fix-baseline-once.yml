@@ -60,25 +60,30 @@ jobs:
           ci_path = Path(".github/workflows/ci.yml")
           ci = ci_path.read_text()
           old_dependency = '''  dependency-review:\n    runs-on: ubuntu-latest\n    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'\n    permissions:\n      contents: read\n      pull-requests: read\n\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v6.0.2\n\n      - name: Dependency review\n        uses: actions/dependency-review-action@v5.0.0\n'''
-          new_dependency = '''  dependency-review:\n    runs-on: ubuntu-latest\n    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'\n    permissions:\n      contents: read\n      pull-requests: read\n\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v6.0.2\n\n      - name: Check Dependency Graph availability\n        id: dependency-graph\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          if gh api "repos/${GITHUB_REPOSITORY}/dependency-graph/sbom" >/dev/null 2>&1; then\n            echo "available=true" >> "$GITHUB_OUTPUT"\n          else\n            echo "available=false" >> "$GITHUB_OUTPUT"\n            echo "::notice::Dependency Graph is unavailable; falling back to Bun production audit."\n          fi\n\n      - name: Dependency review\n        if: steps.dependency-graph.outputs.available == 'true'\n        uses: actions/dependency-review-action@v5.0.0\n\n      - name: Setup Bun fallback\n        if: steps.dependency-graph.outputs.available != 'true'\n        uses: oven-sh/setup-bun@v2.2.0\n        with:\n          bun-version: ${{ env.BUN_VERSION }}\n\n      - name: Install dependencies for fallback audit\n        if: steps.dependency-graph.outputs.available != 'true'\n        run: bun install --frozen-lockfile\n\n      - name: Production dependency audit fallback\n        if: steps.dependency-graph.outputs.available != 'true'\n        run: bun run audit:production\n'''
+          dollar = chr(36)
+          new_dependency = f'''  dependency-review:\n    runs-on: ubuntu-latest\n    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'\n    permissions:\n      contents: read\n      pull-requests: read\n\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v6.0.2\n\n      - name: Check Dependency Graph availability\n        id: dependency-graph\n        env:\n          GH_TOKEN: {dollar}{{{{ github.token }}}}\n        run: |\n          if gh api "repos/{dollar}{{GITHUB_REPOSITORY}}/dependency-graph/sbom" >/dev/null 2>&1; then\n            echo "available=true" >> "{dollar}GITHUB_OUTPUT"\n          else\n            echo "available=false" >> "{dollar}GITHUB_OUTPUT"\n            echo "::notice::Dependency Graph is unavailable; falling back to Bun production audit."\n          fi\n\n      - name: Dependency review\n        if: steps.dependency-graph.outputs.available == 'true'\n        uses: actions/dependency-review-action@v5.0.0\n\n      - name: Setup Bun fallback\n        if: steps.dependency-graph.outputs.available != 'true'\n        uses: oven-sh/setup-bun@v2.2.0\n        with:\n          bun-version: 1.3.14\n\n      - name: Install dependencies for fallback audit\n        if: steps.dependency-graph.outputs.available != 'true'\n        run: bun install --frozen-lockfile\n\n      - name: Production dependency audit fallback\n        if: steps.dependency-graph.outputs.available != 'true'\n        run: bun run audit:production\n'''
           if old_dependency not in ci:
               raise SystemExit("dependency review block changed")
           ci_path.write_text(ci.replace(old_dependency, new_dependency, 1))
           PY
       - name: Format changed code
-        run: bunx prettier --write src/index.test.ts
+        run: bunx prettier --write src/index.test.ts .github/workflows/ci.yml
       - name: Build WASM
         run: |
           if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
           bun run build:wasm
       - name: Verify repaired suites
         run: |
-          bunx vitest run src/index.test.ts src/components/density-table.test.tsx --reporter=verbose
+          bunx vitest run src/index.test.ts src/components/density-table.test.tsx src/density/worker.test.ts --reporter=verbose
           bun run test:coverage
           bun run check-types
           bun run lint
           bun run format:check
           bun run docs:check
+      - name: Validate workflow syntax
+        uses: docker://rhysd/actionlint:1.7.12
+        with:
+          args: -color
       - name: Commit verified repairs
         run: |
           rm .github/workflows/fix-baseline-once.yml
