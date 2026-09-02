@@ -119,7 +119,7 @@ async function loadGeneratedModuleInNode(): Promise<GeneratedChartsWasmModule> {
   )) as GeneratedChartsWasmModule;
   const wasmBytes = await fs.readFile(wasmPath);
 
-  await module.default?.(wasmBytes);
+  await module.default?.({ module_or_path: wasmBytes });
   return module;
 }
 
