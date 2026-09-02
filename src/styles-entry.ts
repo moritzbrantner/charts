@@ -1,2 +1,2 @@
-// Package-owned standalone style surface; keep this independent of @moritzbrantner/ui.
+// Standalone package style entrypoint; never import @moritzbrantner/ui from here.
 import "./styles.css";
