@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { describe, expect, test } from "vitest";
 
 import { ChartDensityTable } from "./density-table";
@@ -33,6 +33,13 @@ describe("ChartDensityTable", () => {
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.getByText("Chart values")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Average" })).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "2" })).toBeTruthy();
+
+    const [, dataRow] = screen.getAllByRole("row");
+    if (!dataRow) {
+      throw new Error("Expected a chart data row.");
+    }
+    const cells = within(dataRow).getAllByRole("cell");
+
+    expect(cells[1]?.textContent).toBe("2");
   });
 });
