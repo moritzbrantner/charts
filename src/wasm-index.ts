@@ -94,7 +94,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
       const valueMode = query.valueMode ?? "average";
       const series = createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
-      populateWasmPercentiles(samples, normalizedPoints, query);
+      populateWasmPercentiles(series.bins, samples, normalizedPoints, query);
 
       return {
         bins: series.bins,
@@ -209,6 +209,7 @@ function createWasmBinnedSeries<TProperties>(
 }
 
 function populateWasmPercentiles<TProperties>(
+  bins: Array<ChartDensityBin<TProperties>>,
   samples: Array<ChartDensitySample<TProperties>>,
   points: Array<IndexedChartSeriesPoint<TProperties>>,
   query: ChartDensityQuery,
@@ -242,17 +243,28 @@ function populateWasmPercentiles<TProperties>(
     valuesByBin[binIndex].push(point.y);
   }
 
+  const binsByIndex = new Map(bins.map((bin) => [bin.index, bin]));
+
   for (const sample of samples) {
     const values = valuesByBin[sample.index] ?? [];
     if (values.length === 0) {
       continue;
     }
     const typedValues = Float64Array.from(values);
+    const bin = binsByIndex.get(sample.index) as
+      | (ChartDensityBin<TProperties> & Partial<Record<ChartPercentileMode, number | null>>)
+      | undefined;
+
     for (const mode of requested) {
       const value = kernel.percentile(typedValues, PERCENTILE_QUANTILES[mode]);
-      sample[mode] = Number.isFinite(value) ? value : null;
+      const percentileValue = Number.isFinite(value) ? value : null;
+
+      if (bin) {
+        bin[mode] = percentileValue;
+      }
+      sample[mode] = percentileValue;
       if (query.valueMode === mode) {
-        sample.y = sample[mode];
+        sample.y = percentileValue;
       }
     }
   }
