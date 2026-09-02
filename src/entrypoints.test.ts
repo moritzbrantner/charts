@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import { createChartDensityIndex } from "./core";
-
 import { ChartSeriesLegend } from "./react";
 
 import * as compatibilityApi from "./index";
