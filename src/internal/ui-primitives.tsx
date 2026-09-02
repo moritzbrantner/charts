@@ -130,6 +130,7 @@ export function ToggleGroup({
   className,
   disabled = false,
   onValueChange,
+  role = "group",
   size: _size,
   type: _type,
   value,
@@ -142,6 +143,7 @@ export function ToggleGroup({
           "inline-flex items-center rounded-md border border-border bg-background p-0.5",
           className,
         )}
+        role={role}
         {...props}
       >
         {children}
@@ -159,27 +161,30 @@ export function ToggleGroupItem({
   className,
   disabled,
   onClick,
+  role = "radio",
   value,
   ...props
 }: ToggleGroupItemProps) {
   const group = useContext(ToggleGroupContext);
   const pressed = group.value === value;
+  const isDisabled = disabled ?? group.disabled;
 
   return (
     <button
-      aria-pressed={pressed}
+      aria-checked={pressed}
       className={cn(
         "inline-flex h-7 items-center justify-center rounded px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
         pressed && "bg-accent text-accent-foreground",
         className,
       )}
-      disabled={disabled ?? group.disabled}
+      disabled={isDisabled}
       onClick={(event) => {
         onClick?.(event);
-        if (!event.defaultPrevented) {
+        if (!event.defaultPrevented && !isDisabled) {
           group.onValueChange?.(pressed ? "" : value);
         }
       }}
+      role={role}
       type="button"
       {...props}
     >
@@ -252,15 +257,26 @@ type CheckboxProps = Omit<
   onCheckedChange?: (checked: boolean) => void;
 };
 
-export function Checkbox({ checked = false, className, onCheckedChange, ...props }: CheckboxProps) {
+export function Checkbox({
+  checked = false,
+  className,
+  disabled = false,
+  onCheckedChange,
+  ...props
+}: CheckboxProps) {
   return (
     <input
+      {...props}
       aria-checked={checked === "indeterminate" ? "mixed" : checked}
       checked={checked === true}
       className={cn("size-4 rounded border border-input accent-primary", className)}
-      onChange={(event) => onCheckedChange?.(event.currentTarget.checked)}
+      disabled={disabled}
+      onChange={(event) => {
+        if (!disabled) {
+          onCheckedChange?.(event.currentTarget.checked);
+        }
+      }}
       type="checkbox"
-      {...props}
     />
   );
 }
