@@ -11,9 +11,7 @@ import type { ChartDensityIndex } from "./types";
 
 let activeIndex: ChartDensityIndex | null = null;
 
-globalThis.addEventListener("message", (event: MessageEvent<ChartDensityWorkerRequest>) => {
-  void handleWorkerMessage(event);
-});
+globalThis.addEventListener("message", handleWorkerMessage);
 
 async function handleWorkerMessage(event: MessageEvent<ChartDensityWorkerRequest>) {
   const message = event.data;
