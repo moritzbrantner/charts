@@ -1,4 +1,6 @@
 import { createContext, useContext } from "react";
+import { ResponsiveContainer } from "recharts";
+
 import type {
   ButtonHTMLAttributes,
   CSSProperties,
@@ -9,7 +11,6 @@ import type {
   ReactNode,
   SelectHTMLAttributes,
 } from "react";
-import { ResponsiveContainer } from "recharts";
 
 export function cn(...values: Array<false | null | string | undefined>): string {
   return values.filter(Boolean).join(" ");
@@ -223,8 +224,12 @@ export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElemen
   return <div className={cn("grid gap-1.5 p-6", className)} {...props} />;
 }
 
-export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("font-semibold leading-none tracking-tight", className)} {...props} />;
+export function CardTitle({ children, className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
+  return (
+    <h3 className={cn("font-semibold leading-none tracking-tight", className)} {...props}>
+      {children}
+    </h3>
+  );
 }
 
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {

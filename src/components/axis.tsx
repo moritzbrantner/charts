@@ -1,7 +1,8 @@
-import { Button, Input, NativeSelect, NativeSelectOption } from "../internal/ui-primitives";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePlotArea } from "recharts";
+
+import { Button, Input, NativeSelect, NativeSelectOption } from "../internal/ui-primitives";
 
 import { ChartSeriesLegend } from "./chrome";
 import {

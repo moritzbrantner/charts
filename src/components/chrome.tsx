@@ -1,3 +1,6 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { createChartRenderData } from "../density";
 import {
   Badge,
   Button,
@@ -13,9 +16,6 @@ import {
   ItemDescription,
   ItemTitle,
 } from "../internal/ui-primitives";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-
-import { createChartRenderData } from "../density";
 
 import {
   useChartBinCount,

@@ -1,6 +1,6 @@
+import { CHART_VALUE_MODE_DEFINITIONS } from "../density";
 import { Button, Progress, ToggleGroup, ToggleGroupItem } from "../internal/ui-primitives";
 
-import { CHART_VALUE_MODE_DEFINITIONS } from "../density";
 
 import { formatDomainRange, formatUnknownError, joinClassNames } from "./shared";
 
