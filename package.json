@@ -16,7 +16,9 @@
   "files": [
     "dist"
   ],
-  "sideEffects": false,
+  "sideEffects": [
+    "*.css"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -31,11 +33,11 @@
     "./react": {
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js"
-    }
+    },
+    "./styles.css": "./dist/styles.css"
   },
   "dependencies": {
-    "@chenglou/pretext": "0.0.7",
-    "@moritzbrantner/ui": "^0.9.1"
+    "@chenglou/pretext": "0.0.7"
   },
   "peerDependencies": {
     "react": "^19.0.0",
@@ -79,7 +81,8 @@
     "typescript-eslint": "^8.60.0",
     "unlighthouse": "^0.17.9",
     "vite": "^8.0.14",
-    "vitest": "^4.1.2"
+    "vitest": "^4.1.2",
+    "@moritzbrantner/ui": "^0.9.1"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org",
@@ -92,7 +95,7 @@
     "bench:large-data:full-json": "CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:json": "CHARTS_BENCH_JSON=test-results/bench-large-data.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:profile": "CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json node ./scripts/benchmark-large-data.mjs",
-    "build": "tsup src/index.ts src/core.ts src/react.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false && node ./scripts/copy-wasm.mjs",
+    "build": "tsup src/index.ts src/core.ts src/react.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false && node ./scripts/copy-wasm.mjs && vite build --config vite.styles.config.ts",
     "build:examples": "vite build --outDir ../dist-examples --emptyOutDir",
     "build:storybook": "storybook build --output-dir storybook-static",
     "build:wasm": "wasm-pack build crates/charts-density-wasm --target web --release --out-dir ../../src/wasm/generated --out-name charts_density_wasm",

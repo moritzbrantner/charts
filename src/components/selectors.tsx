@@ -1,6 +1,5 @@
-import { Button, Progress, ToggleGroup, ToggleGroupItem } from "@moritzbrantner/ui";
-
 import { CHART_VALUE_MODE_DEFINITIONS } from "../density";
+import { Button, Progress, ToggleGroup, ToggleGroupItem } from "../internal/ui-primitives";
 
 import { formatDomainRange, formatUnknownError, joinClassNames } from "./shared";
 

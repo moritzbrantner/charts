@@ -28,27 +28,29 @@ describe("chart density worker module", () => {
       bucketCount: 5,
       xDomain: [0, 11] as [number, number],
     };
-    const expected = createChartDensityIndex(points, { backend: "wasm-index" });
 
-    worker.dispatch({
+    await worker.dispatch({
       options: {},
       points,
       requestId: 1,
       type: "build",
     });
-    worker.dispatch({
+
+    const expected = createChartDensityIndex(points, { backend: "wasm-index" });
+
+    await worker.dispatch({
       method: "getChartSeries",
       query,
       requestId: 2,
       type: "query",
     });
-    worker.dispatch({
+    await worker.dispatch({
       method: "getHeatmap",
       query: heatmapQuery,
       requestId: 3,
       type: "query",
     });
-    worker.dispatch({
+    await worker.dispatch({
       method: "getHistogram",
       query: histogramQuery,
       requestId: 4,
@@ -78,13 +80,13 @@ describe("chart density worker module", () => {
   test("serializes errors for queries before build and disposes without a response", async () => {
     const worker = await importWorkerModule();
 
-    worker.dispatch({
+    await worker.dispatch({
       method: "getChartSeries",
       query: { targetBinCount: 1, xDomain: [0, 1] },
       requestId: 1,
       type: "query",
     });
-    worker.dispatch({
+    await worker.dispatch({
       requestId: 2,
       type: "dispose",
     });
@@ -103,16 +105,23 @@ describe("chart density worker module", () => {
 });
 
 async function importWorkerModule() {
-  const listeners: Array<(event: MessageEvent<ChartDensityWorkerRequest>) => void> = [];
+  const listeners: Array<
+    (event: MessageEvent<ChartDensityWorkerRequest>) => Promise<void> | void
+  > = [];
   const responses: ChartDensityWorkerResponse[] = [];
 
   vi.stubGlobal(
     "addEventListener",
-    vi.fn((type: string, listener: (event: MessageEvent<ChartDensityWorkerRequest>) => void) => {
-      if (type === "message") {
-        listeners.push(listener);
-      }
-    }),
+    vi.fn(
+      (
+        type: string,
+        listener: (event: MessageEvent<ChartDensityWorkerRequest>) => Promise<void> | void,
+      ) => {
+        if (type === "message") {
+          listeners.push(listener);
+        }
+      },
+    ),
   );
   vi.stubGlobal(
     "postMessage",
@@ -124,10 +133,12 @@ async function importWorkerModule() {
   await import("./worker");
 
   return {
-    dispatch(message: ChartDensityWorkerRequest) {
-      for (const listener of listeners) {
-        listener({ data: message } as MessageEvent<ChartDensityWorkerRequest>);
-      }
+    async dispatch(message: ChartDensityWorkerRequest) {
+      await Promise.all(
+        listeners.map((listener) =>
+          listener({ data: message } as MessageEvent<ChartDensityWorkerRequest>),
+        ),
+      );
     },
     responses,
   };

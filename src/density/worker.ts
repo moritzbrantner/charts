@@ -1,3 +1,5 @@
+import { loadChartWasmKernel } from "../wasm-kernel";
+
 import { createChartDensityIndex } from "./backend";
 import {
   serializeChartDensityWorkerError,
@@ -9,12 +11,15 @@ import type { ChartDensityIndex } from "./types";
 
 let activeIndex: ChartDensityIndex | null = null;
 
-globalThis.addEventListener("message", (event: MessageEvent<ChartDensityWorkerRequest>) => {
+globalThis.addEventListener("message", handleWorkerMessage);
+
+async function handleWorkerMessage(event: MessageEvent<ChartDensityWorkerRequest>) {
   const message = event.data;
 
   try {
     switch (message.type) {
       case "build":
+        await loadChartWasmKernel();
         activeIndex = createChartDensityIndex(message.points, {
           ...message.options,
           backend: "wasm-index",
@@ -42,7 +47,7 @@ globalThis.addEventListener("message", (event: MessageEvent<ChartDensityWorkerRe
       type: "error",
     });
   }
-});
+}
 
 function queryActiveIndex(message: Extract<ChartDensityWorkerRequest, { type: "query" }>) {
   if (!activeIndex) {
