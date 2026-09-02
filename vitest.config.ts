@@ -22,6 +22,7 @@ export default defineConfig({
         "src/**/*.visual.spec.ts",
         "src/components/stories/**",
         "src/testing/**",
+        "src/wasm/generated/**",
       ],
       include: ["src/**/*.ts", "src/**/*.tsx"],
       provider: "istanbul",
