@@ -4,13 +4,16 @@ on:
   push:
     branches:
       - decouple-ui-runtime
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   migrate:
-    if: github.actor != 'github-actions[bot]'
+    if: github.actor != 'github-actions[bot]' && (github.event_name != 'pull_request' || github.head_ref == 'decouple-ui-runtime')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6.0.2
