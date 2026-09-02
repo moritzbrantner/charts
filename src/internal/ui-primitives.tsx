@@ -216,8 +216,18 @@ export function Checkbox({ checked = false, className, onCheckedChange, ...props
   );
 }
 
-export function Item({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-start gap-3 rounded-lg border border-border p-3", className)} {...props} />;
+type ItemProps = HTMLAttributes<HTMLDivElement> & {
+  variant?: string;
+};
+
+export function Item({ className, variant, ...props }: ItemProps) {
+  return (
+    <div
+      className={cn("flex items-start gap-3 rounded-lg border border-border p-3", className)}
+      data-variant={variant}
+      {...props}
+    />
+  );
 }
 
 export function ItemContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
