@@ -1,2 +1,2 @@
-// Standalone package style entrypoint; never import @moritzbrantner/ui from here.
+// Standalone package style entrypoint; consumers do not need @moritzbrantner/ui.
 import "./styles.css";
