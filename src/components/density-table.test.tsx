@@ -33,6 +33,6 @@ describe("ChartDensityTable", () => {
     expect(screen.getByRole("table")).toBeTruthy();
     expect(screen.getByText("Chart values")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Average" })).toBeTruthy();
-    expect(screen.getByRole("cell", { name: "2" })).toBeTruthy();
+    expect(screen.getAllByRole("cell", { name: "2" })).toHaveLength(2);
   });
 });
