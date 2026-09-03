@@ -25,7 +25,7 @@ export default defineConfig({
         "src/testing/**",
         "src/wasm/generated/**",
       ],
-      include: ["src/**/*.ts", "src/**/*.tsx"],
+      include: ["src/**/!(*.d).ts", "src/**/*.tsx"],
       provider: "istanbul",
       reporter: ["text", "lcov"],
       thresholds: {

@@ -68,19 +68,10 @@ export async function loadChartWasmKernel(): Promise<ChartWasmKernel> {
 }
 
 async function loadGeneratedModule(): Promise<GeneratedChartsWasmModule> {
-  // Packaged builds copy the wasm-pack output next to the compiled entry point.
-  // Source validation can load the same output directly after `build:wasm`.
-  const packagedModuleUrl = new URL("./wasm/charts_density_wasm.js", import.meta.url).href;
-  let module: GeneratedChartsWasmModule;
-
-  try {
-    module = (await import(/* @vite-ignore */ packagedModuleUrl)) as GeneratedChartsWasmModule;
-  } catch {
-    const sourceModuleUrl = new URL("./wasm/generated/charts_density_wasm.js", import.meta.url)
-      .href;
-    module = (await import(/* @vite-ignore */ sourceModuleUrl)) as GeneratedChartsWasmModule;
-  }
-
+  // Keep the generated wasm-pack module out of the ordinary TypeScript dependency graph.
+  // Release/browser builds copy it to dist/wasm. Development can remain JS-only.
+  const moduleUrl = new URL("./wasm/charts_density_wasm.js", import.meta.url).href;
+  const module = (await import(/* @vite-ignore */ moduleUrl)) as GeneratedChartsWasmModule;
   await module.default?.();
   return module;
 }
