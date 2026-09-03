@@ -39,29 +39,19 @@ jobs:
 
           wasm_index = Path("src/wasm-index.ts")
           text = wasm_index.read_text()
-          old = '''    getBackendCapabilities() {
-              if (!getLoadedChartWasmKernel()) {
-                return (
-                  readFallbackIndex().getBackendCapabilities?.() ?? {
-                    backend: "hybrid-js",
-                    supportsGroupedSeries: true,
-                    supportsHeatmap: true,
-                    supportsHistogram: true,
-                    supportsPercentiles: true,
-                    usesWasm: false,
-                  }
-                );
-              }
-              return WASM_CAPABILITIES;
-            },'''
-          if old in text:
-              text = text.replace(old, '''    getBackendCapabilities() {
-              return WASM_CAPABILITIES;
-            },''')
-          elif '''    getBackendCapabilities() {
-              return WASM_CAPABILITIES;
-            },''' not in text:
-              raise SystemExit("unexpected wasm capability implementation")
+          start_marker = "    getBackendCapabilities() {\n"
+          end_marker = "\n\n    getBinnedSeries"
+          start = text.find(start_marker)
+          if start < 0:
+              raise SystemExit("WASM capability method not found")
+          end = text.find(end_marker, start)
+          if end < 0:
+              raise SystemExit("WASM capability method end not found")
+          desired = """    getBackendCapabilities() {
+            return WASM_CAPABILITIES;
+          },"""
+          if text[start:end] != desired:
+              text = text[:start] + desired + text[end:]
           wasm_index.write_text(text)
 
           test_file = Path("src/components/density-table.test.tsx")
