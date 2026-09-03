@@ -14,6 +14,7 @@ export default defineConfig({
   test: {
     coverage: {
       exclude: [
+        "src/**/*.d.ts",
         "src/**/*.stories.ts",
         "src/**/*.stories.tsx",
         "src/**/*.storybook.spec.ts",
@@ -22,6 +23,7 @@ export default defineConfig({
         "src/**/*.visual.spec.ts",
         "src/components/stories/**",
         "src/testing/**",
+        "src/wasm/generated/**",
       ],
       include: ["src/**/*.ts", "src/**/*.tsx"],
       provider: "istanbul",

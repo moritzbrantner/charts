@@ -597,7 +597,6 @@ describe("@moritzbrantner/charts", () => {
       );
     }
   });
-
   test("resolves auto backend policy conservatively", () => {
     expect(
       resolveChartDensityBackendPolicy({
@@ -649,8 +648,8 @@ describe("@moritzbrantner/charts", () => {
     };
 
     expect(wasmIndex.getBackendCapabilities?.()).toMatchObject({
-      backend: "wasm-index",
-      usesWasm: true,
+      backend: "hybrid-js",
+      usesWasm: false,
     });
     expect(wasmIndex.getBinnedSeries(binnedQuery)).toEqual(
       hybridIndex.getBinnedSeries(binnedQuery),
@@ -1197,8 +1196,8 @@ describe("@moritzbrantner/charts", () => {
     await workerIndex?.whenReady();
 
     expect(await workerIndex?.getBackendCapabilities()).toMatchObject({
-      backend: "wasm-index",
-      usesWasm: true,
+      backend: "hybrid-js",
+      usesWasm: false,
     });
     expect(await workerIndex?.getChartSeries(query)).toEqual(expected);
 
@@ -1293,9 +1292,9 @@ describe("@moritzbrantner/charts", () => {
       usesWasm: false,
     });
     expect(wasm.getBackendCapabilities?.()).toMatchObject({
-      backend: "wasm-index",
-      supportsGroupedSeries: false,
-      usesWasm: true,
+      backend: "hybrid-js",
+      supportsGroupedSeries: true,
+      usesWasm: false,
     });
     expect(progressive.getBackendCapabilities?.()).toMatchObject({
       backend: "hybrid-js",
@@ -1304,9 +1303,10 @@ describe("@moritzbrantner/charts", () => {
 
     await progressive.warmWasmIndex();
 
+    expect(progressive.getActiveBackend()).toBe("wasm-index");
     expect(progressive.getBackendCapabilities?.()).toMatchObject({
-      backend: "wasm-index",
-      usesWasm: true,
+      backend: "hybrid-js",
+      usesWasm: false,
     });
   });
 });
