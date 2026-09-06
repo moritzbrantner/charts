@@ -1,4 +1,4 @@
-name: Docs
+name: Deploy GitHub Pages
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -59,13 +59,24 @@ jobs:
       - name: Build WASM
         run: bun run build:wasm
 
-      - name: Build docs
+      - name: Check types
+        run: bun run check-types
+
+      - name: Build interactive Pages site
+        run: bun run build:examples:pages
+
+      - name: Build API docs
         run: bun run docs
+
+      - name: Stage API docs under the interactive site
+        run: |
+          mkdir -p dist-examples/api
+          cp -R docs/. dist-examples/api/
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5.0.0
         with:
-          path: docs
+          path: dist-examples
 
   deploy:
     runs-on: ubuntu-latest
