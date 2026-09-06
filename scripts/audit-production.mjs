@@ -9,6 +9,7 @@ const packageJson = JSON.parse(readFileSync(path.join(rootDir, "package.json"), 
 const dependencies = {
   ...(packageJson.dependencies ?? {}),
   ...(packageJson.optionalDependencies ?? {}),
+  ...(packageJson.peerDependencies ?? {}),
 };
 
 if (Object.keys(dependencies).length === 0) {
