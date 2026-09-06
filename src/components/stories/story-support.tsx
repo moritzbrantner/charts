@@ -1,4 +1,5 @@
 import { ChartContainer, type ChartConfig, type ChartRange } from "@moritzbrantner/charts";
+
 import type { ReactElement, ReactNode } from "react";
 
 export const chartConfig = {
