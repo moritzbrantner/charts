@@ -1,10 +1,6 @@
 import { useMemo, useState } from "react";
 
-import {
-  ChartPanel,
-  ChartRangeSelector,
-  createChartDensityIndex,
-} from "@moritzbrantner/charts";
+import { ChartPanel, ChartRangeSelector, createChartDensityIndex } from "@moritzbrantner/charts";
 
 import { ChartPlayground } from "./chart-playground";
 import { createExampleDataSets, createGapPoints, formatHour } from "./data";
