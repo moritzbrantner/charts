@@ -1,10 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -27,9 +21,7 @@ for (const declaration of publicDeclarations) {
 const declarationFiles = readdirSync(distDir)
   .filter((file) => file.endsWith(".d.ts"))
   .sort();
-const generatedDeclarations = declarationFiles.filter(
-  (file) => !publicDeclarations.includes(file),
-);
+const generatedDeclarations = declarationFiles.filter((file) => !publicDeclarations.includes(file));
 const canonicalNames = new Map([
   ...publicDeclarations.map((file) => [file, file]),
   ...generatedDeclarations.map((file, index) => [file, `shared-${index + 1}.d.ts`]),
