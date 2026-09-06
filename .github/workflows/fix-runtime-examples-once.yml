@@ -57,6 +57,11 @@ jobs:
               "  ChartCalendarHeatmapSvg,\n",
               "  ChartCalendarHeatmapSvg,\n  ChartContainer,\n",
           )
+          replace_once(
+              "examples/src/playground/chart-playground.tsx",
+              "              yAxisDataDomain,\n            })}\n          </ChartContainer>",
+              "              yAxisDataDomain,\n            })!}\n          </ChartContainer>",
+          )
 
           replace_once(
               "examples/src/playground/dense-trend.tsx",
@@ -120,6 +125,16 @@ jobs:
               "src/components/stories/story-support.tsx",
               'import { ChartContainer, type ChartConfig } from "@moritzbrantner/ui";\n\nimport type { ChartRange } from "@moritzbrantner/charts";',
               'import {\n  ChartContainer,\n  type ChartConfig,\n  type ChartRange,\n} from "@moritzbrantner/charts";',
+          )
+          replace_once(
+              "src/components/stories/story-support.tsx",
+              'import type { ReactNode } from "react";',
+              'import type { ReactElement, ReactNode } from "react";',
+          )
+          replace_once(
+              "src/components/stories/story-support.tsx",
+              "}: {\n  children: ReactNode;\n  className?: string;\n}) {",
+              "}: {\n  children: ReactElement;\n  className?: string;\n}) {",
           )
           PY
 
