@@ -103,7 +103,7 @@
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
-    "format:check": "prettier --write . && git diff --exit-code",
+    "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
     "prepack": "bun run build:wasm && bun run build",
