@@ -114,10 +114,7 @@ select {
   min-height: 36px;
   padding: 0.45rem 0.75rem;
   text-decoration: none;
-  transition:
-    background-color 120ms ease,
-    border-color 120ms ease,
-    color 120ms ease;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
 .example-nav__link:hover {
