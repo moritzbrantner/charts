@@ -1,26 +1,86 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const declarationPath = path.join(rootDir, "dist", "index.d.ts");
+const distDir = path.join(rootDir, "dist");
 const reportPath = path.join(rootDir, "etc", "charts.api.md");
+const publicDeclarations = ["index.d.ts", "core.d.ts", "react.d.ts"];
 
-if (!existsSync(declarationPath)) {
-  throw new Error("API report check requires dist/index.d.ts. Run `bun run build` first.");
+if (!existsSync(distDir)) {
+  throw new Error("API report check requires dist declarations. Run `bun run build` first.");
 }
 
-const declaration = readFileSync(declarationPath, "utf8").trimEnd();
+for (const declaration of publicDeclarations) {
+  if (!existsSync(path.join(distDir, declaration))) {
+    throw new Error(`API report check requires dist/${declaration}. Run \`bun run build\` first.`);
+  }
+}
+
+const declarationFiles = readdirSync(distDir)
+  .filter((file) => file.endsWith(".d.ts"))
+  .sort();
+const generatedDeclarations = declarationFiles.filter(
+  (file) => !publicDeclarations.includes(file),
+);
+const canonicalNames = new Map([
+  ...publicDeclarations.map((file) => [file, file]),
+  ...generatedDeclarations.map((file, index) => [file, `shared-${index + 1}.d.ts`]),
+]);
+
+function normalizeDeclaration(content) {
+  let normalized = content.trimEnd();
+
+  for (const [file, canonicalFile] of canonicalNames) {
+    const actualStem = file.slice(0, -".d.ts".length);
+    const canonicalStem = canonicalFile.slice(0, -".d.ts".length);
+    normalized = normalized.replaceAll(`./${actualStem}`, `./${canonicalStem}`);
+  }
+
+  return normalized;
+}
+
+function declarationSection(title, file) {
+  const content = normalizeDeclaration(readFileSync(path.join(distDir, file), "utf8"));
+  return [
+    `## ${title}`,
+    "",
+    `Generated from \`dist/${canonicalNames.get(file)}\`.`,
+    "",
+    "```ts",
+    content,
+    "```",
+    "",
+  ].join("\n");
+}
+
+const sections = [
+  declarationSection("Compatibility entry point (`.`)", "index.d.ts"),
+  declarationSection("Server-safe entry point (`./core`)", "core.d.ts"),
+  declarationSection("React entry point (`./react`)", "react.d.ts"),
+];
+
+if (generatedDeclarations.length > 0) {
+  sections.push(
+    ...generatedDeclarations.map((file, index) =>
+      declarationSection(`Shared declaration ${index + 1}`, file),
+    ),
+  );
+}
+
 const report = [
   "# API Report: @moritzbrantner/charts",
   "",
-  "This file is generated from `dist/index.d.ts`. Update it intentionally when the public API changes.",
+  "This file is generated from the complete declaration graph emitted for the public package entry points. Generated chunk names are normalized so implementation-only hashes do not create API-report churn.",
   "",
-  "```ts",
-  declaration,
-  "```",
-  "",
+  ...sections,
 ].join("\n");
 
 if (!existsSync(reportPath)) {
