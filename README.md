@@ -27,6 +27,15 @@ bun add @moritzbrantner/charts react react-dom recharts
 
 The package is published to public npm.
 
+For the packaged React controls, import the standalone stylesheet once:
+
+```ts
+import "@moritzbrantner/charts/styles.css";
+```
+
+`@moritzbrantner/ui` is not required by consumers. Chart colors and surface tokens can be
+overridden through the `--charts-*` CSS custom properties.
+
 ## Support matrix
 
 | Dependency | Supported range             | Notes                                                         |
@@ -173,7 +182,7 @@ import {
   ChartWithLegend,
   useChartSeriesVisibility,
 } from "@moritzbrantner/charts";
-import { ChartContainer } from "@moritzbrantner/ui";
+import { ChartContainer } from "@moritzbrantner/charts";
 
 const legendItems = [
   { id: "average", label: "Average", color: "var(--chart-1)" },

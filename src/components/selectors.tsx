@@ -1,6 +1,5 @@
-import { Button, Progress, ToggleGroup, ToggleGroupItem } from "@moritzbrantner/ui";
-
 import { CHART_VALUE_MODE_DEFINITIONS } from "../density";
+import { Button, Progress, ToggleGroup, ToggleGroupItem } from "../internal/ui-primitives";
 
 import { formatDomainRange, formatUnknownError, joinClassNames } from "./shared";
 
@@ -37,9 +36,10 @@ export function ChartRangeSelector({
             variant="outline"
             aria-checked={active}
             className={joinClassNames(
-              "h-auto w-full justify-start whitespace-normal rounded-none border p-4 text-left transition hover:border-primary/60",
+              "h-auto min-w-0 w-full justify-start whitespace-normal rounded-none border p-4 text-left transition hover:border-primary/60",
               active ? "border-primary bg-primary/10" : "border-border/60 bg-muted/20",
             )}
+            style={{ whiteSpace: "normal" }}
             onClick={() => onValueChange(range.id)}
           >
             <span className="grid min-w-0 w-full gap-2">

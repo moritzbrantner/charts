@@ -38,6 +38,7 @@ try {
   assertFile(path.join(packageDir, "dist", "index.js"));
   assertFile(path.join(packageDir, "dist", "index.d.ts"));
   assertFile(path.join(packageDir, "dist", "worker.js"));
+  assertFile(path.join(packageDir, "dist", "styles.css"));
 
   const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 
@@ -52,6 +53,13 @@ try {
   assertPeerDependency(packageJson, "react", "^19.0.0");
   assertPeerDependency(packageJson, "react-dom", "^19.0.0");
   assertPeerDependency(packageJson, "recharts", "^3.0.0");
+
+  if (
+    packageJson.dependencies?.["@moritzbrantner/ui"] ||
+    packageJson.peerDependencies?.["@moritzbrantner/ui"]
+  ) {
+    throw new Error("Packed charts package must not require @moritzbrantner/ui.");
+  }
 
   const consumerDir = path.join(tempDir, "consumer");
   const consumerNodeModules = path.join(consumerDir, "node_modules");

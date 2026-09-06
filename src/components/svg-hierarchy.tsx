@@ -1,5 +1,6 @@
-import { Button } from "@moritzbrantner/ui";
 import { useState } from "react";
+
+import { Button } from "../internal/ui-primitives";
 
 import {
   ChartEmptyState,
