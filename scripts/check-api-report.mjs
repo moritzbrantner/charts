@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -37,6 +38,19 @@ if (current !== report) {
 
   mkdirSync(path.dirname(tempPath), { recursive: true });
   writeFileSync(tempPath, report);
+
+  const diff = spawnSync("git", ["diff", "--no-index", "--", reportPath, tempPath], {
+    cwd: rootDir,
+    encoding: "utf8",
+  });
+
+  if (diff.stdout) {
+    process.stderr.write(diff.stdout);
+  }
+  if (diff.stderr) {
+    process.stderr.write(diff.stderr);
+  }
+
   throw new Error(
     `Public API report is out of date. Compare ${path.relative(rootDir, reportPath)} with ${path.relative(
       rootDir,
