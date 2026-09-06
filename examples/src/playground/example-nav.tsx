@@ -14,20 +14,16 @@ export function ExampleNav({ page }: { page: ExamplePage }) {
   ];
 
   return (
-    <nav className="flex flex-wrap gap-2" aria-label="Examples navigation">
+    <nav aria-label="Examples navigation" className="example-nav">
       {links.map((link) => {
         const active = page === link.id;
 
         return (
           <a
-            key={link.id}
-            href={link.href}
             aria-current={active ? "page" : undefined}
-            className={`inline-flex h-9 items-center rounded-md border px-3 text-sm font-medium transition-colors ${
-              active
-                ? "border-primary bg-primary text-primary-foreground"
-                : "border-border/70 bg-background text-foreground hover:bg-accent hover:text-accent-foreground"
-            }`}
+            className={`example-nav__link${active ? " example-nav__link--active" : ""}`}
+            href={link.href}
+            key={link.id}
           >
             {link.label}
           </a>
