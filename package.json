@@ -94,6 +94,7 @@
     "bench:large-data:profile": "CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json node ./scripts/benchmark-large-data.mjs",
     "build": "tsup src/index.ts src/core.ts src/react.ts --format esm --dts --clean --out-dir dist && tsup src/density/worker.ts --format esm --out-dir dist --clean=false && node ./scripts/copy-wasm.mjs",
     "build:examples": "vite build --outDir ../dist-examples --emptyOutDir",
+    "build:examples:pages": "vite build --base=/charts/ --outDir ../dist-examples --emptyOutDir",
     "build:storybook": "storybook build --output-dir storybook-static",
     "build:wasm": "wasm-pack build crates/charts-density-wasm --target web --release --out-dir ../../src/wasm/generated --out-name charts_density_wasm",
     "changeset": "changeset",
