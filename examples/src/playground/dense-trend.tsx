@@ -1,16 +1,9 @@
-import {
-  ActionMenu,
-  Button,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ContextActionMenu,
-  copyText,
-} from "@moritzbrantner/ui";
+import { ActionMenu, Button, ContextActionMenu, copyText } from "@moritzbrantner/ui";
 import { useCallback, useMemo, useState } from "react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Tooltip, XAxis, YAxis } from "recharts";
 
 import {
+  ChartContainer,
   ChartDomainMinimap,
   ChartHotBinRow,
   ChartMetricCard,
@@ -282,7 +275,7 @@ export function DenseTrendExample({
                     axisLine={false}
                     width={56}
                   />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Tooltip />
                   <Bar dataKey="value" fill="var(--color-value)" radius={0} />
                   {sampleOverlay}
                 </BarChart>
@@ -296,7 +289,7 @@ export function DenseTrendExample({
                     axisLine={false}
                     width={56}
                   />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Tooltip />
                   <Area
                     dataKey="value"
                     fill="var(--color-value)"

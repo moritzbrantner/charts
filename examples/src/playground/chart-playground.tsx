@@ -1,9 +1,10 @@
-import { Badge, ChartContainer, ContextActionMenu } from "@moritzbrantner/ui";
+import { Badge, ContextActionMenu } from "@moritzbrantner/ui";
 import { useCallback, useMemo, useState } from "react";
 
 import {
   ChartCirclePackSvg,
   ChartCalendarHeatmapSvg,
+  ChartContainer,
   ChartDomainMinimap,
   ChartFlameGraphSvg,
   ChartFunnelSvg,
@@ -652,42 +653,44 @@ export function ChartPlayground({
             className={`w-full ${chartType === "histogram" ? "h-80" : "h-[28rem]"}`}
             config={chartType === "stacked" ? groupedConfig : config}
           >
-            {renderPlaygroundChart({
-              animationProps,
-              axesTransform,
-              barRadius,
-              chartType,
-              curve,
-              domain: effectiveDomain,
-              fillOpacity,
-              fullDomain,
-              gapBehavior,
-              histogramRows,
-              labels,
-              onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
-              rows: renderRows,
-              samples: series.samples,
-              selectedSampleIndex,
-              showGrid,
-              showThreshold: activeShowThreshold,
-              strokeWidth,
-              threshold,
-              valueMode,
-              visibleSeriesIds,
-              grouped,
-              groupedRows,
-              hiddenLegendIds,
-              legendItems,
-              orientation: axisOrientation,
-              onAxesTransformChange: setAxesTransform,
-              onDomainChange: handleInteractiveDomainChange,
-              onHiddenLegendIdsChange: setHiddenLegendIds,
-              timeAxisStatus,
-              valueAxisDomain,
-              valueAxisStatus,
-              verticalXDomain,
-              yAxisDataDomain,
-            })}
+            {
+              renderPlaygroundChart({
+                animationProps,
+                axesTransform,
+                barRadius,
+                chartType,
+                curve,
+                domain: effectiveDomain,
+                fillOpacity,
+                fullDomain,
+                gapBehavior,
+                histogramRows,
+                labels,
+                onSampleSelect: (interaction) => setSelectedSampleIndex(interaction.sample.index),
+                rows: renderRows,
+                samples: series.samples,
+                selectedSampleIndex,
+                showGrid,
+                showThreshold: activeShowThreshold,
+                strokeWidth,
+                threshold,
+                valueMode,
+                visibleSeriesIds,
+                grouped,
+                groupedRows,
+                hiddenLegendIds,
+                legendItems,
+                orientation: axisOrientation,
+                onAxesTransformChange: setAxesTransform,
+                onDomainChange: handleInteractiveDomainChange,
+                onHiddenLegendIdsChange: setHiddenLegendIds,
+                timeAxisStatus,
+                valueAxisDomain,
+                valueAxisStatus,
+                verticalXDomain,
+                yAxisDataDomain,
+              })!
+            }
           </ChartContainer>
         )}
         {chartCapabilities.directDomainInteraction && previewDomainSelection ? (

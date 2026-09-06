@@ -1,11 +1,4 @@
-import {
-  Badge,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@moritzbrantner/ui";
+import { Badge, ToggleGroup, ToggleGroupItem } from "@moritzbrantner/ui";
 import { useMemo, useState } from "react";
 import {
   Area,
@@ -15,6 +8,7 @@ import {
   CartesianGrid,
   Line,
   LineChart,
+  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -26,6 +20,7 @@ import {
   ChartBackendStatus,
   ChartBoxPlotSvg,
   ChartCalendarHeatmapSvg,
+  ChartContainer,
   ChartDerivedMetricCard,
   ChartHeatmapGrid,
   ChartHotBinRow,
@@ -253,7 +248,7 @@ export function AnalyticsExamples({
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
               <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <Tooltip />
               <Line
                 dataKey="average"
                 dot={false}
@@ -307,7 +302,7 @@ export function AnalyticsExamples({
             <CartesianGrid vertical={false} />
             <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
             <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={60} />
-            <ChartTooltip content={<ChartTooltipContent />} />
+            <Tooltip />
             <Area
               dataKey="cumulativeRevenue"
               fill="var(--color-cumulativeRevenue)"
@@ -535,7 +530,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
           <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           <Line
             dataKey="previous"
             dot={false}
@@ -575,7 +570,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
           <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           <Bar dataKey="revenueK" fill="var(--color-revenueK)" radius={0} />
         </BarChart>
       );
@@ -585,7 +580,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
           <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           <Bar dataKey="volume" fill="var(--color-volume)" radius={0} />
         </BarChart>
       );
@@ -595,7 +590,7 @@ export function renderVariantChart(variant: ChartVariantId, rows: ChartVariantRo
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
           <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           <Line
             dataKey="peak"
             dot={false}
@@ -790,7 +785,7 @@ export function ComposedChartExamples({
                   axisLine={false}
                   width={60}
                 />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <Tooltip />
                 {lineVisibility.isVisible("average") ? (
                   <Line
                     dataKey="average"
@@ -864,7 +859,7 @@ export function ComposedChartExamples({
                 <CartesianGrid vertical={false} />
                 <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
                 <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
-                <ChartTooltip content={<ChartTooltipContent />} />
+                <Tooltip />
                 {grouped.groups.map((group, index) =>
                   groupedVisibility.isVisible(group.key) ? (
                     <Bar
@@ -1093,7 +1088,7 @@ export function DistributionExamples({
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
               <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <Tooltip />
               <Bar dataKey="count" fill="var(--color-count)" radius={0} />
             </BarChart>
           </ChartContainer>
@@ -1125,7 +1120,7 @@ export function DistributionExamples({
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
               <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={42} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <Tooltip />
               {grouped.groups.map((group, index) => (
                 <Bar
                   key={group.key}
@@ -1145,7 +1140,7 @@ export function DistributionExamples({
               <CartesianGrid vertical={false} />
               <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={26} />
               <YAxis tickFormatter={formatCompact} tickLine={false} axisLine={false} width={48} />
-              <ChartTooltip content={<ChartTooltipContent />} />
+              <Tooltip />
               <Area
                 dataKey="range"
                 fill="var(--color-range)"
@@ -1332,7 +1327,7 @@ export function GapBehaviorExample({
                     axisLine={false}
                     width={42}
                   />
-                  <ChartTooltip content={<ChartTooltipContent />} />
+                  <Tooltip />
                   <Line
                     dataKey="average"
                     dot={false}
