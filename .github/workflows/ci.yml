@@ -95,7 +95,7 @@ jobs:
 
       - name: Audit changed Bun dependencies
         if: steps.dependency-changes.outputs.bun == 'true'
-        run: bun audit --production
+        run: bun run audit:production
 
       - name: Reject unreviewed Cargo dependency changes
         if: steps.dependency-changes.outputs.cargo == 'true'
