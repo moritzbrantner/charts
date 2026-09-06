@@ -1,22 +1,13 @@
-import { Badge } from "@moritzbrantner/ui";
 import { useMemo, useState } from "react";
 
 import {
-  ChartMetricStrip,
   ChartPanel,
   ChartRangeSelector,
   createChartDensityIndex,
-  createChartDensityViewportSummary,
 } from "@moritzbrantner/charts";
 
 import { ChartPlayground } from "./chart-playground";
-import {
-  createExampleDataSets,
-  createGapPoints,
-  formatCompact,
-  formatCurrency,
-  formatHour,
-} from "./data";
+import { createExampleDataSets, createGapPoints, formatHour } from "./data";
 import { DeferredExampleMount } from "./deferred-example-mount";
 import { DenseTrendExample } from "./dense-trend";
 import { ExampleNav } from "./example-nav";
@@ -58,17 +49,6 @@ export function App() {
   const index = useMemo(() => createChartDensityIndex(points, { backend: "auto" }), [points]);
   const bounds = index.getSeriesBounds();
   const fullDomain: [number, number] = bounds ? [bounds.minX, bounds.maxX] : activeDomain;
-  const fullSeries = useMemo(
-    () =>
-      index.getChartSeries({
-        includeEmptyBins: true,
-        targetBinCount: 180,
-        valueMode: "average",
-        xDomain: [0, 30 * 24],
-      }),
-    [index],
-  );
-  const fullSummary = createChartDensityViewportSummary(fullSeries);
   const handleDataSetChange = (nextDatasetId: ExampleDataSetId) => {
     setDatasetId(nextDatasetId);
     setRangeId("week");
@@ -86,49 +66,26 @@ export function App() {
   };
 
   return (
-    <main className="min-h-screen bg-background text-foreground">
-      <header className="border-b border-border/70 bg-background/95">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-5 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
-          <a href="./" className="text-sm font-semibold tracking-tight">
-            @moritzbrantner/charts
-          </a>
-          <ExampleNav page={page} />
-        </div>
+    <main className="charts-site">
+      <header className="site-header">
+        <a className="site-header__brand" href="./">
+          @moritzbrantner/charts
+        </a>
+        <ExampleNav page={page} />
       </header>
-      <section className="border-b border-border/70 bg-card/50" data-testid="examples-hero">
-        <div className="mx-auto flex w-full max-w-7xl flex-col gap-7 px-5 py-8 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl space-y-3">
-              <Badge variant="secondary" className="w-fit rounded-full px-3 py-1">
-                Examples
-              </Badge>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-                  @moritzbrantner/charts
-                </h1>
-                <p className="max-w-2xl text-base leading-7 text-muted-foreground">
-                  Density-aware chart helpers, render data, and React controls across loadable
-                  datasets and common product analytics views.
-                </p>
-              </div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 lg:w-[42rem] lg:grid-cols-4">
-              <ChartMetricStrip label="Points" value={formatCompact(points.length)} />
-              <ChartMetricStrip label="Dataset" value={selectedDataset.label} />
-              <ChartMetricStrip
-                label="Revenue"
-                value={formatCurrency(fullSummary.metrics.revenue ?? 0)}
-              />
-              <ChartMetricStrip
-                label="Domain"
-                value={bounds ? `${formatHour(bounds.minX)}-${formatHour(bounds.maxX)}` : "n/a"}
-              />
-            </div>
-          </div>
+
+      <section className="hero" data-testid="examples-hero">
+        <div className="hero__copy">
+          <p className="hero__eyebrow">Examples</p>
+          <h1>@moritzbrantner/charts</h1>
+          <p className="hero__description">
+            Density-aware chart helpers, render data, and React controls for large numeric series,
+            common product analytics views, and renderer-agnostic workflows.
+          </p>
         </div>
       </section>
 
-      <div className="mx-auto grid w-full max-w-7xl gap-6 px-5 py-6 sm:px-6 lg:px-8">
+      <div className="content-grid">
         {page === "compose" || chartPageType ? (
           <ChartPlayground
             activeRange={activeRange}
