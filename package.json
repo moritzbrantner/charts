@@ -87,7 +87,7 @@
   },
   "scripts": {
     "api:check": "bun run build && node ./scripts/check-api-report.mjs",
-    "audit:production": "bun audit --production",
+    "audit:production": "bun audit --prod",
     "bench:large-data": "node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:full-json": "CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:json": "CHARTS_BENCH_JSON=test-results/bench-large-data.json node ./scripts/benchmark-large-data.mjs",
