@@ -28,6 +28,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6.0.2
+        with:
+          fetch-depth: 0
 
       - name: Check dependency graph availability
         id: dependency-graph
@@ -59,19 +61,54 @@ jobs:
         if: steps.dependency-graph.outputs.available == 'true'
         uses: actions/dependency-review-action@v5.0.0
 
-      - name: Setup Bun fallback
+      - name: Check fallback dependency changes
         if: steps.dependency-graph.outputs.available == 'false'
+        id: dependency-changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- package.json bun.lock crates)"
+          printf '%s\n' "$changed"
+
+          if printf '%s\n' "$changed" | grep -Eq '^(package\.json|bun\.lock)$'; then
+            echo "bun=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "bun=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if printf '%s\n' "$changed" | grep -Eq '^crates/.+/(Cargo\.toml|Cargo\.lock)$'; then
+            echo "cargo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cargo=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Setup Bun fallback
+        if: steps.dependency-changes.outputs.bun == 'true'
         uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: ${{ env.BUN_VERSION }}
 
       - name: Install dependencies for fallback audit
-        if: steps.dependency-graph.outputs.available == 'false'
+        if: steps.dependency-changes.outputs.bun == 'true'
         run: bun install --frozen-lockfile
 
-      - name: Production dependency audit fallback
-        if: steps.dependency-graph.outputs.available == 'false'
+      - name: Audit changed Bun dependencies
+        if: steps.dependency-changes.outputs.bun == 'true'
         run: bun audit --production
+
+      - name: Reject unreviewed Cargo dependency changes
+        if: steps.dependency-changes.outputs.cargo == 'true'
+        run: |
+          echo "Dependency Graph is unavailable and Cargo dependency files changed; dependency review cannot be completed safely." >&2
+          exit 1
+
+      - name: No dependency changes to review
+        if: >-
+          steps.dependency-graph.outputs.available == 'false' &&
+          steps.dependency-changes.outputs.bun == 'false' &&
+          steps.dependency-changes.outputs.cargo == 'false'
+        run: echo "No dependency manifest or lockfile changes in this pull request."
 
   quality:
     runs-on: ubuntu-latest
