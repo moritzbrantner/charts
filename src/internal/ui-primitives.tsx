@@ -221,9 +221,7 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
 
 function hasPaddingOverride(className: string | undefined): boolean {
   return Boolean(
-    className
-      ?.split(/\s+/)
-      .some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)),
+    className?.split(/\s+/).some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)),
   );
 }
 
@@ -335,7 +333,10 @@ type ItemProps = HTMLAttributes<HTMLDivElement> & {
 export function Item({ className, variant, ...props }: ItemProps) {
   return (
     <div
-      className={cn("flex w-full flex-wrap items-start gap-3 rounded-lg border border-border p-3", className)}
+      className={cn(
+        "flex w-full flex-wrap items-start gap-3 rounded-lg border border-border p-3",
+        className,
+      )}
       data-slot="item"
       data-variant={variant}
       {...props}
