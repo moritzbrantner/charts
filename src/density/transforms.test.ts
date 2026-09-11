@@ -62,14 +62,11 @@ describe("chart transforms", () => {
   });
 
   test("bins the full finite numeric range without overflowing geometry", () => {
-    const transformed = createChartBinTransform(
-      [-Number.MAX_VALUE, 0, Number.MAX_VALUE],
-      {
-        binCount: 2,
-        domain: [-Number.MAX_VALUE, Number.MAX_VALUE],
-        value: (value) => value,
-      },
-    );
+    const transformed = createChartBinTransform([-Number.MAX_VALUE, 0, Number.MAX_VALUE], {
+      binCount: 2,
+      domain: [-Number.MAX_VALUE, Number.MAX_VALUE],
+      value: (value) => value,
+    });
 
     expect(transformed.summary.binnedItemCount).toBe(3);
     expect(transformed.bins.map((bin) => bin.count)).toEqual([1, 2]);
