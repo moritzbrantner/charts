@@ -74,7 +74,7 @@ export function ChartValueModeSelector({
       type="single"
       value={value}
       aria-label={ariaLabel}
-      className={joinClassNames("flex flex-wrap items-center gap-2", className)}
+      className={joinClassNames("flex w-full flex-wrap items-center gap-2", className)}
       onValueChange={(nextValue) => {
         if (nextValue) {
           onValueChange(nextValue as ChartValueMode);
