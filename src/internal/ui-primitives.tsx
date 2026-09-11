@@ -45,6 +45,9 @@ export function Button({
         size === "icon-sm" && "size-8",
         className,
       )}
+      data-size={size}
+      data-slot="button"
+      data-variant={variant}
       type={type}
       {...props}
     />
@@ -130,7 +133,7 @@ export function ToggleGroup({
   disabled = false,
   onValueChange,
   role = "group",
-  size: _size,
+  size = "default",
   type: _type,
   value,
   ...props
@@ -138,10 +141,11 @@ export function ToggleGroup({
   return (
     <ToggleGroupContext.Provider value={{ disabled, onValueChange, value }}>
       <div
-        className={cn(
-          "inline-flex items-center rounded-md border border-border bg-background p-0.5",
-          className,
-        )}
+        className={cn("group/toggle-group flex w-fit flex-row items-center rounded-md", className)}
+        data-orientation="horizontal"
+        data-size={size}
+        data-slot="toggle-group"
+        data-spacing="0"
         role={role}
         {...props}
       >
@@ -172,10 +176,11 @@ export function ToggleGroupItem({
     <button
       aria-checked={pressed}
       className={cn(
-        "inline-flex h-7 items-center justify-center rounded px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50",
-        pressed && "bg-accent text-accent-foreground",
+        "group/toggle inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md bg-transparent px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-muted",
         className,
       )}
+      data-slot="toggle-group-item"
+      data-state={pressed ? "on" : "off"}
       disabled={isDisabled}
       onClick={(event) => {
         onClick?.(event);
@@ -207,8 +212,18 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
         variant === "secondary" && "border-transparent bg-secondary text-secondary-foreground",
         className,
       )}
+      data-slot="badge"
+      data-variant={variant}
       {...props}
     />
+  );
+}
+
+function hasPaddingOverride(className: string | undefined): boolean {
+  return Boolean(
+    className
+      ?.split(/\s+/)
+      .some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)),
   );
 }
 
@@ -216,36 +231,68 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-xl border border-border bg-card text-card-foreground shadow-sm",
+        "group/card flex flex-col gap-3 overflow-hidden py-3.5 text-sm text-card-foreground ring-1 ring-foreground/10",
         className,
       )}
+      data-slot="card"
       {...props}
     />
   );
 }
 
 export function CardHeader({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("grid gap-1.5 p-6", className)} {...props} />;
+  return (
+    <div
+      className={cn(
+        "group/card-header grid auto-rows-min items-start gap-1 px-3.5 has-data-[slot=card-action]:grid-cols-[1fr_auto] has-data-[slot=card-description]:grid-rows-[auto_auto]",
+        className,
+      )}
+      data-slot="card-header"
+      {...props}
+    />
+  );
 }
 
 export function CardTitle({ children, className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
   return (
-    <h2 className={cn("font-semibold leading-none tracking-tight", className)} {...props}>
+    <h2
+      className={cn("text-base leading-snug font-medium", className)}
+      data-slot="card-title"
+      {...props}
+    >
       {children}
     </h2>
   );
 }
 
 export function CardDescription({ className, ...props }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-muted-foreground", className)} {...props} />;
+  return (
+    <p
+      className={cn("text-sm text-muted-foreground", className)}
+      data-slot="card-description"
+      {...props}
+    />
+  );
 }
 
 export function CardContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("p-6 pt-0", className)} {...props} />;
+  return (
+    <div
+      className={cn(hasPaddingOverride(className) ? undefined : "px-3.5", className)}
+      data-slot="card-content"
+      {...props}
+    />
+  );
 }
 
 export function CardFooter({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex items-center p-6 pt-0", className)} {...props} />;
+  return (
+    <div
+      className={cn("flex items-center border-t bg-muted/50 p-3.5", className)}
+      data-slot="card-footer"
+      {...props}
+    />
+  );
 }
 
 type CheckboxProps = Omit<
@@ -269,6 +316,7 @@ export function Checkbox({
       aria-checked={checked === "indeterminate" ? "mixed" : checked}
       checked={checked === true}
       className={cn("size-4 rounded border border-input accent-primary", className)}
+      data-slot="checkbox"
       disabled={disabled}
       onChange={(event) => {
         if (!disabled) {
@@ -287,7 +335,8 @@ type ItemProps = HTMLAttributes<HTMLDivElement> & {
 export function Item({ className, variant, ...props }: ItemProps) {
   return (
     <div
-      className={cn("flex items-start gap-3 rounded-lg border border-border p-3", className)}
+      className={cn("flex w-full flex-wrap items-start gap-3 rounded-lg border border-border p-3", className)}
+      data-slot="item"
       data-variant={variant}
       {...props}
     />
@@ -295,15 +344,33 @@ export function Item({ className, variant, ...props }: ItemProps) {
 }
 
 export function ItemContent({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("min-w-0 flex-1 space-y-1", className)} {...props} />;
+  return (
+    <div
+      className={cn("flex min-w-0 flex-1 flex-col gap-1", className)}
+      data-slot="item-content"
+      {...props}
+    />
+  );
 }
 
 export function ItemTitle({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("text-sm font-medium text-foreground", className)} {...props} />;
+  return (
+    <div
+      className={cn("text-sm leading-snug font-medium text-foreground", className)}
+      data-slot="item-title"
+      {...props}
+    />
+  );
 }
 
 export function ItemDescription({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("text-sm text-muted-foreground", className)} {...props} />;
+  return (
+    <div
+      className={cn("text-sm leading-normal text-muted-foreground", className)}
+      data-slot="item-description"
+      {...props}
+    />
+  );
 }
 
 const CHART_THEMES = { light: "", dark: ".dark" } as const;
