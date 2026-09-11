@@ -1,7 +1,6 @@
-import { ChartContainer, type ChartConfig } from "@moritzbrantner/ui";
+import { ChartContainer, type ChartConfig, type ChartRange } from "@moritzbrantner/charts";
 
-import type { ChartRange } from "@moritzbrantner/charts";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 export const chartConfig = {
   average: { color: "hsl(214 86% 46%)", label: "Average" },
@@ -48,7 +47,7 @@ export function StoryChartContainer({
   children,
   className = "h-80 w-full",
 }: {
-  children: ReactNode;
+  children: ReactElement;
   className?: string;
 }) {
   return (

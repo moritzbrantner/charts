@@ -1,4 +1,3 @@
-import { ChartTooltip, ChartTooltipContent } from "@moritzbrantner/ui";
 import {
   Area,
   AreaChart,
@@ -8,6 +7,7 @@ import {
   Line,
   LineChart,
   ReferenceLine,
+  Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -246,7 +246,7 @@ export function renderPlaygroundChart({
             {grid}
             {horizontalXAxis}
             {horizontalYAxis}
-            <ChartTooltip content={<ChartTooltipContent />} />
+            <Tooltip />
             {thresholdLine}
             {chartType === "stacked" ? (
               grouped.groups.map((group, index) =>
@@ -281,7 +281,7 @@ export function renderPlaygroundChart({
             {grid}
             {horizontalXAxis}
             {horizontalYAxis}
-            <ChartTooltip content={<ChartTooltipContent />} />
+            <Tooltip />
             {thresholdLine}
             {visibleSeriesIds.has(valueMode) ? (
               <Line
@@ -341,7 +341,7 @@ export function renderPlaygroundChart({
           {grid}
           {verticalXAxis}
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
             <Bar
@@ -363,7 +363,7 @@ export function renderPlaygroundChart({
           {grid}
           {verticalXAxis}
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
             <Area
@@ -400,7 +400,7 @@ export function renderPlaygroundChart({
           {grid}
           <XAxis dataKey="label" tickLine={false} axisLine={false} minTickGap={18} />
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {visibleSeriesIds.has("count") ? (
             <Bar
               dataKey="count"
@@ -418,7 +418,7 @@ export function renderPlaygroundChart({
           {grid}
           {verticalXAxis}
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
             <Line
@@ -455,7 +455,7 @@ export function renderPlaygroundChart({
           {grid}
           {verticalXAxis}
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {grouped.groups.map((group, index) =>
             visibleSeriesIds.has(group.key) ? (
               <Bar
@@ -480,7 +480,7 @@ export function renderPlaygroundChart({
           {grid}
           {verticalXAxis}
           {verticalYAxis}
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           {thresholdLine}
           {visibleSeriesIds.has(valueMode) ? (
             <Area

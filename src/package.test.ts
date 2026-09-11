@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 
 type PackageJson = {
+  dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  exports?: Record<string, unknown>;
   license?: string;
   peerDependencies?: Record<string, string>;
   scripts?: Record<string, string>;
@@ -49,6 +51,15 @@ describe("package metadata", () => {
     expect(packageJson.peerDependencies?.["react-dom"]).toBe("^19.0.0");
     expect(packageJson.peerDependencies?.recharts).toBe("^3.0.0");
     expect(readme).toContain("bun add @moritzbrantner/charts react react-dom recharts");
+  });
+
+  test("keeps UI tooling out of the published runtime contract", () => {
+    const packageJson = readJson<PackageJson>("package.json");
+
+    expect(packageJson.dependencies?.["@moritzbrantner/ui"]).toBeUndefined();
+    expect(packageJson.peerDependencies?.["@moritzbrantner/ui"]).toBeUndefined();
+    expect(packageJson.devDependencies?.["@moritzbrantner/ui"]).toBeTruthy();
+    expect(packageJson.exports?.["./styles.css"]).toBe("./dist/styles.css");
   });
 });
 

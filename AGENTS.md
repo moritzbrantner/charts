@@ -23,4 +23,4 @@ Apply, in order of specificity:
 - Colocate focused tests with the smallest production scope they cover when touching existing broad tests.
 - Add executable evidence for behavior changes.
 - Keep durable view state controlled/serializable; routing and URL ownership stay in consuming applications.
-- Reuse `@moritzbrantner/ui` primitives for application chrome rather than introducing generic local UI primitives.
+- Production chart chrome and primitives are repository-owned and must not import `@moritzbrantner/ui`; examples and Storybook may use it only as a development dependency until their separate decoupling slice.

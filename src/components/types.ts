@@ -1,4 +1,4 @@
-import { type ChartContainer, type ChartConfig } from "@moritzbrantner/ui";
+import { type ChartContainer, type ChartConfig } from "../internal/ui-primitives";
 
 import type { ChartAnomalyAnnotation, ChartThresholdAnnotation } from "../analytics";
 import type {

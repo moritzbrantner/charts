@@ -1,0 +1,69 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+@source "./components/**/*.{ts,tsx}";
+@source "./internal/**/*.{ts,tsx}";
+
+:root {
+  --charts-background: oklch(1 0 0);
+  --charts-foreground: oklch(0.21 0.034 264.665);
+  --charts-card: oklch(1 0 0);
+  --charts-card-foreground: oklch(0.21 0.034 264.665);
+  --charts-primary: oklch(0.278 0.033 256.848);
+  --charts-primary-foreground: oklch(0.985 0.002 247.839);
+  --charts-secondary: oklch(0.967 0.003 264.542);
+  --charts-secondary-foreground: oklch(0.278 0.033 256.848);
+  --charts-muted: oklch(0.967 0.003 264.542);
+  --charts-muted-foreground: oklch(0.551 0.027 264.364);
+  --charts-accent: oklch(0.967 0.003 264.542);
+  --charts-accent-foreground: oklch(0.278 0.033 256.848);
+  --charts-destructive: oklch(0.577 0.245 27.325);
+  --charts-border: oklch(0.928 0.006 264.531);
+  --charts-input: oklch(0.928 0.006 264.531);
+  --charts-ring: oklch(0.707 0.022 261.325);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --charts-background: oklch(0.145 0.02 264.695);
+    --charts-foreground: oklch(0.985 0.002 247.839);
+    --charts-card: oklch(0.205 0.025 263.442);
+    --charts-card-foreground: oklch(0.985 0.002 247.839);
+    --charts-primary: oklch(0.922 0.006 264.531);
+    --charts-primary-foreground: oklch(0.205 0.025 263.442);
+    --charts-secondary: oklch(0.269 0.018 264.442);
+    --charts-secondary-foreground: oklch(0.985 0.002 247.839);
+    --charts-muted: oklch(0.269 0.018 264.442);
+    --charts-muted-foreground: oklch(0.707 0.022 261.325);
+    --charts-accent: oklch(0.269 0.018 264.442);
+    --charts-accent-foreground: oklch(0.985 0.002 247.839);
+    --charts-destructive: oklch(0.704 0.191 22.216);
+    --charts-border: oklch(1 0 0 / 10%);
+    --charts-input: oklch(1 0 0 / 15%);
+    --charts-ring: oklch(0.551 0.027 264.364);
+  }
+}
+
+@theme inline {
+  --color-background: var(--charts-background);
+  --color-foreground: var(--charts-foreground);
+  --color-card: var(--charts-card);
+  --color-card-foreground: var(--charts-card-foreground);
+  --color-primary: var(--charts-primary);
+  --color-primary-foreground: var(--charts-primary-foreground);
+  --color-secondary: var(--charts-secondary);
+  --color-secondary-foreground: var(--charts-secondary-foreground);
+  --color-muted: var(--charts-muted);
+  --color-muted-foreground: var(--charts-muted-foreground);
+  --color-accent: var(--charts-accent);
+  --color-accent-foreground: var(--charts-accent-foreground);
+  --color-destructive: var(--charts-destructive);
+  --color-border: var(--charts-border);
+  --color-input: var(--charts-input);
+  --color-ring: var(--charts-ring);
+}
+
+.charts-container {
+  color: var(--charts-foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

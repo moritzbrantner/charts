@@ -6,11 +6,15 @@ export type BrowserErrors = {
   pageErrors: string[];
 };
 
+const browserErrorsByPage = new WeakMap<Page, BrowserErrors>();
+
 export function collectBrowserErrors(page: Page): BrowserErrors {
   const errors: BrowserErrors = {
     consoleErrors: [],
     pageErrors: [],
   };
+
+  browserErrorsByPage.set(page, errors);
 
   page.on("console", (message) => {
     if (message.type() === "error") {
@@ -44,7 +48,46 @@ async function waitForAxeIdle(page: Page) {
   );
 }
 
+async function getA11yDocumentState(page: Page) {
+  return page.evaluate(() => {
+    const main = document.querySelector<HTMLElement>("main");
+    const heading = document.querySelector<HTMLElement>("h1");
+    const root = document.getElementById("root");
+    const summarize = (element: HTMLElement | null) => {
+      if (!element) {
+        return null;
+      }
+
+      const style = window.getComputedStyle(element);
+
+      return {
+        ariaHidden: element.getAttribute("aria-hidden"),
+        display: style.display,
+        hidden: element.hidden,
+        inert: element.inert,
+        visibility: style.visibility,
+      };
+    };
+
+    return {
+      bodyChildCount: document.body.children.length,
+      bodyText: (document.body.innerText ?? "").slice(0, 240),
+      heading: summarize(heading),
+      location: window.location.href,
+      main: summarize(main),
+      rootChildCount: root?.children.length ?? null,
+      rootText: (root?.innerText ?? "").slice(0, 240),
+    };
+  });
+}
+
 export async function expectA11yClean(page: Page) {
+  const browserErrors = browserErrorsByPage.get(page);
+
+  if (browserErrors) {
+    expectNoBrowserErrors(browserErrors);
+  }
+
   let lastError: unknown;
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -52,8 +95,12 @@ export async function expectA11yClean(page: Page) {
 
     try {
       const results = await new AxeBuilder({ page }).analyze();
+      const documentState = results.violations.length > 0 ? await getA11yDocumentState(page) : null;
 
-      expect(results.violations).toEqual([]);
+      expect(
+        results.violations,
+        documentState ? `Document state: ${JSON.stringify(documentState)}` : undefined,
+      ).toEqual([]);
       return;
     } catch (error) {
       if (!isAxeAlreadyRunningError(error)) {
