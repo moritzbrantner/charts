@@ -369,7 +369,9 @@ export function ChartContainer({
       {...props}
     >
       <ChartStyle config={config} id={chartId} />
-      <ResponsiveContainer initialDimension={INITIAL_CHART_DIMENSION}>{children}</ResponsiveContainer>
+      <ResponsiveContainer initialDimension={INITIAL_CHART_DIMENSION}>
+        {children}
+      </ResponsiveContainer>
     </div>
   );
 }
