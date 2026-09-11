@@ -61,6 +61,25 @@ describe("chart transforms", () => {
     expect(transformed.bins.every((bin) => bin.x0 === 2 && bin.x1 === 2)).toBe(true);
   });
 
+  test("bins the full finite numeric range without overflowing geometry", () => {
+    const transformed = createChartBinTransform(
+      [-Number.MAX_VALUE, 0, Number.MAX_VALUE],
+      {
+        binCount: 2,
+        domain: [-Number.MAX_VALUE, Number.MAX_VALUE],
+        value: (value) => value,
+      },
+    );
+
+    expect(transformed.summary.binnedItemCount).toBe(3);
+    expect(transformed.bins.map((bin) => bin.count)).toEqual([1, 2]);
+    expect(transformed.bins.map((bin) => [bin.x0, bin.x1])).toEqual([
+      [-Number.MAX_VALUE, 0],
+      [0, Number.MAX_VALUE],
+    ]);
+    expect(transformed.bins.every((bin) => Number.isFinite(bin.x))).toBe(true);
+  });
+
   test("extracts and stitches a contour across adjacent cells", () => {
     const [contour] = createChartContours(
       {
@@ -130,6 +149,60 @@ describe("chart transforms", () => {
       1e15 + 1,
     ]);
     expect(line.points.every((point) => point.y === 0.5)).toBe(true);
+  });
+
+  test("maps the full finite contour domain without overflowing coordinates", () => {
+    const [contour] = createChartContours(
+      {
+        values: [0, 0, 1, 1],
+        xCount: 2,
+        xDomain: [-Number.MAX_VALUE, Number.MAX_VALUE],
+        yCount: 2,
+      },
+      { thresholds: [0.5] },
+    );
+
+    expect(contour!.lines).toHaveLength(1);
+    const line = contour!.lines[0]!;
+    expect(line.points.map((point) => point.x).sort((left, right) => left - right)).toEqual([
+      -Number.MAX_VALUE,
+      Number.MAX_VALUE,
+    ]);
+    expect(line.points.every((point) => Number.isFinite(point.x) && point.y === 0.5)).toBe(true);
+  });
+
+  test("interpolates contours across the full finite scalar range", () => {
+    const [contour] = createChartContours(
+      {
+        values: [-Number.MAX_VALUE, -Number.MAX_VALUE, Number.MAX_VALUE, Number.MAX_VALUE],
+        xCount: 2,
+        yCount: 2,
+      },
+      { thresholds: [0] },
+    );
+
+    expect(contour!.lines).toHaveLength(1);
+    expect(contour!.lines[0]!.points).toEqual([
+      { x: 0, y: 0.5 },
+      { x: 1, y: 0.5 },
+    ]);
+  });
+
+  test("filters zero-length segments at exact-threshold vertices", () => {
+    const [contour] = createChartContours(
+      {
+        values: [-2, -1, 0, -1, 0, 1, 0, 1, 2],
+        xCount: 3,
+        yCount: 3,
+      },
+      { thresholds: [0] },
+    );
+
+    expect(contour!.lines).toHaveLength(1);
+    const points = contour!.lines[0]!.points;
+    expect(points).toHaveLength(3);
+    expect(new Set(points.map((point) => `${point.x},${point.y}`)).size).toBe(3);
+    expect(points).toContainEqual({ x: 1, y: 1 });
   });
 
   test("uses the cell center to resolve ambiguous marching-squares cells", () => {
