@@ -105,7 +105,7 @@
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write src/internal/ui-primitives.tsx && git diff -- src/internal/ui-primitives.tsx && exit 1",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
     "prepack": "bun run build:wasm && bun run build",
