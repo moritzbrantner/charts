@@ -66,7 +66,7 @@ function getFiniteValueDomain<TDatum>(valuedData: readonly ValuedDatum<TDatum>[]
     return [0, 0] as [number, number];
   }
 
-  let min = valuedData[0]!.value;
+  let min = valuedData[0].value;
   let max = min;
 
   for (const item of valuedData.slice(1)) {
@@ -265,7 +265,7 @@ function createCellSegments(
   ].filter((point): point is ChartContourPoint => Boolean(point));
 
   if (entries.length === 2) {
-    return [[entries[0]!, entries[1]!]];
+    return [[entries[0], entries[1]]];
   }
 
   if (entries.length !== 4) {
@@ -311,7 +311,7 @@ function stitchContourSegments(segments: readonly ChartContourSegment[]): ChartC
       continue;
     }
 
-    const seed = segments[seedIndex]!;
+    const seed = segments[seedIndex];
     const firstDegree = adjacency.get(getContourPointKey(seed[0]))?.length ?? 0;
     const secondDegree = adjacency.get(getContourPointKey(seed[1]))?.length ?? 0;
     const seedStartEndpoint: 0 | 1 = firstDegree === 1 || secondDegree !== 1 ? 0 : 1;
@@ -324,7 +324,7 @@ function stitchContourSegments(segments: readonly ChartContourSegment[]): ChartC
 
     while (!used.has(segmentIndex)) {
       used.add(segmentIndex);
-      const segment = segments[segmentIndex]!;
+      const segment = segments[segmentIndex];
       const exitEndpoint = entryEndpoint === 0 ? 1 : 0;
       const exitPoint = segment[exitEndpoint];
       const exitKey = getContourPointKey(exitPoint);
@@ -371,10 +371,10 @@ function createContourSegmentsForThreshold(
     for (let xIndex = 0; xIndex < xCount - 1; xIndex += 1) {
       const x0 = mapGridCoordinate(xIndex, xCount, xDomain);
       const x1 = mapGridCoordinate(xIndex + 1, xCount, xDomain);
-      const topLeftValue = grid.values[yIndex * xCount + xIndex]!;
-      const topRightValue = grid.values[yIndex * xCount + xIndex + 1]!;
-      const bottomLeftValue = grid.values[(yIndex + 1) * xCount + xIndex]!;
-      const bottomRightValue = grid.values[(yIndex + 1) * xCount + xIndex + 1]!;
+      const topLeftValue = grid.values[yIndex * xCount + xIndex];
+      const topRightValue = grid.values[yIndex * xCount + xIndex + 1];
+      const bottomLeftValue = grid.values[(yIndex + 1) * xCount + xIndex];
+      const bottomRightValue = grid.values[(yIndex + 1) * xCount + xIndex + 1];
 
       segments.push(
         ...createCellSegments(
