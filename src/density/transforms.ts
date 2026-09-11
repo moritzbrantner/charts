@@ -77,6 +77,45 @@ function getFiniteValueDomain<TDatum>(valuedData: readonly ValuedDatum<TDatum>[]
   return [min, max] as [number, number];
 }
 
+function interpolateFinite(start: number, end: number, position: number) {
+  if (position <= 0) {
+    return start;
+  }
+
+  if (position >= 1) {
+    return end;
+  }
+
+  return start * (1 - position) + end * position;
+}
+
+function getFiniteInterpolationPosition(value: number, start: number, end: number) {
+  if (value === start) {
+    return 0;
+  }
+
+  if (value === end) {
+    return 1;
+  }
+
+  const span = end - start;
+
+  if (Number.isFinite(span)) {
+    return (value - start) / span;
+  }
+
+  const scale = Math.max(Math.abs(start), Math.abs(end), Math.abs(value));
+
+  if (scale === 0) {
+    return 0;
+  }
+
+  const scaledStart = start / scale;
+  const scaledEnd = end / scale;
+  const scaledValue = value / scale;
+  return (scaledValue - scaledStart) / (scaledEnd - scaledStart);
+}
+
 function getBinIndex(value: number, domain: [number, number], binCount: number) {
   const [min, max] = domain;
 
@@ -84,7 +123,7 @@ function getBinIndex(value: number, domain: [number, number], binCount: number) 
     return 0;
   }
 
-  const position = (value - min) / (max - min);
+  const position = getFiniteInterpolationPosition(value, min, max);
   return Math.min(binCount - 1, Math.max(0, Math.floor(position * binCount)));
 }
 
@@ -98,18 +137,17 @@ export function createChartBinTransform<TDatum>(
     .filter((item): item is ValuedDatum<TDatum> => isFiniteNumber(item.value));
   const valueDomain = normalizeChartDomain(options.domain ?? getFiniteValueDomain(valuedData));
   const [min, max] = valueDomain;
-  const binWidth = requestedBinCount > 0 ? (max - min) / requestedBinCount : 0;
   const bins = Array.from(
     { length: requestedBinCount },
     (_, index): ChartBinTransformBin<TDatum> => {
-      const x0 = min + binWidth * index;
-      const x1 = index === requestedBinCount - 1 ? max : min + binWidth * (index + 1);
+      const x0 = interpolateFinite(min, max, index / requestedBinCount);
+      const x1 = interpolateFinite(min, max, (index + 1) / requestedBinCount);
 
       return {
         count: 0,
         index,
         items: [],
-        x: x0 + (x1 - x0) / 2,
+        x: interpolateFinite(x0, x1, 0.5),
         x0,
         x1,
       };
@@ -164,11 +202,15 @@ function normalizeContourThresholds(thresholds: readonly number[]) {
 }
 
 function mapGridCoordinate(index: number, count: number, domain: [number, number]) {
-  if (count <= 1) {
+  if (index <= 0) {
     return domain[0];
   }
 
-  return domain[0] + (index / (count - 1)) * (domain[1] - domain[0]);
+  if (index >= count - 1) {
+    return domain[1];
+  }
+
+  return interpolateFinite(domain[0], domain[1], index / (count - 1));
 }
 
 function interpolateContourPoint(
@@ -178,13 +220,12 @@ function interpolateContourPoint(
   start: ChartContourPoint,
   end: ChartContourPoint,
 ): ChartContourPoint {
-  const denominator = endValue - startValue;
-  const position = denominator === 0 ? 0.5 : (threshold - startValue) / denominator;
+  const position = getFiniteInterpolationPosition(threshold, startValue, endValue);
   const t = Math.min(1, Math.max(0, position));
 
   return {
-    x: start.x + (end.x - start.x) * t,
-    y: start.y + (end.y - start.y) * t,
+    x: interpolateFinite(start.x, end.x, t),
+    y: interpolateFinite(start.y, end.y, t),
   };
 }
 
@@ -269,7 +310,9 @@ function createCellSegments(
   ].filter((point): point is ChartContourPoint => Boolean(point));
 
   if (entries.length === 2) {
-    return [[entries[0], entries[1]]];
+    const segments: ChartContourSegment[] = [];
+    addContourSegment(segments, entries[0], entries[1]);
+    return segments;
   }
 
   if (entries.length !== 4) {
@@ -280,8 +323,9 @@ function createCellSegments(
   const right = intersections.right!;
   const bottom = intersections.bottom!;
   const left = intersections.left!;
-  const centerHigh =
-    (topLeftValue + topRightValue + bottomRightValue + bottomLeftValue) / 4 >= threshold;
+  const centerValue =
+    topLeftValue * 0.25 + topRightValue * 0.25 + bottomRightValue * 0.25 + bottomLeftValue * 0.25;
+  const centerHigh = centerValue >= threshold;
   const segments: ChartContourSegment[] = [];
 
   if (centerHigh === topLeftHigh) {
