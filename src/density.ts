@@ -1,4 +1,5 @@
 export type * from "./density/types";
+export type * from "./density/transforms";
 export {
   CHART_VALUE_MODE_DEFINITIONS,
   getChartValueModeDefinition,
@@ -34,3 +35,4 @@ export {
   createChartTreeLayout,
   createChartTreemapLayout,
 } from "./density/layouts";
+export { createChartBinTransform, createChartContours } from "./density/transforms";
