@@ -105,7 +105,7 @@
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
-    "format:check": "prettier --write src/density/transforms.ts && git diff -- src/density/transforms.ts && exit 1",
+    "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
     "prepack": "bun run build:wasm && bun run build",
