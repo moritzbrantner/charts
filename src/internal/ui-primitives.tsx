@@ -220,9 +220,7 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
 }
 
 function hasPaddingOverride(className: string | undefined): boolean {
-  return Boolean(
-    className?.split(/\s+/).some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)),
-  );
+  return Boolean(className?.split(/\s+/).some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)));
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
