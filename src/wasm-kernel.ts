@@ -68,9 +68,14 @@ export async function loadChartWasmKernel(): Promise<ChartWasmKernel> {
 }
 
 async function loadGeneratedModule(): Promise<GeneratedChartsWasmModule> {
-  // Keep the generated wasm-pack module out of the ordinary TypeScript dependency graph.
-  // Release/browser builds copy it to dist/wasm. Development can remain JS-only.
-  const moduleUrl = new URL("./wasm/charts_density_wasm.js", import.meta.url).href;
+  // Vite executes this source module directly after build:wasm, while published bundles copy the
+  // same wasm-pack output next to dist/*.js. Keep both layouts explicit so source execution does
+  // not probe a known-missing production path and emit a browser 404 before falling back to JS.
+  const currentModuleUrl = new URL(import.meta.url);
+  const generatedModulePath = currentModuleUrl.pathname.endsWith(".ts")
+    ? "./wasm/generated/charts_density_wasm.js"
+    : "./wasm/charts_density_wasm.js";
+  const moduleUrl = new URL(generatedModulePath, currentModuleUrl).href;
   const module = (await import(/* @vite-ignore */ moduleUrl)) as GeneratedChartsWasmModule;
   await module.default?.();
   return module;
