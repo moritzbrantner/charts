@@ -88,6 +88,52 @@ describe("chart transforms", () => {
     });
   });
 
+  test("stitches an open contour from a component endpoint", () => {
+    const values = Array.from({ length: 25 }, (_, index) => {
+      const x = index % 5;
+      const y = Math.floor(index / 5);
+      return (x - 2) ** 2 + (y - 4) ** 2;
+    });
+    const [contour] = createChartContours(
+      {
+        values,
+        xCount: 5,
+        yCount: 5,
+      },
+      { thresholds: [2.25] },
+    );
+
+    expect(contour!.lines).toHaveLength(1);
+    const line = contour!.lines[0]!;
+    expect(line.closed).toBe(false);
+    expect([line.points[0]!.x, line.points.at(-1)!.x].sort((left, right) => left - right)).toEqual([
+      0.5, 3.5,
+    ]);
+    expect(line.points[0]!.y).toBe(4);
+    expect(line.points.at(-1)!.y).toBe(4);
+  });
+
+  test("preserves distinct contour endpoints at large coordinate offsets", () => {
+    const [contour] = createChartContours(
+      {
+        values: [0, 0, 1, 1],
+        xCount: 2,
+        xDomain: [1e15, 1e15 + 1],
+        yCount: 2,
+      },
+      { thresholds: [0.5] },
+    );
+
+    expect(contour!.lines).toHaveLength(1);
+    const line = contour!.lines[0]!;
+    expect(line.closed).toBe(false);
+    expect(line.points.map((point) => point.x).sort((left, right) => left - right)).toEqual([
+      1e15,
+      1e15 + 1,
+    ]);
+    expect(line.points.every((point) => point.y === 0.5)).toBe(true);
+  });
+
   test("uses the cell center to resolve ambiguous marching-squares cells", () => {
     const [contour] = createChartContours(
       {
