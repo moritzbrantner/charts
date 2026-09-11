@@ -3,6 +3,10 @@ import { resolve } from "node:path";
 
 import { describe, expect, test } from "vitest";
 
+import { createChartDensityIndex } from "./core";
+import * as compatibilityApi from "./index";
+import { ChartSeriesLegend } from "./react";
+
 type PackageJson = {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
@@ -21,6 +25,11 @@ describe("package entrypoint boundaries", () => {
       import: "./dist/react.js",
       types: "./dist/react.d.ts",
     });
+  });
+
+  test("keeps source entrypoints aligned with the compatibility surface", () => {
+    expect(compatibilityApi.createChartDensityIndex).toBe(createChartDensityIndex);
+    expect(compatibilityApi.ChartSeriesLegend).toBe(ChartSeriesLegend);
   });
 
   test("keeps the core source free of React and Recharts", () => {
