@@ -1,3 +1,4 @@
+# One-shot helper; the job removes this file after formatting the test.
 name: Format Transform Tests Once
 
 on:
