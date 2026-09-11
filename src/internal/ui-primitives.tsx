@@ -1,9 +1,8 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useId } from "react";
 import { ResponsiveContainer } from "recharts";
 
 import type {
   ButtonHTMLAttributes,
-  CSSProperties,
   HTMLAttributes,
   InputHTMLAttributes,
   OptionHTMLAttributes,
@@ -307,44 +306,74 @@ export function ItemDescription({ className, ...props }: HTMLAttributes<HTMLDivE
   return <div className={cn("text-sm text-muted-foreground", className)} {...props} />;
 }
 
+const CHART_THEMES = { light: "", dark: ".dark" } as const;
+const INITIAL_CHART_DIMENSION = { width: 320, height: 200 } as const;
+
 export type ChartConfig = Record<
   string,
   {
     color?: string;
     label?: ReactNode;
-    theme?: Record<string, string>;
+    theme?: Partial<Record<keyof typeof CHART_THEMES, string>>;
   }
 >;
 
 export type ChartContainerProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: ReactElement;
   config: ChartConfig;
+  initialDimension?: {
+    height: number;
+    width: number;
+  };
 };
+
+function ChartStyle({ config, id }: { config: ChartConfig; id: string }) {
+  const colorConfig = Object.entries(config).filter(([, entry]) => entry.theme ?? entry.color);
+
+  if (colorConfig.length === 0) {
+    return null;
+  }
+
+  const css = Object.entries(CHART_THEMES)
+    .map(([theme, prefix]) => {
+      const variables = colorConfig
+        .map(([key, entry]) => {
+          const color = entry.theme?.[theme as keyof typeof CHART_THEMES] ?? entry.color;
+          return color ? `  --color-${key}: ${color};` : null;
+        })
+        .filter(Boolean)
+        .join("\n");
+
+      return `${prefix} [data-chart=${id}] {\n${variables}\n}`;
+    })
+    .join("\n");
+
+  return <style dangerouslySetInnerHTML={{ __html: css }} />;
+}
 
 export function ChartContainer({
   children,
   className,
   config,
-  style,
+  id,
+  initialDimension = INITIAL_CHART_DIMENSION,
   ...props
 }: ChartContainerProps) {
-  const chartVariables: Record<string, string> = {};
-
-  for (const [key, entry] of Object.entries(config)) {
-    if (entry.color) {
-      chartVariables[`--color-${key}`] = entry.color;
-    }
-  }
+  const uniqueId = useId();
+  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
 
   return (
     <div
-      className={cn("charts-container min-h-32 w-full text-xs", className)}
-      style={{ ...(chartVariables as CSSProperties), ...style }}
+      className={cn(
+        "charts-container flex aspect-video justify-center text-xs [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground [&_.recharts-cartesian-grid_line[stroke='#ccc']]:stroke-border/50 [&_.recharts-curve.recharts-tooltip-cursor]:stroke-border [&_.recharts-dot[stroke='#fff']]:stroke-transparent [&_.recharts-layer]:outline-hidden [&_.recharts-polar-grid_[stroke='#ccc']]:stroke-border [&_.recharts-radial-bar-background-sector]:fill-muted [&_.recharts-rectangle.recharts-tooltip-cursor]:fill-muted [&_.recharts-reference-line_[stroke='#ccc']]:stroke-border [&_.recharts-sector]:outline-hidden [&_.recharts-sector[stroke='#fff']]:stroke-transparent [&_.recharts-surface]:outline-hidden",
+        className,
+      )}
+      data-chart={chartId}
+      data-slot="chart"
       {...props}
     >
-      <ResponsiveContainer height="100%" width="100%">
-        {children}
-      </ResponsiveContainer>
+      <ChartStyle config={config} id={chartId} />
+      <ResponsiveContainer initialDimension={initialDimension}>{children}</ResponsiveContainer>
     </div>
   );
 }
