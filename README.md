@@ -228,13 +228,13 @@ export function TrendWithLegend({ rows }) {
 ## Responsive Recharts chart
 
 ```tsx
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, Tooltip, XAxis } from "recharts";
 import {
+  ChartContainer,
   createChartDensityIndex,
   createChartRenderData,
   useChartBinCount,
 } from "@moritzbrantner/charts";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@moritzbrantner/ui";
 
 const index = createChartDensityIndex(points);
 
@@ -260,7 +260,7 @@ export function DenseAreaChart() {
         <AreaChart data={chartData}>
           <CartesianGrid vertical={false} />
           <XAxis dataKey="label" tickLine={false} axisLine={false} />
-          <ChartTooltip content={<ChartTooltipContent />} />
+          <Tooltip />
           <Area
             dataKey="average"
             fill="var(--color-average)"
@@ -604,20 +604,18 @@ a `wasm-index` in an idle slot, then uses method-level routing for later queries
 Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force the wrapper
 construction policy.
 
-The `wasm-index` backend is provided by `@moritzbrantner/viz-engine`. It owns
-compact numeric arrays for sorted x/y values and metric columns, and currently
-accelerates binning, percentiles, and histograms. Heatmap queries currently route
-to the hybrid point-store implementation because public WASM heatmap result
-mapping is slower in the large-data benchmark. Grouped series, render-row
-shaping, gap annotations, React controls, label layout, and derived analytics
-stay in TypeScript so the public API remains renderer-agnostic and easy to
-compose.
+The `wasm-index` backend is provided by this package's own Rust/WASM density
+kernel. It accelerates binned-series construction and percentiles. Heatmap,
+histogram, grouped-series, point, and scatter queries currently route to the
+hybrid point-store implementation. Render-row shaping, gap annotations, React
+controls, label layout, and derived analytics stay in TypeScript so the public
+API remains renderer-agnostic and easy to compose.
 
 Use `hybrid-js` when you need the smallest runtime surface or are running in an
 environment that does not allow WebAssembly. Use `wasm-index` when you want the
 native kernel immediately and can pay construction cost up front. Use
 `progressive` for interactive screens: the first render uses JavaScript, then
-chart-series queries can use WASM after warmup while heatmap and unsupported
+supported chart-series queries can use WASM after warmup while unsupported
 operations continue through the hybrid fallback.
 
 For large browser datasets where construction cost is visible, opt into worker
@@ -642,11 +640,11 @@ object API. Function-based `filterPoint` options and function-based
 `valueAccessor` queries stay on the main-thread index; pass serializable data
 and object accessors such as `{ metric: "revenue" }` to the worker path.
 
-The WASM binary is embedded by `@moritzbrantner/viz-engine`, so consumers do not
+The WASM binary is packaged with `@moritzbrantner/charts`, so consumers do not
 need a special `.wasm` asset loader for the package import.
 Benchmarks generally show random or high-cardinality large-domain chart queries
-and histograms as the primary WASM win cases. Sorted public-wrapper chart queries
-can be faster in `hybrid-js` because they avoid WASM result mapping overhead.
+as the primary WASM win cases. Sorted public-wrapper chart queries can be faster
+in `hybrid-js` because they avoid WASM result mapping overhead.
 
 Each index may expose `getBackendCapabilities()` for runtime inspection:
 
@@ -731,9 +729,8 @@ Large-data benchmarks are intentionally diagnostic, not a promise that one
 backend is always faster. `hybrid-js` is often faster for sorted public-wrapper
 chart queries because it avoids mapping WASM results back into public objects.
 `wasm-index` is expected to win on random or high-cardinality large-domain chart
-queries, percentile-heavy chart work, and competitive histogram cases. Heatmap
-currently routes through the hybrid point store because the mapped public WASM
-heatmap result is slower.
+queries and percentile-heavy chart work. Heatmap and histogram queries currently
+route through the hybrid point store.
 
 Useful commands:
 
@@ -741,6 +738,7 @@ Useful commands:
 bun run bench:large-data
 CHARTS_BENCH_FULL=1 bun run bench:large-data
 CHARTS_BENCH_JSON=test-results/bench-large-data.json bun run bench:large-data
+CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json bun run bench:large-data
 CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json bun run bench:large-data
 bun run bench:large-data:json
 bun run bench:large-data:full-json
