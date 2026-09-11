@@ -15,6 +15,14 @@ export function cn(...values: Array<false | null | string | undefined>): string 
   return values.filter(Boolean).join(" ");
 }
 
+function hasHeightOverride(className: string | undefined): boolean {
+  return Boolean(className?.split(/\s+/).some((token) => /^(?:h|size)-/.test(token)));
+}
+
+function hasPaddingOverride(className: string | undefined): boolean {
+  return Boolean(className?.split(/\s+/).some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)));
+}
+
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   size?: "default" | "icon" | "icon-sm" | "lg" | "sm";
   variant?: "default" | "destructive" | "ghost" | "link" | "outline" | "secondary";
@@ -27,6 +35,9 @@ export function Button({
   variant = "default",
   ...props
 }: ButtonProps) {
+  const heightOverridden = hasHeightOverride(className);
+  const paddingOverridden = hasPaddingOverride(className);
+
   return (
     <button
       className={cn(
@@ -38,9 +49,14 @@ export function Button({
         variant === "outline" &&
           "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
         variant === "secondary" && "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        size === "default" && "h-9 px-4 py-2",
-        size === "sm" && "h-8 rounded-md px-3 text-xs",
-        size === "lg" && "h-10 rounded-md px-6",
+        size === "default" && !heightOverridden && "h-9",
+        size === "default" && !paddingOverridden && "px-4 py-2",
+        size === "sm" && !heightOverridden && "h-8",
+        size === "sm" && !paddingOverridden && "px-3",
+        size === "sm" && "rounded-md text-xs",
+        size === "lg" && !heightOverridden && "h-10",
+        size === "lg" && !paddingOverridden && "px-6",
+        size === "lg" && "rounded-md",
         size === "icon" && "size-9",
         size === "icon-sm" && "size-8",
         className,
@@ -176,7 +192,7 @@ export function ToggleGroupItem({
     <button
       aria-checked={pressed}
       className={cn(
-        "group/toggle inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-md bg-transparent px-2.5 text-sm font-medium whitespace-nowrap transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-muted",
+        "group/toggle inline-flex h-8 min-w-8 shrink-0 items-center justify-center gap-1 rounded-none bg-transparent px-2 text-sm font-medium whitespace-nowrap transition-colors outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 data-[state=on]:bg-muted first:rounded-l-md last:rounded-r-md",
         className,
       )}
       data-slot="toggle-group-item"
@@ -217,10 +233,6 @@ export function Badge({ className, variant = "default", ...props }: BadgeProps) 
       {...props}
     />
   );
-}
-
-function hasPaddingOverride(className: string | undefined): boolean {
-  return Boolean(className?.split(/\s+/).some((token) => /^(?:p|px|py|pt|pr|pb|pl)-/.test(token)));
 }
 
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
