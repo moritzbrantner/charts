@@ -1,5 +1,14 @@
 export type * from "./density/types";
-export type * from "./density/transforms";
+export type {
+  ChartBinTransform,
+  ChartBinTransformBin,
+  ChartBinTransformOptions,
+  ChartContour,
+  ChartContourGrid,
+  ChartContourLine,
+  ChartContourOptions,
+  ChartContourPoint,
+} from "./density/transforms";
 export {
   CHART_VALUE_MODE_DEFINITIONS,
   getChartValueModeDefinition,
