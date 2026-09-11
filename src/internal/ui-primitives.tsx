@@ -314,17 +314,13 @@ export type ChartConfig = Record<
   {
     color?: string;
     label?: ReactNode;
-    theme?: Partial<Record<keyof typeof CHART_THEMES, string>>;
+    theme?: Record<string, string>;
   }
 >;
 
 export type ChartContainerProps = Omit<HTMLAttributes<HTMLDivElement>, "children"> & {
   children: ReactElement;
   config: ChartConfig;
-  initialDimension?: {
-    height: number;
-    width: number;
-  };
 };
 
 function ChartStyle({ config, id }: { config: ChartConfig; id: string }) {
@@ -338,7 +334,7 @@ function ChartStyle({ config, id }: { config: ChartConfig; id: string }) {
     .map(([theme, prefix]) => {
       const variables = colorConfig
         .map(([key, entry]) => {
-          const color = entry.theme?.[theme as keyof typeof CHART_THEMES] ?? entry.color;
+          const color = entry.theme?.[theme] ?? entry.color;
           return color ? `  --color-${key}: ${color};` : null;
         })
         .filter(Boolean)
@@ -355,12 +351,11 @@ export function ChartContainer({
   children,
   className,
   config,
-  id,
-  initialDimension = INITIAL_CHART_DIMENSION,
+  style,
   ...props
 }: ChartContainerProps) {
   const uniqueId = useId();
-  const chartId = `chart-${id ?? uniqueId.replace(/:/g, "")}`;
+  const chartId = `chart-${props.id ?? uniqueId.replace(/:/g, "")}`;
 
   return (
     <div
@@ -370,10 +365,11 @@ export function ChartContainer({
       )}
       data-chart={chartId}
       data-slot="chart"
+      style={style}
       {...props}
     >
       <ChartStyle config={config} id={chartId} />
-      <ResponsiveContainer initialDimension={initialDimension}>{children}</ResponsiveContainer>
+      <ResponsiveContainer initialDimension={INITIAL_CHART_DIMENSION}>{children}</ResponsiveContainer>
     </div>
   );
 }
