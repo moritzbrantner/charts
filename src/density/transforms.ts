@@ -189,7 +189,7 @@ function interpolateContourPoint(
 }
 
 function getContourPointKey(point: ChartContourPoint) {
-  return `${point.x.toPrecision(15)},${point.y.toPrecision(15)}`;
+  return `${point.x},${point.y}`;
 }
 
 function addContourSegment(
@@ -308,9 +308,19 @@ function stitchContourSegments(segments: readonly ChartContourSegment[]): ChartC
     });
   });
 
+  const openSeedIndices: number[] = [];
+  const remainingSeedIndices: number[] = [];
+
+  segments.forEach((segment, segmentIndex) => {
+    const hasOpenEndpoint = segment.some(
+      (point) => (adjacency.get(getContourPointKey(point))?.length ?? 0) === 1,
+    );
+    (hasOpenEndpoint ? openSeedIndices : remainingSeedIndices).push(segmentIndex);
+  });
+
   const lines: ChartContourLine[] = [];
 
-  for (let seedIndex = 0; seedIndex < segments.length; seedIndex += 1) {
+  for (const seedIndex of [...openSeedIndices, ...remainingSeedIndices]) {
     if (used.has(seedIndex)) {
       continue;
     }
@@ -318,7 +328,7 @@ function stitchContourSegments(segments: readonly ChartContourSegment[]): ChartC
     const seed = segments[seedIndex];
     const firstDegree = adjacency.get(getContourPointKey(seed[0]))?.length ?? 0;
     const secondDegree = adjacency.get(getContourPointKey(seed[1]))?.length ?? 0;
-    const seedStartEndpoint: 0 | 1 = firstDegree === 1 || secondDegree !== 1 ? 0 : 1;
+    const seedStartEndpoint: 0 | 1 = firstDegree === 1 ? 0 : secondDegree === 1 ? 1 : 0;
     const startPoint = seed[seedStartEndpoint];
     const startKey = getContourPointKey(startPoint);
     const points: ChartContourPoint[] = [startPoint];
