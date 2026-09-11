@@ -1,4 +1,3 @@
-# One-shot helper; the job removes this file after updating README.md.
 name: Refresh Contour Docs Once
 
 on:
@@ -17,70 +16,17 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Checkout
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8
         with:
           fetch-depth: 0
 
       - name: Update README
+        shell: bash
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          python -c 'from pathlib import Path; p=Path("README.md"); s=p.read_text(); a="- `createProgressiveChartDensityIndex(points, options)`\n"; assert a in s; s=s.replace(a,a+"- `createChartBinTransform(data, options)` / `createChartContours(grid, options)`\n",1); old="- future contour and bin transforms\n"; assert old in s; p.write_text(s.replace(old,"- contour and generic bin transforms\n",1))'
 
-          path = Path('README.md')
-          text = path.read_text()
-
-          api_anchor = '- `createProgressiveChartDensityIndex(points, options)`\n'
-          api_insert = api_anchor + '- `createChartBinTransform(data, options)` / `createChartContours(grid, options)`\n'
-          if api_anchor not in text:
-              raise SystemExit('API anchor missing')
-          text = text.replace(api_anchor, api_insert, 1)
-
-          section_anchor = '## Gap behavior\n'
-          section = '''## Generic bin and contour transforms
-
-Use `createChartBinTransform` when arbitrary finite values need deterministic,
-renderer-neutral bin geometry without constructing a density index. Domain
-endpoints are inclusive and the maximum value is assigned to the final bin.
-
-```ts
-const bins = createChartBinTransform(rows, {
-  binCount: 24,
-  value: (row) => row.duration,
-});
-```
-
-Use `createChartContours` to extract deterministic contour polylines from a
-regular scalar grid. The transform returns data-space points only; SVG, canvas,
-WebGL, or server-side renderers remain responsible for drawing or filling them.
-
-```ts
-const contours = createChartContours(
-  {
-    values,
-    xCount: 64,
-    yCount: 32,
-    xDomain: [0, 1_000],
-    yDomain: [0, 500],
-  },
-  { thresholds: [0.25, 0.5, 0.75] },
-);
-```
-
-'''
-          if section_anchor not in text:
-              raise SystemExit('section anchor missing')
-          text = text.replace(section_anchor, section + section_anchor, 1)
-
-          roadmap_old = '- future contour and bin transforms\n'
-          roadmap_new = '- contour and generic bin transforms\n'
-          if roadmap_old not in text:
-              raise SystemExit('roadmap anchor missing')
-          text = text.replace(roadmap_old, roadmap_new, 1)
-
-          path.write_text(text)
-          PY
-
-      - name: Commit docs and remove helper workflow
+      - name: Commit docs and remove helper
+        shell: bash
         run: |
           git rm .github/workflows/readme-contour-refresh.yml
           git add README.md
