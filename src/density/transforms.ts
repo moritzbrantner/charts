@@ -99,19 +99,22 @@ export function createChartBinTransform<TDatum>(
   const valueDomain = normalizeChartDomain(options.domain ?? getFiniteValueDomain(valuedData));
   const [min, max] = valueDomain;
   const binWidth = requestedBinCount > 0 ? (max - min) / requestedBinCount : 0;
-  const bins = Array.from({ length: requestedBinCount }, (_, index): ChartBinTransformBin<TDatum> => {
-    const x0 = min + binWidth * index;
-    const x1 = index === requestedBinCount - 1 ? max : min + binWidth * (index + 1);
+  const bins = Array.from(
+    { length: requestedBinCount },
+    (_, index): ChartBinTransformBin<TDatum> => {
+      const x0 = min + binWidth * index;
+      const x1 = index === requestedBinCount - 1 ? max : min + binWidth * (index + 1);
 
-    return {
-      count: 0,
-      index,
-      items: [],
-      x: x0 + (x1 - x0) / 2,
-      x0,
-      x1,
-    };
-  });
+      return {
+        count: 0,
+        index,
+        items: [],
+        x: x0 + (x1 - x0) / 2,
+        x0,
+        x1,
+      };
+    },
+  );
 
   let binnedItemCount = 0;
 
@@ -131,7 +134,8 @@ export function createChartBinTransform<TDatum>(
     binnedItemCount += 1;
   }
 
-  const visibleBins = options.includeEmptyBins === false ? bins.filter((bin) => bin.count > 0) : bins;
+  const visibleBins =
+    options.includeEmptyBins === false ? bins.filter((bin) => bin.count > 0) : bins;
 
   return {
     bins: visibleBins,
