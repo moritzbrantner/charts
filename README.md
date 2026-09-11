@@ -102,6 +102,7 @@ const rows = createChartRenderData(series.samples, {
 
 - `createChartDensityIndex(points, options)` / `createChartSeriesIndex(points, options)`
 - `createProgressiveChartDensityIndex(points, options)`
+- `createChartBinTransform(data, options)` / `createChartContours(grid, options)`
 - `createChartDensityWorkerIndex(points, options, workerOptions)`
 - `index.getChartSeries(query)` / `index.getBinnedSeries(query)`
 - `createChartDensitySample(bin, valueMode)` / `createChartDensityViewportSummary(series)`
@@ -667,7 +668,7 @@ data kernel, not a full visualization framework. Near-term kernel modules are:
 
 - density indexes and viewport summaries
 - percentile, histogram, and heatmap kernels
-- future contour and bin transforms
+- contour and generic bin transforms
 - future stack and layout kernels
 - worker-backed indexing for non-blocking construction
 
