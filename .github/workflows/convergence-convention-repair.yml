@@ -45,7 +45,7 @@ jobs:
       - name: Add exact convention executables
         run: bun add --dev --exact oxlint@1.80.0 oxfmt@0.65.0
 
-      - name: Wire convention checks without replacing existing checks
+      - name: Bind convention-specific capability entrypoints
         shell: bash
         run: |
           python3 - <<'PY'
@@ -55,18 +55,12 @@ jobs:
           package_path = Path('package.json')
           package = json.loads(package_path.read_text())
           scripts = package['scripts']
-          old_lint = scripts['lint']
-          old_format_check = scripts['format:check']
-          if old_lint != 'eslint . --max-warnings 0':
-              raise SystemExit(f'unexpected lint command: {old_lint}')
-          if old_format_check != 'prettier --check .':
-              raise SystemExit(f'unexpected format check: {old_format_check}')
-          scripts['lint:eslint'] = old_lint
+          if scripts['lint'] != 'eslint . --max-warnings 0':
+              raise SystemExit(f"unexpected lint command: {scripts['lint']}")
+          if scripts['format:check'] != 'prettier --check .':
+              raise SystemExit(f"unexpected format check: {scripts['format:check']}")
           scripts['lint:conventions'] = 'oxlint .'
-          scripts['lint'] = 'bun run lint:eslint && bun run lint:conventions'
-          scripts['format:prettier:check'] = old_format_check
           scripts['format:conventions:check'] = 'oxfmt --check .'
-          scripts['format:check'] = 'bun run format:prettier:check && bun run format:conventions:check'
           package_path.write_text(json.dumps(package, indent=2) + '\n')
 
           config_path = Path('.coding-tooling.json')
@@ -75,6 +69,39 @@ jobs:
           commands['lint'] = ['bun', 'run', 'lint:conventions']
           commands['format:check'] = ['bun', 'run', 'format:conventions:check']
           config_path.write_text(json.dumps(config, indent=2) + '\n')
+          PY
+
+      - name: Remove declaration-merging dependency from long-task instrumentation
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('examples/src/testing/playwright.ts')
+          source = path.read_text()
+          old = '''declare global {
+            interface Window {
+              __chartLongTasks?: Array<{
+                duration: number;
+                name: string;
+                startTime: number;
+              }>;
+            }
+          }
+          '''
+          new = '''declare global {
+            var __chartLongTasks:
+              | Array<{
+                  duration: number;
+                  name: string;
+                  startTime: number;
+                }>
+              | undefined;
+          }
+          '''
+          if old not in source:
+              raise SystemExit('expected Window declaration was not found')
+          path.write_text(source.replace(old, new))
           PY
 
       - name: Verify convention repair and isolate remaining foundation state
@@ -116,6 +143,6 @@ jobs:
           rm .github/workflows/convergence-convention-repair.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json bun.lock .coding-tooling.json .github/workflows/convergence-convention-repair.yml
+          git add package.json bun.lock .coding-tooling.json examples/src/testing/playwright.ts .github/workflows/convergence-convention-repair.yml
           git commit -m "chore: execute managed convention checks"
           git push origin HEAD:fix/execute-managed-conventions
