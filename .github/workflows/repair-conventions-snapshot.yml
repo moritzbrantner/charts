@@ -1,0 +1,56 @@
+name: Repair conventions snapshot
+
+on:
+  push:
+    branches:
+      - fix/complete-foundation-conventions
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    name: Generate canonical conventions snapshot
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Materialize conventions through canonical tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/moritzbrantner/coding-tooling.git /tmp/coding-tooling
+          git -C /tmp/coding-tooling checkout --quiet 3d97b1fce11fb80effe3d8003025a583f4aa8b41
+          git clone --quiet https://github.com/moritzbrantner/coding-agent-conventions.git /tmp/coding-agent-conventions
+          git -C /tmp/coding-agent-conventions checkout --quiet bb437f815a3f126f1f58a81e968f3f5891adcb4d
+          (cd /tmp/coding-tooling && bun install --frozen-lockfile)
+          bun /tmp/coding-tooling/src/cli.ts conventions update \
+            --root "$GITHUB_WORKSPACE" \
+            --conventions-root /tmp/coding-agent-conventions \
+            --json
+          bun /tmp/coding-tooling/src/cli.ts conventions check \
+            --root "$GITHUB_WORKSPACE" \
+            --json
+          git diff --check
+
+      - name: Commit only the canonical snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/repair-conventions-snapshot.yml
+          git add -A
+          git diff --cached --check
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -m "chore: complete conventions snapshot"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
