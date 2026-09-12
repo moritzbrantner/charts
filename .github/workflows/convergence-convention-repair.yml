@@ -1,0 +1,110 @@
+name: Convergence convention repair
+
+on:
+  push:
+    branches: [fix/execute-managed-conventions]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repair branch
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+        with:
+          ref: fix/execute-managed-conventions
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.3.14
+
+      - name: Install current dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Confirm corrected foundation finding
+        id: before
+        continue-on-error: true
+        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        with:
+          operation: foundation
+          bun-version: 1.3.14
+          install-mode: none
+          report-path: .artifacts/coding-tooling/foundation-before.json
+
+      - name: Require the proven adapter mismatch
+        shell: bash
+        run: |
+          test '${{ steps.before.outcome }}' = 'failure'
+          test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-adapter-unresolved")] | length' .artifacts/coding-tooling/foundation-before.json)" -eq 4
+          test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-tool-missing")] | length' .artifacts/coding-tooling/foundation-before.json)" -eq 0
+
+      - name: Add exact convention executables
+        run: bun add --dev --exact oxlint@1.80.0 oxfmt@0.65.0
+
+      - name: Wire convention checks without replacing existing checks
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          package_path = Path('package.json')
+          package = json.loads(package_path.read_text())
+          scripts = package['scripts']
+          old_lint = scripts['lint']
+          old_format_check = scripts['format:check']
+          if old_lint != 'eslint . --max-warnings 0':
+              raise SystemExit(f'unexpected lint command: {old_lint}')
+          if old_format_check != 'prettier --check .':
+              raise SystemExit(f'unexpected format check: {old_format_check}')
+          scripts['lint:eslint'] = old_lint
+          scripts['lint:conventions'] = 'oxlint .'
+          scripts['lint'] = 'bun run lint:eslint && bun run lint:conventions'
+          scripts['format:prettier:check'] = old_format_check
+          scripts['format:conventions:check'] = 'oxfmt --check .'
+          scripts['format:check'] = 'bun run format:prettier:check && bun run format:conventions:check'
+          package_path.write_text(json.dumps(package, indent=2) + '\n')
+
+          config_path = Path('.coding-tooling.json')
+          config = json.loads(config_path.read_text())
+          commands = config['capabilityCommands']['@moritzbrantner/charts']
+          commands['lint'] = ['bun', 'run', 'lint:conventions']
+          commands['format:check'] = ['bun', 'run', 'format:conventions:check']
+          config_path.write_text(json.dumps(config, indent=2) + '\n')
+          PY
+
+      - name: Verify repaired foundation
+        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        with:
+          operation: foundation
+          bun-version: 1.3.14
+          install-mode: none
+          report-path: .artifacts/coding-tooling/foundation-after.json
+
+      - name: Execute composed convention checks and fast validation
+        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        with:
+          operation: run
+          tier: fast
+          bun-version: 1.3.14
+          install-mode: auto
+          report-path: .artifacts/coding-tooling/fast-after.json
+
+      - name: Preserve canonical repository lint and formatting validation
+        run: |
+          bun run lint
+          bun run format:check
+
+      - name: Commit the repair and remove temporary convergence workflow
+        shell: bash
+        run: |
+          rm .github/workflows/convergence-convention-repair.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json bun.lock .coding-tooling.json .github/workflows/convergence-convention-repair.yml
+          git commit -m "chore: execute managed convention checks"
+          git push origin HEAD:fix/execute-managed-conventions
