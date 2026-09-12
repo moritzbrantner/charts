@@ -25,24 +25,25 @@ jobs:
       - name: Install current dependencies
         run: bun install --frozen-lockfile
 
-      - name: Confirm corrected foundation finding
+      - name: Confirm corrected foundation findings
         id: before
         continue-on-error: true
-        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        uses: moritzbrantner/coding-tooling@d3908c6c0be8dc43f67d0a4deab707023f976af1
         with:
           operation: foundation
           bun-version: 1.3.14
           install-mode: none
           report-path: .artifacts/coding-tooling/foundation-before.json
 
-      - name: Require the proven adapter mismatch
+      - name: Require the proven adapter and enforcement gaps
         shell: bash
         run: |
           test '${{ steps.before.outcome }}' = 'failure'
           test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-adapter-unresolved")] | length' .artifacts/coding-tooling/foundation-before.json)" -eq 4
-          test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-tool-missing")] | length' .artifacts/coding-tooling/foundation-before.json)" -eq 0
+          jq -e '[.data.components.conventions.executableTooling.requiredExecutables[] | select(.name == "oxlint" and .status == "missing")] | length == 1' .artifacts/coding-tooling/foundation-before.json
+          jq -e '[.data.components.conventions.executableTooling.requiredExecutables[] | select(.name == "oxlint-tsgolint" and .status == "missing")] | length == 1' .artifacts/coding-tooling/foundation-before.json
 
-      - name: Add exact convention executables
+      - name: Add adapter executables
         run: bun add --dev --exact oxlint@1.80.0 oxfmt@0.65.0
 
       - name: Bind convention-specific capability entrypoints
@@ -104,17 +105,40 @@ jobs:
           path.write_text(source.replace(old, new))
           PY
 
+      - name: Prove the enforcement-only executable gap
+        id: enforcement_gap
+        continue-on-error: true
+        uses: moritzbrantner/coding-tooling@d3908c6c0be8dc43f67d0a4deab707023f976af1
+        with:
+          operation: foundation
+          bun-version: 1.3.14
+          install-mode: none
+          report-path: .artifacts/coding-tooling/foundation-enforcement-gap.json
+
+      - name: Require only type-aware convention tooling to remain
+        shell: bash
+        run: |
+          test '${{ steps.enforcement_gap.outcome }}' = 'failure'
+          test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-adapter-unresolved")] | length' .artifacts/coding-tooling/foundation-enforcement-gap.json)" -eq 0
+          jq -e '[.data.components.conventions.executableTooling.requiredExecutables[] | select(.name == "oxlint" and .status == "adopted")] | length == 1' .artifacts/coding-tooling/foundation-enforcement-gap.json
+          jq -e '[.data.components.conventions.executableTooling.requiredExecutables[] | select(.name == "oxfmt" and .status == "adopted")] | length == 1' .artifacts/coding-tooling/foundation-enforcement-gap.json
+          jq -e '[.data.components.conventions.executableTooling.requiredExecutables[] | select(.name == "oxlint-tsgolint" and .status == "missing" and (.rules | index("TS-005") != null))] | length == 1' .artifacts/coding-tooling/foundation-enforcement-gap.json
+          test "$(jq '[.diagnostics[] | select(.code == "foundation-convention-tool-missing")] | length' .artifacts/coding-tooling/foundation-enforcement-gap.json)" -eq 1
+
+      - name: Add the proven type-aware convention executable
+        run: bun add --dev --exact oxlint-tsgolint@7.0.2001
+
       - name: Verify convention repair and isolate remaining foundation state
         id: after
         continue-on-error: true
-        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        uses: moritzbrantner/coding-tooling@d3908c6c0be8dc43f67d0a4deab707023f976af1
         with:
           operation: foundation
           bun-version: 1.3.14
           install-mode: none
           report-path: .artifacts/coding-tooling/foundation-after.json
 
-      - name: Require repaired conventions and only the pre-existing environment gap
+      - name: Require repaired conventions and only the advisory environment gap
         shell: bash
         run: |
           test '${{ steps.after.outcome }}' = 'failure'
@@ -124,7 +148,7 @@ jobs:
           test "$(jq '[.diagnostics[] | select((.code // "") | startswith("foundation-convention-"))] | length' .artifacts/coding-tooling/foundation-after.json)" -eq 0
 
       - name: Execute composed convention checks and fast validation
-        uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
+        uses: moritzbrantner/coding-tooling@d3908c6c0be8dc43f67d0a4deab707023f976af1
         with:
           operation: run
           tier: fast
