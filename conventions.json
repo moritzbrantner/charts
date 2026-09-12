@@ -11,6 +11,11 @@
     "tooling",
     "typescript",
     "vite",
-    "vitest"
+    "vitest",
+    "dependencies",
+    "environment",
+    "git",
+    "moritzbrantner-ui",
+    "ui"
   ]
 }
