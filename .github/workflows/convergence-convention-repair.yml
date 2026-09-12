@@ -77,13 +77,24 @@ jobs:
           config_path.write_text(json.dumps(config, indent=2) + '\n')
           PY
 
-      - name: Verify repaired foundation
+      - name: Verify convention repair and isolate remaining foundation state
+        id: after
+        continue-on-error: true
         uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
         with:
           operation: foundation
           bun-version: 1.3.14
           install-mode: none
           report-path: .artifacts/coding-tooling/foundation-after.json
+
+      - name: Require repaired conventions and only the pre-existing environment gap
+        shell: bash
+        run: |
+          test '${{ steps.after.outcome }}' = 'failure'
+          jq -e '.data.components.conventions.status == "adopted"' .artifacts/coding-tooling/foundation-after.json
+          jq -e '.data.components.environment.status == "missing"' .artifacts/coding-tooling/foundation-after.json
+          jq -e '.data.summary.invalid == 0 and .data.summary.missing == 1' .artifacts/coding-tooling/foundation-after.json
+          test "$(jq '[.diagnostics[] | select((.code // "") | startswith("foundation-convention-"))] | length' .artifacts/coding-tooling/foundation-after.json)" -eq 0
 
       - name: Execute composed convention checks and fast validation
         uses: moritzbrantner/coding-tooling@798e37a60e7908b8f4c3faf5d3b260a218c38a8f
