@@ -16,9 +16,20 @@ import {
 } from "./point-store";
 import { createChartDensitySample } from "./render-data";
 import { clampInteger, normalizeChartDomain, scheduleChartDensityWarmup } from "./shared";
+import {
+  attachChartDensityWorkFacts,
+  createMutableChartDensityWorkFacts,
+  getMutableChartDensityWorkFacts,
+} from "./work-facts";
 import { createChartDensityWorkerIndex } from "./worker-client";
 
-import type { BinnedSeries, BinnedSeriesIndexOptions, BinnedSeriesQuery } from "../data-density";
+import type {
+  BinnedSeries,
+  BinnedSeriesIndex,
+  BinnedSeriesIndexOptions,
+  BinnedSeriesQuery,
+} from "../data-density";
+import type { ChartPointStore, ChartRangeAggregateStore } from "./point-store";
 import type { StaticChartDensityIndexOptions } from "./shared";
 import type {
   BinnedSeriesBackend,
@@ -320,16 +331,72 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: StaticChartDensityIndexOptions<TProperties>,
 ): ChartDensityIndex<TProperties> {
-  const binnedIndex = createBinnedSeriesIndex(
-    points,
-    options as BinnedSeriesIndexOptions<TProperties>,
-  );
-  const pointStore = createChartPointStore(points, options);
-  const rangeAggregateStore = options.rangeAggregate
-    ? createChartRangeAggregateStore(pointStore)
-    : null;
+  const facts = createMutableChartDensityWorkFacts(points.length);
+  let binnedIndex: BinnedSeriesIndex<TProperties> | null = null;
+  let pointStore: ChartPointStore<TProperties> | null = null;
+  let pointStoreBounds:
+    | { maxX: number; maxY: number; minX: number; minY: number }
+    | null
+    | undefined;
+  let rangeAggregateStore: ChartRangeAggregateStore<TProperties> | null = null;
+  const readBinnedIndex = () => {
+    if (!binnedIndex) {
+      facts.preparation.binnedIndexBuilds += 1;
+      binnedIndex = createBinnedSeriesIndex(
+        points,
+        options as BinnedSeriesIndexOptions<TProperties>,
+      );
+    }
 
-  return {
+    return binnedIndex;
+  };
+  const readPointStore = () => {
+    if (!pointStore) {
+      facts.preparation.pointStoreBuilds += 1;
+      pointStore = createChartPointStore(points, options);
+    }
+
+    return pointStore;
+  };
+  const readRangeAggregateStore = () => {
+    if (!rangeAggregateStore) {
+      facts.preparation.rangeAggregateStoreBuilds += 1;
+      rangeAggregateStore = createChartRangeAggregateStore(readPointStore());
+    }
+
+    return rangeAggregateStore;
+  };
+  const readPointStoreBounds = () => {
+    if (pointStoreBounds !== undefined) {
+      return pointStoreBounds;
+    }
+
+    const store = readPointStore();
+
+    if (store.points.length === 0) {
+      pointStoreBounds = null;
+      return pointStoreBounds;
+    }
+
+    let minY = Number.POSITIVE_INFINITY;
+    let maxY = Number.NEGATIVE_INFINITY;
+
+    for (const point of store.points) {
+      minY = Math.min(minY, point.y);
+      maxY = Math.max(maxY, point.y);
+    }
+
+    pointStoreBounds = {
+      maxX: store.points[store.points.length - 1].x,
+      maxY,
+      minX: store.points[0].x,
+      minY,
+    };
+
+    return pointStoreBounds;
+  };
+
+  const index: ChartDensityIndex<TProperties> = {
     getBackendCapabilities() {
       return {
         backend: "hybrid-js",
@@ -342,64 +409,110 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
     },
 
     getBinnedSeries(query) {
-      if (rangeAggregateStore) {
-        return createRangeAggregateBinnedSeries(rangeAggregateStore, query);
-      }
+      facts.queries.binnedSeries += 1;
+      const series = options.rangeAggregate
+        ? createRangeAggregateBinnedSeries(readRangeAggregateStore(), query)
+        : readBinnedIndex().getBinnedSeries(query);
 
-      return binnedIndex.getBinnedSeries(query);
+      facts.materialized.bins += series.bins.length;
+      return series;
     },
 
     getChartSeries(query) {
+      facts.queries.chartSeries += 1;
       const valueMode = query.valueMode ?? "average";
+      let result: ChartDensitySeries<TProperties>;
 
       if (shouldUsePointStoreForQuery(query)) {
-        return createPointStoreChartSeries(pointStore, query, valueMode);
+        result = createPointStoreChartSeries(readPointStore(), query, valueMode);
+      } else {
+        const series = options.rangeAggregate
+          ? createRangeAggregateBinnedSeries(readRangeAggregateStore(), query)
+          : readBinnedIndex().getBinnedSeries(query);
+        const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
+
+        result = {
+          bins: series.bins,
+          samples,
+          summary: {
+            ...series.summary,
+            sampleCount: samples.length,
+            valueMode,
+          },
+        };
       }
 
-      const series = rangeAggregateStore
-        ? createRangeAggregateBinnedSeries(rangeAggregateStore, query)
-        : binnedIndex.getBinnedSeries(query);
-      const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
-
-      return {
-        bins: series.bins,
-        samples,
-        summary: {
-          ...series.summary,
-          sampleCount: samples.length,
-          valueMode,
-        },
-      };
+      facts.materialized.bins += result.bins.length;
+      facts.materialized.samples += result.samples.length;
+      return result;
     },
 
     getGroupedChartSeries(query) {
-      return createPointStoreGroupedChartSeries(pointStore, query);
+      facts.queries.groupedSeries += 1;
+      const grouped = createPointStoreGroupedChartSeries(readPointStore(), query);
+
+      facts.materialized.groups += grouped.groups.length;
+      for (const group of grouped.groups) {
+        facts.materialized.bins += group.series.bins.length;
+        facts.materialized.samples += group.series.samples.length;
+      }
+      return grouped;
     },
 
     getChartPoints(query = {}) {
-      return createPointStoreChartPoints(pointStore, query);
+      facts.queries.chartPoints += 1;
+      const series = createPointStoreChartPoints(readPointStore(), query);
+
+      facts.materialized.points += series.points.length;
+      return series;
     },
 
     getHeatmap(query) {
-      return createPointStoreHeatmap(pointStore, query);
+      facts.queries.heatmaps += 1;
+      const heatmap = createPointStoreHeatmap(readPointStore(), query);
+
+      facts.materialized.cells += heatmap.cells.length;
+      return heatmap;
     },
 
     getHistogram(query) {
-      return createPointStoreHistogram(pointStore, query);
+      facts.queries.histograms += 1;
+      const histogram = createPointStoreHistogram(readPointStore(), query);
+
+      facts.materialized.buckets += histogram.buckets.length;
+      return histogram;
     },
 
     getPointById(pointId) {
-      return binnedIndex.getPointById(pointId);
+      facts.queries.pointLookups += 1;
+
+      if (pointStore) {
+        return pointStore.pointLookup.get(pointId) ?? null;
+      }
+
+      return readBinnedIndex().getPointById(pointId);
     },
 
     getScatter(query = {}) {
-      return createPointStoreScatter(pointStore, query);
+      facts.queries.scatters += 1;
+      const scatter = createPointStoreScatter(readPointStore(), query);
+
+      facts.materialized.scatterPoints += scatter.points.length;
+      return scatter;
     },
 
     getSeriesBounds() {
-      return binnedIndex.getSeriesBounds();
+      facts.queries.bounds += 1;
+
+      if (pointStore) {
+        return readPointStoreBounds();
+      }
+
+      return readBinnedIndex().getSeriesBounds();
     },
   };
+
+  return attachChartDensityWorkFacts(index, facts);
 }
 
 function normalizeChartDensityCacheOptions(
@@ -421,17 +534,23 @@ function createCachedChartDensityIndex<TProperties>(
 
   const binnedCache = new ChartLruCache<BinnedSeries<TProperties>>(maxEntries);
   const chartCache = new ChartLruCache<ChartDensitySeries<TProperties>>(maxEntries);
-
-  return {
+  const facts = getMutableChartDensityWorkFacts(index);
+  const cachedIndex: ChartDensityIndex<TProperties> = {
     ...index,
     getBinnedSeries(query) {
       const key = createBinnedSeriesCacheKey(query);
       const cached = binnedCache.get(key);
 
       if (cached) {
+        if (facts) {
+          facts.cache.hits += 1;
+        }
         return cached;
       }
 
+      if (facts) {
+        facts.cache.misses += 1;
+      }
       const series = index.getBinnedSeries(query);
 
       binnedCache.set(key, series);
@@ -443,9 +562,15 @@ function createCachedChartDensityIndex<TProperties>(
       const cached = chartCache.get(key);
 
       if (cached) {
+        if (facts) {
+          facts.cache.hits += 1;
+        }
         return cached;
       }
 
+      if (facts) {
+        facts.cache.misses += 1;
+      }
       const series = index.getChartSeries(query);
 
       chartCache.set(key, series);
@@ -459,6 +584,8 @@ function createCachedChartDensityIndex<TProperties>(
       return index.getScatter(query);
     },
   };
+
+  return facts ? attachChartDensityWorkFacts(cachedIndex, facts) : cachedIndex;
 }
 
 class ChartLruCache<TValue> {

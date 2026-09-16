@@ -108,6 +108,7 @@
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
+    "performance:contract": "bun ./scripts/check-density-work-contract.ts",
     "prepack": "bun run build:wasm && bun run build",
     "release": "changeset publish",
     "storybook": "storybook dev -p 6006",
@@ -121,7 +122,7 @@
     "test:visual": "playwright test -c playwright.visual.config.ts",
     "quality:pages": "bun run test:unlighthouse",
     "version-packages": "changeset version",
-    "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
+    "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run performance:contract && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
     "verify:release": "bun run verify && bun run test:wasm && bun run bench:large-data"
   }
 }

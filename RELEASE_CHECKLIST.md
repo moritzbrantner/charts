@@ -9,10 +9,19 @@
 - Public API report updated intentionally when `etc/charts.api.md` changes.
 - Changelog entry explains migration steps for breaking changes.
 
-## Performance budget
+## Performance contracts
 
-`bun run bench:large-data` enforces the stable 100k-point scenarios below. Each
-listed operation must complete within 3,000 ms:
+`bun run performance:contract` is the deterministic structural gate. It verifies
+allowed work rather than elapsed time: unused query capabilities must prepare no
+state, repeated cached queries must not repeat underlying work, and prepared
+query state must be reused across compatible precise operations. CI stores the
+result as JSON and Markdown with the workload fingerprint, environment, revision,
+and work snapshots so regressions remain comparable.
+
+`bun run bench:large-data` is the separate runtime benchmark. It exercises the
+stable 100k-point scenarios below and emits portable JSON evidence in CI. The
+listed operations retain the existing 3,000 ms runtime budget, but wall-clock
+measurements complement the structural contract rather than substituting for it:
 
 - `chart.100k.sorted.3metrics.hybrid-js.construct`
 - `chart.100k.sorted.3metrics.hybrid-js.query.full`
