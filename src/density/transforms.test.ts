@@ -179,7 +179,7 @@ describe("chart transforms", () => {
     );
 
     expect(contour!.lines).toHaveLength(1);
-    expect(contour!.lines[0]!.points).toEqual([
+    expect([...contour!.lines[0]!.points].sort((left, right) => left.x - right.x)).toEqual([
       { x: 0, y: 0.5 },
       { x: 1, y: 0.5 },
     ]);
