@@ -9,6 +9,13 @@ export type {
   ChartContourOptions,
   ChartContourPoint,
 } from "./density/transforms";
+export type {
+  ChartStackOffset,
+  ChartStackPoint,
+  ChartStackSeries,
+  ChartStackTransform,
+  ChartStackTransformOptions,
+} from "./density/stack";
 export {
   CHART_VALUE_MODE_DEFINITIONS,
   getChartValueModeDefinition,
@@ -45,3 +52,4 @@ export {
   createChartTreemapLayout,
 } from "./density/layouts";
 export { createChartBinTransform, createChartContours } from "./density/transforms";
+export { createChartStackTransform } from "./density/stack";
