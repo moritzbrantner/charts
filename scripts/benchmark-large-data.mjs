@@ -28,14 +28,20 @@ if (profileBenchmarks) {
 }
 
 results.push(
-  benchmark("chart.wasm.module.load", () => {
-    const index = createChartDensityIndex(
+  await benchmarkAsync("chart.wasm.module.load", async () => {
+    const index = createProgressiveChartDensityIndex(
       [{ id: "wasm-load", metrics: { count: 1 }, x: 0, y: 1 }],
       {
-        backend: "wasm-index",
+        progressive: {
+          warmup: "manual",
+        },
       },
     );
 
+    await index.warmWasmIndex();
+    if (index.getActiveBackend() !== "wasm-index") {
+      throw new Error("chart WASM module warmup did not activate the WASM backend");
+    }
     assertChartSeries(index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] }));
   }),
 );

@@ -7,6 +7,10 @@ import {
 } from "./data-density";
 import { createChartDensitySample } from "./density/render-data";
 import { clampInteger, normalizeChartDomain } from "./density/shared";
+import {
+  attachChartDensityWorkFacts,
+  createMutableChartDensityWorkFacts,
+} from "./density/work-facts";
 import { getLoadedChartWasmKernel, loadChartWasmKernel } from "./wasm-kernel";
 
 import type {
@@ -31,6 +35,15 @@ const WASM_CAPABILITIES: ChartBackendCapabilities = {
   usesWasm: true,
 };
 
+const FALLBACK_CAPABILITIES: ChartBackendCapabilities = {
+  backend: "hybrid-js",
+  supportsGroupedSeries: true,
+  supportsHeatmap: true,
+  supportsHistogram: true,
+  supportsPercentiles: true,
+  usesWasm: false,
+};
+
 const PERCENTILE_QUANTILES: Record<ChartPercentileMode, number> = {
   p10: 0.1,
   p25: 0.25,
@@ -41,62 +54,104 @@ const PERCENTILE_QUANTILES: Record<ChartPercentileMode, number> = {
   p99: 0.99,
 };
 
+type WasmPreparedChartState<TProperties> = {
+  metricKeys: string[];
+  points: Array<IndexedChartSeriesPoint<TProperties>>;
+  x: Float64Array;
+  y: Float64Array;
+};
+
+type WasmChartDensityPreparationOptions<TProperties> = {
+  fallbackIndex?: ChartDensityIndex<TProperties>;
+  prepareImmediately?: boolean;
+};
+
 export function createWasmChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: BinnedSeriesIndexOptions<TProperties>,
   createFallbackIndex: () => ChartDensityIndex<TProperties>,
+  preparation: WasmChartDensityPreparationOptions<TProperties> = {},
 ): ChartDensityIndex<TProperties> {
   // Loading is intentionally asynchronous so importing @moritzbrantner/charts/core remains
-  // server-safe and ordinary development never requires a WASM artifact. Until the local
-  // kernel is ready, this index is behaviorally identical to the JS correctness baseline.
+  // server-safe and ordinary development never requires a WASM artifact. Dataset normalization
+  // and coordinate packing are also demand-driven so merely constructing this wrapper does not
+  // duplicate the source series before a WASM query is actually requested.
   if (!getLoadedChartWasmKernel()) {
     void loadChartWasmKernel().catch(() => undefined);
   }
 
-  const normalizedPoints = normalizeWasmPoints(points, options);
-  const x = Float64Array.from(normalizedPoints, (point) => point.x);
-  const y = Float64Array.from(normalizedPoints, (point) => point.y);
-  const pointLookup = new Map(normalizedPoints.map((point) => [point.id, point]));
-  const metricKeys = collectDensityMetricKeys(normalizedPoints.map((point) => point.metrics));
-  const bounds = createSeriesBounds(normalizedPoints);
-  let fallbackIndex: ChartDensityIndex<TProperties> | null = null;
-  const readFallbackIndex = () => (fallbackIndex ??= createFallbackIndex());
+  const facts = createMutableChartDensityWorkFacts(points.length);
+  let fallbackIndex = preparation.fallbackIndex ?? null;
+  let wasmState: WasmPreparedChartState<TProperties> | null = null;
+  const readFallbackIndex = () => {
+    if (!fallbackIndex) {
+      facts.preparation.fallbackIndexBuilds += 1;
+      fallbackIndex = createFallbackIndex();
+    }
 
-  return {
+    return fallbackIndex;
+  };
+  const readWasmState = () => {
+    if (wasmState) {
+      return wasmState;
+    }
+
+    facts.preparation.wasmStateBuilds += 1;
+    const normalizedPoints = normalizeWasmPoints(points, options);
+    const x = Float64Array.from(normalizedPoints, (point) => point.x);
+    const y = Float64Array.from(normalizedPoints, (point) => point.y);
+
+    facts.materialized.wasmPreparedPoints += normalizedPoints.length;
+    facts.materialized.wasmCoordinateValues += x.length + y.length;
+    wasmState = {
+      metricKeys: collectDensityMetricKeys(normalizedPoints.map((point) => point.metrics)),
+      points: normalizedPoints,
+      x,
+      y,
+    };
+
+    return wasmState;
+  };
+
+  if (preparation.prepareImmediately) {
+    if (!getLoadedChartWasmKernel()) {
+      throw new Error("charts WASM kernel must be loaded before eager preparation");
+    }
+    readWasmState();
+  }
+
+  const index: ChartDensityIndex<TProperties> = {
     getBackendCapabilities() {
-      if (!getLoadedChartWasmKernel()) {
-        return (
-          readFallbackIndex().getBackendCapabilities?.() ?? {
-            backend: "hybrid-js",
-            supportsGroupedSeries: true,
-            supportsHeatmap: true,
-            supportsHistogram: true,
-            supportsPercentiles: true,
-            usesWasm: false,
-          }
-        );
-      }
-      return WASM_CAPABILITIES;
+      return wasmState ? WASM_CAPABILITIES : FALLBACK_CAPABILITIES;
     },
 
     getBinnedSeries(query) {
-      if (!getLoadedChartWasmKernel()) {
-        return readFallbackIndex().getBinnedSeries(query);
-      }
-      return createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
+      facts.queries.binnedSeries += 1;
+      const series = getLoadedChartWasmKernel()
+        ? createWasmBinnedSeries(readWasmState(), query)
+        : readFallbackIndex().getBinnedSeries(query);
+
+      facts.materialized.bins += series.bins.length;
+      return series;
     },
 
     getChartSeries(query) {
+      facts.queries.chartSeries += 1;
+
       if (!getLoadedChartWasmKernel()) {
-        return readFallbackIndex().getChartSeries(query);
+        const result = readFallbackIndex().getChartSeries(query);
+
+        facts.materialized.bins += result.bins.length;
+        facts.materialized.samples += result.samples.length;
+        return result;
       }
 
+      const state = readWasmState();
       const valueMode = query.valueMode ?? "average";
-      const series = createWasmBinnedSeries(normalizedPoints, x, y, metricKeys, query);
+      const series = createWasmBinnedSeries(state, query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
-      populateWasmPercentiles(samples, normalizedPoints, query);
-
-      return {
+      populateWasmPercentiles(samples, state.points, query);
+      const result = {
         bins: series.bins,
         samples,
         summary: {
@@ -105,43 +160,72 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
           valueMode,
         },
       } satisfies ChartDensitySeries<TProperties>;
+
+      facts.materialized.bins += result.bins.length;
+      facts.materialized.samples += result.samples.length;
+      return result;
     },
 
     getChartPoints(query) {
-      return readFallbackIndex().getChartPoints(query);
+      facts.queries.chartPoints += 1;
+      const series = readFallbackIndex().getChartPoints(query);
+
+      facts.materialized.points += series.points.length;
+      return series;
     },
 
     getGroupedChartSeries(query) {
-      return readFallbackIndex().getGroupedChartSeries(query);
+      facts.queries.groupedSeries += 1;
+      const grouped = readFallbackIndex().getGroupedChartSeries(query);
+
+      facts.materialized.groups += grouped.groups.length;
+      for (const group of grouped.groups) {
+        facts.materialized.bins += group.series.bins.length;
+        facts.materialized.samples += group.series.samples.length;
+      }
+      return grouped;
     },
 
     getHeatmap(query) {
-      return readFallbackIndex().getHeatmap(query);
+      facts.queries.heatmaps += 1;
+      const heatmap = readFallbackIndex().getHeatmap(query);
+
+      facts.materialized.cells += heatmap.cells.length;
+      return heatmap;
     },
 
     getHistogram(query) {
-      return readFallbackIndex().getHistogram(query);
+      facts.queries.histograms += 1;
+      const histogram = readFallbackIndex().getHistogram(query);
+
+      facts.materialized.buckets += histogram.buckets.length;
+      return histogram;
     },
 
     getPointById(pointId) {
-      return pointLookup.get(pointId) ?? null;
+      facts.queries.pointLookups += 1;
+      return readFallbackIndex().getPointById(pointId);
     },
 
     getScatter(query) {
-      return readFallbackIndex().getScatter(query);
+      facts.queries.scatters += 1;
+      const scatter = readFallbackIndex().getScatter(query);
+
+      facts.materialized.scatterPoints += scatter.points.length;
+      return scatter;
     },
 
     getSeriesBounds() {
-      return bounds;
+      facts.queries.bounds += 1;
+      return readFallbackIndex().getSeriesBounds();
     },
   };
+
+  return attachChartDensityWorkFacts(index, facts);
 }
 
 function createWasmBinnedSeries<TProperties>(
-  points: Array<IndexedChartSeriesPoint<TProperties>>,
-  x: Float64Array,
-  y: Float64Array,
-  metricKeys: string[],
+  state: WasmPreparedChartState<TProperties>,
   query: { includeEmptyBins?: boolean; targetBinCount: number; xDomain: [number, number] },
 ): BinnedSeries<TProperties> {
   const kernel = getLoadedChartWasmKernel();
@@ -149,6 +233,7 @@ function createWasmBinnedSeries<TProperties>(
     throw new Error("charts WASM kernel is not loaded");
   }
 
+  const { metricKeys, points, x, y } = state;
   const xDomain = normalizeChartDomain(query.xDomain);
   const targetBinCount = clampInteger(query.targetBinCount, 1, 100_000);
   const numericBins = kernel.aggregateDensityBins(x, y, xDomain, targetBinCount);
@@ -286,26 +371,6 @@ function normalizeWasmPoints<TProperties>(
 
   normalized.sort((left, right) => left.x - right.x);
   return normalized;
-}
-
-function createSeriesBounds<TProperties>(points: Array<IndexedChartSeriesPoint<TProperties>>) {
-  if (points.length === 0) {
-    return null;
-  }
-
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    maxX = Math.max(maxX, point.x);
-    minY = Math.min(minY, point.y);
-    maxY = Math.max(maxY, point.y);
-  }
-
-  return { maxX, maxY, minX, minY };
 }
 
 function isPercentileMode(value: string): value is ChartPercentileMode {
