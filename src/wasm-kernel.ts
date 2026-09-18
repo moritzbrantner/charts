@@ -86,12 +86,7 @@ export async function loadChartWasmKernel(): Promise<ChartWasmKernel> {
         return normalizeBins(bins);
       },
       aggregateHistogram(values, domain, bucketCount) {
-        const buckets = module.aggregate_histogram(
-          values,
-          domain[0],
-          domain[1],
-          bucketCount,
-        );
+        const buckets = module.aggregate_histogram(values, domain[0], domain[1], bucketCount);
         return normalizeHistogramBuckets(buckets);
       },
       percentile(values, quantile) {
