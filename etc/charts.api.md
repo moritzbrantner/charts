@@ -1105,6 +1105,7 @@ type ChartDensityCacheOptions = {
     enabled?: boolean;
     maxEntries?: number;
 };
+type ChartDensityPreparationMode = "lazy" | "eager";
 type ChartDensityBackendPolicy = ChartDensityBackend | "auto";
 type ChartDensitySample<TProperties = Record<string, unknown>> = {
     averageY: number | null;
@@ -1531,6 +1532,7 @@ type ChartDensityProgressiveOptions<TProperties = Record<string, unknown>> = {
 type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Omit<BinnedSeriesIndexOptions<TProperties>, "backend"> & {
     backend?: ChartDensityBackendPolicy;
     cache?: ChartDensityCacheOptions;
+    preparation?: ChartDensityPreparationMode;
     progressive?: ChartDensityProgressiveOptions<TProperties>;
 };
 type ChartDensityProgressiveStatus = {

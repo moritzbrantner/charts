@@ -31,6 +31,8 @@ import {
   type ChartValueMode,
 } from "@moritzbrantner/charts";
 
+import { getChartDensityWorkFacts } from "./density/work-facts";
+
 describe("@moritzbrantner/charts", () => {
   test("adapts data-density bins into chart samples", () => {
     const index = createChartDensityIndex(
@@ -661,6 +663,56 @@ describe("@moritzbrantner/charts", () => {
     expect(publicChartSeries(wasmIndex.getChartSeries(percentileQuery))).toEqual(
       publicChartSeries(hybridIndex.getChartSeries(percentileQuery)),
     );
+  });
+
+  test("supports explicit lazy and eager reusable-state preparation", () => {
+    const points = Array.from({ length: 32 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1 },
+      x: pointIndex,
+      y: pointIndex % 5,
+    }));
+    const lazy = createChartDensityIndex(points, {
+      backend: "hybrid-js",
+      cache: { enabled: false },
+      preparation: "lazy",
+    });
+    const eager = createChartDensityIndex(points, {
+      backend: "hybrid-js",
+      cache: { enabled: false },
+      preparation: "eager",
+    });
+    const eagerAuto = createChartDensityIndex(points, {
+      backend: "auto",
+      cache: { enabled: false },
+      preparation: "eager",
+    });
+
+    expect(getChartDensityWorkFacts(lazy)?.preparation).toMatchObject({
+      binnedIndexBuilds: 0,
+      pointStoreBuilds: 0,
+      rangeAggregateStoreBuilds: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.preparation).toMatchObject({
+      binnedIndexBuilds: 1,
+      pointStoreBuilds: 1,
+      rangeAggregateStoreBuilds: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.queries).toMatchObject({
+      binnedSeries: 0,
+      chartSeries: 0,
+      histograms: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.materialized).toMatchObject({
+      bins: 0,
+      buckets: 0,
+      samples: 0,
+    });
+    expect(getChartDensityWorkFacts(eagerAuto)?.preparation).toMatchObject({
+      binnedIndexBuilds: 0,
+      pointStoreBuilds: 1,
+      rangeAggregateStoreBuilds: 1,
+    });
   });
 
   test("exposes chart value mode definitions", () => {

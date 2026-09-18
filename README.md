@@ -615,10 +615,31 @@ in TypeScript so the public API remains renderer-agnostic and easy to compose.
 
 Use `hybrid-js` when you need the smallest runtime surface or are running in an
 environment that does not allow WebAssembly. Use `wasm-index` when you want the
-native kernel immediately and can pay construction cost up front. Use
-`progressive` for interactive screens: the first render uses JavaScript, then
-supported chart-series queries can use WASM after warmup while unsupported
-operations continue through the hybrid fallback.
+native kernel available for supported numeric work. Use `progressive` for
+interactive screens: the first render uses JavaScript, then supported queries can
+use WASM after warmup while unsupported operations continue through the hybrid
+fallback.
+
+Reusable backend preparation is lazy by default. This keeps index construction
+cheap and prepares the binned index, point store, range aggregates, or packed WASM
+coordinates only when a query needs them. Opt into `preparation: "eager"` when
+construction already happens off the critical path and predictable first-query
+latency matters:
+
+```ts
+const index = createChartDensityIndex(points, {
+  backend: "hybrid-js",
+  preparation: "eager",
+});
+```
+
+Eager preparation builds reusable backend state only; it does not precompute or
+materialize chart-series, histogram, heatmap, or scatter results. For
+`wasm-index`, eager preparation requires the WASM kernel to have been loaded
+first. Unsupported-capability fallback state remains lazy so eager WASM
+construction does not duplicate the source dataset. Progressive `warmup` is a
+separate concern: it controls when the WASM backend is promoted, while
+`preparation` controls when reusable state for a selected backend is built.
 
 For large browser datasets where construction cost is visible, opt into worker
 warmup:
@@ -731,8 +752,8 @@ Large-data benchmarks are intentionally diagnostic, not a promise that one
 backend is always faster. `hybrid-js` is often faster for sorted public-wrapper
 chart queries because it avoids mapping WASM results back into public objects.
 `wasm-index` is expected to win on random or high-cardinality large-domain chart
-queries and percentile-heavy chart work. Heatmap and histogram queries currently
-route through the hybrid point store.
+queries and percentile-heavy chart work. Heatmap queries and function-accessor histograms route through the hybrid point
+store; serializable `x`, `y`, and metric histograms can use the WASM kernel.
 
 Useful commands:
 

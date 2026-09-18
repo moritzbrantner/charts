@@ -24,6 +24,7 @@ import type {
   ChartBackendCapabilities,
   ChartDensityBin,
   ChartDensityIndex,
+  ChartDensityPreparationMode,
   ChartDensityQuery,
   ChartDensitySample,
   ChartDensitySeries,
@@ -72,7 +73,7 @@ type WasmPreparedChartState<TProperties> = {
 
 type WasmChartDensityPreparationOptions<TProperties> = {
   fallbackIndex?: ChartDensityIndex<TProperties>;
-  prepareImmediately?: boolean;
+  mode?: ChartDensityPreparationMode;
 };
 
 export function createWasmChartDensityIndex<TProperties = Record<string, unknown>>(
@@ -122,7 +123,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
     return wasmState;
   };
 
-  if (preparation.prepareImmediately) {
+  if (preparation.mode === "eager") {
     if (!getLoadedChartWasmKernel()) {
       throw new Error("charts WASM kernel must be loaded before eager preparation");
     }

@@ -419,7 +419,7 @@ jobs:
           CHARTS_BENCH_JSON: benchmark-results.json
         run: |
           set -o pipefail
-          bun run bench:large-data | tee benchmark-results.txt
+          bun run bench:large-data:built | tee benchmark-results.txt
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v7.0.1

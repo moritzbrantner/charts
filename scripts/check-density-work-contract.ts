@@ -7,6 +7,7 @@ import {
   createProgressiveChartDensityIndex,
 } from "../src/density/backend";
 import { getChartDensityWorkFacts } from "../src/density/work-facts";
+import { loadChartWasmKernel } from "../src/wasm-kernel";
 
 const outputDir = path.resolve(process.cwd(), "test-results");
 const points = Array.from({ length: 4_096 }, (_, index) => ({
@@ -63,6 +64,42 @@ expectEqual(
   facts.preparation.rangeAggregateStoreBuilds,
   0,
 );
+
+const eagerHybrid = createChartDensityIndex(points, {
+  backend: "hybrid-js",
+  cache: { enabled: false },
+  preparation: "eager",
+});
+facts = readFacts("hybrid.eager-construct", eagerHybrid);
+expectEqual("hybrid.eager-construct.binnedIndexBuilds", facts.preparation.binnedIndexBuilds, 1);
+expectEqual("hybrid.eager-construct.pointStoreBuilds", facts.preparation.pointStoreBuilds, 1);
+expectEqual(
+  "hybrid.eager-construct.rangeAggregateStoreBuilds",
+  facts.preparation.rangeAggregateStoreBuilds,
+  0,
+);
+expectEqual("hybrid.eager-construct.chartQueries", facts.queries.chartSeries, 0);
+expectEqual("hybrid.eager-construct.histogramQueries", facts.queries.histograms, 0);
+expectEqual("hybrid.eager-construct.materializedBins", facts.materialized.bins, 0);
+expectEqual("hybrid.eager-construct.materializedBuckets", facts.materialized.buckets, 0);
+expectEqual("hybrid.eager-construct.materializedSamples", facts.materialized.samples, 0);
+
+const eagerAutomatic = createChartDensityIndex(points, {
+  backend: "auto",
+  cache: { enabled: false },
+  preparation: "eager",
+});
+facts = readFacts("auto.eager-construct", eagerAutomatic);
+expectEqual("auto.eager-construct.binnedIndexBuilds", facts.preparation.binnedIndexBuilds, 0);
+expectEqual("auto.eager-construct.pointStoreBuilds", facts.preparation.pointStoreBuilds, 1);
+expectEqual(
+  "auto.eager-construct.rangeAggregateStoreBuilds",
+  facts.preparation.rangeAggregateStoreBuilds,
+  1,
+);
+expectEqual("auto.eager-construct.chartQueries", facts.queries.chartSeries, 0);
+expectEqual("auto.eager-construct.materializedBins", facts.materialized.bins, 0);
+expectEqual("auto.eager-construct.materializedSamples", facts.materialized.samples, 0);
 
 const binnedQuery = {
   includeEmptyBins: true,
@@ -210,6 +247,29 @@ expectValue(
   "wasm-index",
 );
 
+await loadChartWasmKernel();
+const eagerWasm = createChartDensityIndex(points, {
+  backend: "wasm-index",
+  cache: { enabled: false },
+  preparation: "eager",
+});
+facts = readFacts("wasm.eager-construct", eagerWasm);
+expectEqual("wasm.eager-construct.wasmStateBuilds", facts.preparation.wasmStateBuilds, 1);
+expectEqual("wasm.eager-construct.fallbackIndexBuilds", facts.preparation.fallbackIndexBuilds, 0);
+expectEqual(
+  "wasm.eager-construct.wasmPreparedPoints",
+  facts.materialized.wasmPreparedPoints,
+  points.length,
+);
+expectEqual(
+  "wasm.eager-construct.wasmCoordinateValues",
+  facts.materialized.wasmCoordinateValues,
+  points.length * 2,
+);
+expectEqual("wasm.eager-construct.chartQueries", facts.queries.chartSeries, 0);
+expectEqual("wasm.eager-construct.materializedBins", facts.materialized.bins, 0);
+expectEqual("wasm.eager-construct.materializedSamples", facts.materialized.samples, 0);
+
 const nativeHistogramWasm = createChartDensityIndex(points, {
   backend: "wasm-index",
   cache: { enabled: false },
@@ -272,7 +332,7 @@ expectEqual(
 );
 
 const evidence = {
-  schemaVersion: 3,
+  schemaVersion: 4,
   generatedAt: new Date().toISOString(),
   environment: {
     arch: process.arch,
@@ -287,6 +347,10 @@ const evidence = {
   },
   contract: {
     constructionPreparesNoUnusedQueryState: true,
+    eagerPreparationBuildsReusableStateWithoutQueryMaterialization: true,
+    eagerAutoPreparationAvoidsRedundantBinnedIndex: true,
+    eagerWasmPreparationPacksOnceWithoutFallback: true,
+    lazyPreparationIsDefault: true,
     repeatedCachedQueryDoesNotRepeatUnderlyingWork: true,
     autoChartPathDoesNotBuildRedundantBinnedIndex: true,
     preparedPointStoreIsReusedAcrossPreciseQueries: true,
