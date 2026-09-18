@@ -319,10 +319,7 @@ function createWasmHistogram<TProperties>(
   const xDomain = query.xDomain ? normalizeChartDomain(query.xDomain) : null;
   const selectedPoints = xDomain ? getPointsInXDomain(state.points, xDomain) : state.points;
   const accessor = query.valueAccessor ?? "y";
-  const valuedPoints: Array<{
-    point: IndexedChartSeriesPoint<TProperties>;
-    value: number;
-  }> = [];
+  const valuedPoints: Array<{ point: IndexedChartSeriesPoint<TProperties>; value: number }> = [];
   for (const point of selectedPoints) {
     const value = getPointAccessorValue(point, accessor);
     if (value !== null) {
