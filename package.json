@@ -106,7 +106,7 @@
     "docs": "typedoc",
     "docs:check": "typedoc --emit none",
     "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format:check": "prettier --write src/wasm-index.ts && git diff -- src/wasm-index.ts && exit 1",
     "lint": "eslint . --max-warnings 0",
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
     "performance:contract": "bun ./scripts/check-density-work-contract.ts",
