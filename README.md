@@ -606,11 +606,12 @@ Pass `backend: "hybrid-js"` or `backend: "wasm-index"` to force the wrapper
 construction policy.
 
 The `wasm-index` backend is provided by this package's own Rust/WASM density
-kernel. It accelerates binned-series construction and percentiles. Heatmap,
-histogram, grouped-series, point, and scatter queries currently route to the
-hybrid point-store implementation. Render-row shaping, gap annotations, React
-controls, label layout, and derived analytics stay in TypeScript so the public
-API remains renderer-agnostic and easy to compose.
+kernel. It accelerates binned-series construction, percentiles, and histogram
+bucket aggregation for serializable `x`, `y`, and metric accessors. Function-based
+histogram accessors, heatmap, grouped-series, point, and scatter queries continue
+through the hybrid point-store implementation. Render-row shaping, point metadata,
+metrics, gap annotations, React controls, label layout, and derived analytics stay
+in TypeScript so the public API remains renderer-agnostic and easy to compose.
 
 Use `hybrid-js` when you need the smallest runtime surface or are running in an
 environment that does not allow WebAssembly. Use `wasm-index` when you want the
@@ -664,13 +665,13 @@ and source-point lookup.
 ## D3-inspired kernel roadmap
 
 The project is intentionally narrower than D3. The goal is a composable chart
-data kernel, not a full visualization framework. Near-term kernel modules are:
+data kernel, not a full visualization framework. Implemented kernel modules include density indexing, viewport summaries,
+percentiles, histograms, contour/bin transforms, stack transforms, hierarchy
+layouts, and worker-backed indexing. The next numeric acceleration candidates are:
 
-- density indexes and viewport summaries
-- percentile, histogram, and heatmap kernels
-- contour and generic bin transforms
-- future stack and layout kernels
-- worker-backed indexing for non-blocking construction
+- heatmap aggregation and geometry
+- large-series downsampling and transform kernels
+- renderer-neutral hit-testing primitives
 
 ## Examples app
 
