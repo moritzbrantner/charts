@@ -219,11 +219,7 @@ nativeHistogramWasm.getHistogram({
   xDomain: [0, points.length - 1],
 });
 facts = readFacts("wasm.after-native-histogram", nativeHistogramWasm);
-expectEqual(
-  "wasm.after-native-histogram.wasmStateBuilds",
-  facts.preparation.wasmStateBuilds,
-  1,
-);
+expectEqual("wasm.after-native-histogram.wasmStateBuilds", facts.preparation.wasmStateBuilds, 1);
 expectEqual(
   "wasm.after-native-histogram.fallbackIndexBuilds",
   facts.preparation.fallbackIndexBuilds,
