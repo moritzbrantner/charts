@@ -231,8 +231,19 @@ type ChartWasmDensityBin = {
     x0: number;
     x1: number;
 };
+type ChartWasmHistogramBucket = {
+    averageValue: number | null;
+    index: number;
+    maxValue: number | null;
+    minValue: number | null;
+    pointCount: number;
+    sumValue: number;
+    value0: number;
+    value1: number;
+};
 type ChartWasmKernel = {
     aggregateDensityBins(x: Float64Array, y: Float64Array, domain: [number, number], binCount: number): ChartWasmDensityBin[];
+    aggregateHistogram(values: Float64Array, domain: [number, number], bucketCount: number): ChartWasmHistogramBucket[];
     percentile(values: Float64Array, quantile: number): number;
 };
 declare function getLoadedChartWasmKernel(): ChartWasmKernel | null;
