@@ -5,6 +5,13 @@ import {
   type BinnedSeries,
   type BinnedSeriesIndexOptions,
 } from "./data-density";
+import {
+  getBucketIndex,
+  getChartBinWidth,
+  getPointAccessorValue,
+  getPointsInXDomain,
+  getValueDomain,
+} from "./density/point-store";
 import { createChartDensitySample } from "./density/render-data";
 import { clampInteger, normalizeChartDomain } from "./density/shared";
 import {
@@ -20,6 +27,9 @@ import type {
   ChartDensityQuery,
   ChartDensitySample,
   ChartDensitySeries,
+  ChartHistogram,
+  ChartHistogramBucket,
+  ChartHistogramQuery,
   ChartMetricRecord,
   ChartPercentileMode,
   ChartSeriesPoint,
@@ -30,7 +40,7 @@ const WASM_CAPABILITIES: ChartBackendCapabilities = {
   backend: "wasm-index",
   supportsGroupedSeries: false,
   supportsHeatmap: false,
-  supportsHistogram: false,
+  supportsHistogram: true,
   supportsPercentiles: true,
   usesWasm: true,
 };
@@ -196,7 +206,10 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
 
     getHistogram(query) {
       facts.queries.histograms += 1;
-      const histogram = readFallbackIndex().getHistogram(query);
+      const histogram =
+        getLoadedChartWasmKernel() && typeof query.valueAccessor !== "function"
+          ? createWasmHistogram(readWasmState(), query)
+          : readFallbackIndex().getHistogram(query);
 
       facts.materialized.buckets += histogram.buckets.length;
       return histogram;
@@ -288,6 +301,98 @@ function createWasmBinnedSeries<TProperties>(
         metricKeys,
       ),
       pointCount: visibleBins.reduce((total, bin) => total + bin.pointCount, 0),
+      xDomain,
+    },
+  };
+}
+
+function createWasmHistogram<TProperties>(
+  state: WasmPreparedChartState<TProperties>,
+  query: ChartHistogramQuery<TProperties>,
+): ChartHistogram<TProperties> {
+  const kernel = getLoadedChartWasmKernel();
+  if (!kernel) {
+    throw new Error("charts WASM kernel is not loaded");
+  }
+
+  const bucketCount = clampInteger(query.bucketCount, 1, 100_000);
+  const xDomain = query.xDomain ? normalizeChartDomain(query.xDomain) : null;
+  const selectedPoints = xDomain ? getPointsInXDomain(state.points, xDomain) : state.points;
+  const accessor = query.valueAccessor ?? "y";
+  const valuedPoints = selectedPoints
+    .map((point) => ({ point, value: getPointAccessorValue(point, accessor) }))
+    .filter(
+      (
+        item,
+      ): item is {
+        point: IndexedChartSeriesPoint<TProperties>;
+        value: number;
+      } => item.value !== null,
+    );
+  const valueDomain =
+    query.valueDomain ?? getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
+  const normalizedValueDomain = normalizeChartDomain(valueDomain);
+  const numericBuckets = kernel.aggregateHistogram(
+    Float64Array.from(valuedPoints, (item) => item.value),
+    normalizedValueDomain,
+    bucketCount,
+  );
+  const metadata = numericBuckets.map<{
+    firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+    lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+    metrics: ChartMetricRecord;
+  }>(() => ({
+    firstPoint: null,
+    lastPoint: null,
+    metrics: Object.fromEntries(state.metricKeys.map((key) => [key, 0])),
+  }));
+
+  for (const item of valuedPoints) {
+    if (item.value < normalizedValueDomain[0] || item.value > normalizedValueDomain[1]) {
+      continue;
+    }
+
+    const bucketIndex = getBucketIndex(item.value, normalizedValueDomain, bucketCount);
+    const bucketMetadata = metadata[bucketIndex];
+    bucketMetadata.firstPoint ??= item.point;
+    bucketMetadata.lastPoint = item.point;
+    for (const key of state.metricKeys) {
+      bucketMetadata.metrics[key] =
+        (bucketMetadata.metrics[key] ?? 0) + (item.point.metrics[key] ?? 0);
+    }
+  }
+
+  const bucketWidth = getChartBinWidth(normalizedValueDomain, bucketCount);
+  const buckets: Array<ChartHistogramBucket<TProperties>> = numericBuckets.map(
+    (bucket, index) => ({
+      averageValue: bucket.averageValue,
+      firstPoint: metadata[index].firstPoint,
+      index: bucket.index,
+      lastPoint: metadata[index].lastPoint,
+      maxValue: bucket.maxValue,
+      metrics: metadata[index].metrics,
+      minValue: bucket.minValue,
+      pointCount: bucket.pointCount,
+      value: normalizedValueDomain[0] + (index + 0.5) * bucketWidth,
+      value0: bucket.value0,
+      value1: bucket.value1,
+    }),
+  );
+  const visibleBuckets =
+    query.includeEmptyBuckets === false
+      ? buckets.filter((bucket) => bucket.pointCount > 0)
+      : buckets;
+
+  return {
+    buckets: visibleBuckets,
+    summary: {
+      bucketCount: visibleBuckets.length,
+      metrics: sumDensityMetrics(
+        visibleBuckets.map((bucket) => bucket.metrics),
+        state.metricKeys,
+      ),
+      pointCount: visibleBuckets.reduce((total, bucket) => total + bucket.pointCount, 0),
+      valueDomain: normalizedValueDomain,
       xDomain,
     },
   };
