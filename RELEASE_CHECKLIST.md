@@ -14,14 +14,21 @@
 `bun run performance:contract` is the deterministic structural gate. It verifies
 allowed work rather than elapsed time: unused query capabilities must prepare no
 state, repeated cached queries must not repeat underlying work, and prepared
-query state must be reused across compatible precise operations. CI stores the
-result as JSON and Markdown with the workload fingerprint, environment, revision,
-and work snapshots so regressions remain comparable.
+query state must be reused across compatible precise operations. WASM wrappers
+must not normalize or pack source data at construction, progressive WASM warmup
+must finish kernel loading and dataset preparation before reporting ready, and a
+progressive WASM index must reuse the already-existing hybrid fallback rather
+than building a private duplicate. CI stores the result as JSON and Markdown
+with the workload fingerprint, environment, revision, and work snapshots so
+regressions remain comparable.
 
 `bun run bench:large-data` is the separate runtime benchmark. It exercises the
 stable 100k-point scenarios below and emits portable JSON evidence in CI. The
-listed operations retain the existing 3,000 ms runtime budget, but wall-clock
-measurements complement the structural contract rather than substituting for it:
+listed operations retain the existing 3,000 ms runtime budget, and the CI shell
+propagates benchmark failures through the output-capture pipeline. Backend
+speedup ratios remain calibration evidence for now; they are not release gates
+until first-use preparation and steady-state query phases have enough repeated,
+representative evidence for a stable threshold.
 
 - `chart.100k.sorted.3metrics.hybrid-js.construct`
 - `chart.100k.sorted.3metrics.hybrid-js.query.full`

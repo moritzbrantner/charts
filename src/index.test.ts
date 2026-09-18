@@ -1305,8 +1305,9 @@ describe("@moritzbrantner/charts", () => {
 
     expect(progressive.getActiveBackend()).toBe("wasm-index");
     expect(progressive.getBackendCapabilities?.()).toMatchObject({
-      backend: "hybrid-js",
-      usesWasm: false,
+      backend: "wasm-index",
+      supportsGroupedSeries: false,
+      usesWasm: true,
     });
   });
 });

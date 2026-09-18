@@ -1,7 +1,9 @@
 export type ChartDensityPreparationFacts = {
   binnedIndexBuilds: number;
+  fallbackIndexBuilds: number;
   pointStoreBuilds: number;
   rangeAggregateStoreBuilds: number;
+  wasmStateBuilds: number;
 };
 
 export type ChartDensityQueryFacts = {
@@ -24,6 +26,8 @@ export type ChartDensityMaterializationFacts = {
   points: number;
   samples: number;
   scatterPoints: number;
+  wasmCoordinateValues: number;
+  wasmPreparedPoints: number;
 };
 
 export type ChartDensityCacheFacts = {
@@ -59,11 +63,15 @@ export function createMutableChartDensityWorkFacts(
       points: 0,
       samples: 0,
       scatterPoints: 0,
+      wasmCoordinateValues: 0,
+      wasmPreparedPoints: 0,
     },
     preparation: {
       binnedIndexBuilds: 0,
+      fallbackIndexBuilds: 0,
       pointStoreBuilds: 0,
       rangeAggregateStoreBuilds: 0,
+      wasmStateBuilds: 0,
     },
     queries: {
       binnedSeries: 0,

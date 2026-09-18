@@ -1,5 +1,6 @@
 import { createBinnedSeriesIndex } from "../data-density";
 import { createWasmChartDensityIndex } from "../wasm-index";
+import { loadChartWasmKernel } from "../wasm-kernel";
 
 import {
   createChartPointStore,
@@ -44,6 +45,11 @@ import type {
   ChartSeriesPoint,
   ProgressiveChartDensityIndex,
 } from "./types";
+
+type StaticChartDensityInternalOptions<TProperties> = {
+  prepareWasmState?: boolean;
+  wasmFallbackIndex?: ChartDensityIndex<TProperties>;
+};
 
 export function resolveChartDensityBackendPolicy({
   hasPercentiles = false,
@@ -93,11 +99,12 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
   options: Omit<ChartDensityIndexOptions<TProperties>, "backend"> = {},
 ): ProgressiveChartDensityIndex<TProperties> {
   const { progressive, ...indexOptions } = options;
-  let activeBackend: BinnedSeriesBackend = "hybrid-js";
-  let activeIndex = createStaticChartDensityIndex(points, {
+  const hybridIndex = createStaticChartDensityIndex(points, {
     ...indexOptions,
     backend: "hybrid-js",
   });
+  let activeBackend: BinnedSeriesBackend = "hybrid-js";
+  let activeIndex = hybridIndex;
   let wasmIndex: ChartDensityIndex<TProperties> | null = null;
   let wasmError: unknown | null = null;
   let isWarming = false;
@@ -120,11 +127,19 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
     isWarming = true;
     wasmError = null;
     warmupPromise = Promise.resolve()
-      .then(() => {
-        const nextIndex = createStaticChartDensityIndex(points, {
-          ...indexOptions,
-          backend: "wasm-index",
-        });
+      .then(async () => {
+        await loadChartWasmKernel();
+        const nextIndex = createStaticChartDensityIndex(
+          points,
+          {
+            ...indexOptions,
+            backend: "wasm-index",
+          },
+          {
+            prepareWasmState: true,
+            wasmFallbackIndex: hybridIndex,
+          },
+        );
 
         wasmIndex = nextIndex;
         activeIndex = nextIndex;
@@ -310,6 +325,7 @@ function normalizeChartDensityWorkerError(error: unknown) {
 function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: StaticChartDensityIndexOptions<TProperties>,
+  internal: StaticChartDensityInternalOptions<TProperties> = {},
 ): ChartDensityIndex<TProperties> {
   const { cache, ...indexOptions } = options;
   const cacheOptions = normalizeChartDensityCacheOptions(cache);
@@ -319,6 +335,10 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
           points,
           indexOptions as BinnedSeriesIndexOptions<TProperties>,
           () => createHybridChartDensityIndex(points, indexOptions),
+          {
+            fallbackIndex: internal.wasmFallbackIndex,
+            prepareImmediately: internal.prepareWasmState,
+          },
         )
       : createHybridChartDensityIndex(points, indexOptions);
 
