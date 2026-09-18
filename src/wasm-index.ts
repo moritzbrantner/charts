@@ -28,7 +28,6 @@ import type {
   ChartDensitySample,
   ChartDensitySeries,
   ChartHistogram,
-  ChartHistogramBucket,
   ChartHistogramQuery,
   ChartMetricRecord,
   ChartPercentileMode,
@@ -160,7 +159,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
       const valueMode = query.valueMode ?? "average";
       const series = createWasmBinnedSeries(state, query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
-      populateWasmPercentiles(samples, state.points, query);
+      populateWasmPercentiles(series.bins, samples, state.points, query);
       const result = {
         bins: series.bins,
         samples,
@@ -360,7 +359,7 @@ function createWasmHistogram<TProperties>(
   }
 
   const bucketWidth = getChartBinWidth(normalizedValueDomain, bucketCount);
-  const buckets: Array<ChartHistogramBucket<TProperties>> = numericBuckets.map((bucket, index) => ({
+  const buckets = numericBuckets.map((bucket, index) => ({
     averageValue: bucket.averageValue,
     firstPoint: metadata[index].firstPoint,
     index: bucket.index,
@@ -369,6 +368,7 @@ function createWasmHistogram<TProperties>(
     metrics: metadata[index].metrics,
     minValue: bucket.minValue,
     pointCount: bucket.pointCount,
+    sumValue: bucket.sumValue,
     value: normalizedValueDomain[0] + (index + 0.5) * bucketWidth,
     value0: bucket.value0,
     value1: bucket.value1,
@@ -394,6 +394,7 @@ function createWasmHistogram<TProperties>(
 }
 
 function populateWasmPercentiles<TProperties>(
+  bins: Array<ChartDensityBin<TProperties>>,
   samples: Array<ChartDensitySample<TProperties>>,
   points: Array<IndexedChartSeriesPoint<TProperties>>,
   query: ChartDensityQuery,
@@ -427,7 +428,10 @@ function populateWasmPercentiles<TProperties>(
     valuesByBin[binIndex].push(point.y);
   }
 
-  for (const sample of samples) {
+  for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+    const sample = samples[sampleIndex];
+    const bin = bins[sampleIndex] as ChartDensityBin<TProperties> &
+      Partial<Record<ChartPercentileMode, number | null>>;
     const values = valuesByBin[sample.index] ?? [];
     if (values.length === 0) {
       continue;
@@ -435,9 +439,11 @@ function populateWasmPercentiles<TProperties>(
     const typedValues = Float64Array.from(values);
     for (const mode of requested) {
       const value = kernel.percentile(typedValues, PERCENTILE_QUANTILES[mode]);
-      sample[mode] = Number.isFinite(value) ? value : null;
+      const percentile = Number.isFinite(value) ? value : null;
+      bin[mode] = percentile;
+      sample[mode] = percentile;
       if (query.valueMode === mode) {
-        sample.y = sample[mode];
+        sample.y = percentile;
       }
     }
   }
