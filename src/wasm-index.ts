@@ -326,8 +326,8 @@ function createWasmHistogram<TProperties>(
       valuedPoints.push({ point, value });
     }
   }
-  const valueDomain =
-    query.valueDomain ?? getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
+  const valueDomain = query.valueDomain ??
+    getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
   const normalizedValueDomain = normalizeChartDomain(valueDomain);
   const numericBuckets = kernel.aggregateHistogram(
     Float64Array.from(valuedPoints, (item) => item.value),
@@ -360,21 +360,19 @@ function createWasmHistogram<TProperties>(
   }
 
   const bucketWidth = getChartBinWidth(normalizedValueDomain, bucketCount);
-  const buckets: Array<ChartHistogramBucket<TProperties>> = numericBuckets.map(
-    (bucket, index) => ({
-      averageValue: bucket.averageValue,
-      firstPoint: metadata[index].firstPoint,
-      index: bucket.index,
-      lastPoint: metadata[index].lastPoint,
-      maxValue: bucket.maxValue,
-      metrics: metadata[index].metrics,
-      minValue: bucket.minValue,
-      pointCount: bucket.pointCount,
-      value: normalizedValueDomain[0] + (index + 0.5) * bucketWidth,
-      value0: bucket.value0,
-      value1: bucket.value1,
-    }),
-  );
+  const buckets: Array<ChartHistogramBucket<TProperties>> = numericBuckets.map((bucket, index) => ({
+    averageValue: bucket.averageValue,
+    firstPoint: metadata[index].firstPoint,
+    index: bucket.index,
+    lastPoint: metadata[index].lastPoint,
+    maxValue: bucket.maxValue,
+    metrics: metadata[index].metrics,
+    minValue: bucket.minValue,
+    pointCount: bucket.pointCount,
+    value: normalizedValueDomain[0] + (index + 0.5) * bucketWidth,
+    value0: bucket.value0,
+    value1: bucket.value1,
+  }));
   const visibleBuckets =
     query.includeEmptyBuckets === false
       ? buckets.filter((bucket) => bucket.pointCount > 0)
