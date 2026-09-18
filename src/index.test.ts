@@ -25,6 +25,7 @@ import {
   getChartGapAnnotations,
   getChartValueModeDefinition,
   getChartValueModeDefinitions,
+  loadChartWasmKernel,
   resolveChartDensityBackendPolicy,
   type ChartHeatmapQuery,
   type ChartValueMode,
@@ -245,6 +246,7 @@ describe("@moritzbrantner/charts", () => {
       { id: "d", x: 20, y: 8, metrics: { orders: 1 } },
       { id: "invalid", x: Number.NaN, y: 100, metrics: { orders: 100 } },
     ];
+    const kernel = await loadChartWasmKernel();
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
     const valueModes: ChartValueMode[] = ["average", "count", "max", "min", "sum"];
@@ -713,7 +715,7 @@ describe("@moritzbrantner/charts", () => {
     );
   });
 
-  test("keeps histogram and heatmap queries in parity across backends", () => {
+  test("keeps histogram and heatmap queries in parity across backends", async () => {
     const points = Array.from({ length: 60 }, (_, pointIndex) => ({
       id: `point-${pointIndex}`,
       metrics: {
@@ -754,23 +756,65 @@ describe("@moritzbrantner/charts", () => {
     ];
 
     expect(wasm.getHistogram({ bucketCount: 7 })).toEqual(hybrid.getHistogram({ bucketCount: 7 }));
+    const metricHistogramQuery = {
+      bucketCount: 5,
+      includeEmptyBuckets: false,
+      valueAccessor: { metric: "latency" } as const,
+      valueDomain: [0, 10] as [number, number],
+      xDomain: [10, 40] as [number, number],
+    };
+    expect(wasm.getHistogram(metricHistogramQuery)).toEqual(
+      hybrid.getHistogram(metricHistogramQuery),
+    );
     expect(
       wasm.getHistogram({
-        bucketCount: 5,
-        includeEmptyBuckets: false,
-        valueAccessor: { metric: "latency" },
-        valueDomain: [0, 10],
-        xDomain: [10, 40],
+        bucketCount: 6,
+        valueAccessor: "x",
+        valueDomain: [0, 60],
       }),
     ).toEqual(
       hybrid.getHistogram({
-        bucketCount: 5,
-        includeEmptyBuckets: false,
-        valueAccessor: { metric: "latency" },
-        valueDomain: [0, 10],
-        xDomain: [10, 40],
+        bucketCount: 6,
+        valueAccessor: "x",
+        valueDomain: [0, 60],
       }),
     );
+    expect(
+      wasm.getHistogram({
+        bucketCount: 3,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [5, 5],
+      }),
+    ).toEqual(
+      hybrid.getHistogram({
+        bucketCount: 3,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [5, 5],
+      }),
+    );
+    expect(
+      wasm.getHistogram({
+        bucketCount: 4,
+        valueAccessor: (point) => point.y + (point.metrics.latency ?? 0),
+      }),
+    ).toEqual(
+      hybrid.getHistogram({
+        bucketCount: 4,
+        valueAccessor: (point) => point.y + (point.metrics.latency ?? 0),
+      }),
+    );
+    expect(wasm.getBackendCapabilities?.()).toMatchObject({
+      backend: "wasm-index",
+      supportsHistogram: true,
+      usesWasm: true,
+    });
+
+    expect(() =>
+      kernel.aggregateHistogram(new Float64Array([1]), [2, 1], 4),
+    ).toThrow();
+    expect(() =>
+      kernel.aggregateHistogram(new Float64Array([1]), [0, 1], 0),
+    ).toThrow();
 
     for (const query of heatmapQueries) {
       expect(wasm.getHeatmap(query)).toEqual(hybrid.getHeatmap(query));
