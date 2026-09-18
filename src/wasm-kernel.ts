@@ -7,6 +7,12 @@ type GeneratedChartsWasmModule = {
     domainMax: number,
     binCount: number,
   ) => unknown;
+  aggregate_histogram: (
+    values: Float64Array,
+    domainMin: number,
+    domainMax: number,
+    bucketCount: number,
+  ) => unknown;
   percentile: (values: Float64Array, quantile: number) => number;
 };
 
@@ -32,6 +38,17 @@ export type ChartWasmDensityBin = {
   x1: number;
 };
 
+export type ChartWasmHistogramBucket = {
+  averageValue: number | null;
+  index: number;
+  maxValue: number | null;
+  minValue: number | null;
+  pointCount: number;
+  sumValue: number;
+  value0: number;
+  value1: number;
+};
+
 export type ChartWasmKernel = {
   aggregateDensityBins(
     x: Float64Array,
@@ -39,6 +56,11 @@ export type ChartWasmKernel = {
     domain: [number, number],
     binCount: number,
   ): ChartWasmDensityBin[];
+  aggregateHistogram(
+    values: Float64Array,
+    domain: [number, number],
+    bucketCount: number,
+  ): ChartWasmHistogramBucket[];
   percentile(values: Float64Array, quantile: number): number;
 };
 
@@ -62,6 +84,15 @@ export async function loadChartWasmKernel(): Promise<ChartWasmKernel> {
       aggregateDensityBins(x, y, domain, binCount) {
         const bins = module.aggregate_density_bins(x, y, domain[0], domain[1], binCount);
         return normalizeBins(bins);
+      },
+      aggregateHistogram(values, domain, bucketCount) {
+        const buckets = module.aggregate_histogram(
+          values,
+          domain[0],
+          domain[1],
+          bucketCount,
+        );
+        return normalizeHistogramBuckets(buckets);
       },
       percentile(values, quantile) {
         return module.percentile(values, quantile);
@@ -144,6 +175,29 @@ function normalizeBins(value: unknown): ChartWasmDensityBin[] {
       sumY: readNumber(bin.sumY, "sumY"),
       x0: readNumber(bin.x0, "x0"),
       x1: readNumber(bin.x1, "x1"),
+    };
+  });
+}
+
+function normalizeHistogramBuckets(value: unknown): ChartWasmHistogramBucket[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError("charts WASM aggregate_histogram returned a non-array result");
+  }
+
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object") {
+      throw new TypeError(`charts WASM histogram bucket ${index} is not an object`);
+    }
+    const bucket = entry as Record<string, unknown>;
+    return {
+      averageValue: readNullableNumber(bucket.averageValue),
+      index: readNumber(bucket.index, "index"),
+      maxValue: readNullableNumber(bucket.maxValue),
+      minValue: readNullableNumber(bucket.minValue),
+      pointCount: readNumber(bucket.pointCount, "pointCount"),
+      sumValue: readNumber(bucket.sumValue, "sumValue"),
+      value0: readNumber(bucket.value0, "value0"),
+      value1: readNumber(bucket.value1, "value1"),
     };
   });
 }
