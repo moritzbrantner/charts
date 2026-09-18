@@ -246,7 +246,6 @@ describe("@moritzbrantner/charts", () => {
       { id: "d", x: 20, y: 8, metrics: { orders: 1 } },
       { id: "invalid", x: Number.NaN, y: 100, metrics: { orders: 100 } },
     ];
-    const kernel = await loadChartWasmKernel();
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
     const valueModes: ChartValueMode[] = ["average", "count", "max", "min", "sum"];
@@ -726,6 +725,7 @@ describe("@moritzbrantner/charts", () => {
       x: pointIndex % 2 === 0 ? pointIndex : 60 - pointIndex,
       y: Math.cos(pointIndex / 5) * 20,
     }));
+    const kernel = await loadChartWasmKernel();
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
     const heatmapQueries: Array<ChartHeatmapQuery<Record<string, unknown>>> = [
