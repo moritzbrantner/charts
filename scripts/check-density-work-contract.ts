@@ -210,6 +210,27 @@ expectValue(
   "wasm-index",
 );
 
+const nativeHistogramWasm = createChartDensityIndex(points, {
+  backend: "wasm-index",
+  cache: { enabled: false },
+});
+nativeHistogramWasm.getHistogram({
+  bucketCount: 64,
+  xDomain: [0, points.length - 1],
+});
+facts = readFacts("wasm.after-native-histogram", nativeHistogramWasm);
+expectEqual(
+  "wasm.after-native-histogram.wasmStateBuilds",
+  facts.preparation.wasmStateBuilds,
+  1,
+);
+expectEqual(
+  "wasm.after-native-histogram.fallbackIndexBuilds",
+  facts.preparation.fallbackIndexBuilds,
+  0,
+);
+expectEqual("wasm.after-native-histogram.histogramQueries", facts.queries.histograms, 1);
+
 progressive.getHeatmap({
   xBinCount: 32,
   xDomain: [0, points.length - 1],
@@ -255,7 +276,7 @@ expectEqual(
 );
 
 const evidence = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   generatedAt: new Date().toISOString(),
   environment: {
     arch: process.arch,
@@ -277,6 +298,7 @@ const evidence = {
     wasmPreparationHappensOnce: true,
     progressiveWarmupLoadsAndPreparesWasm: true,
     progressiveWasmReusesHybridFallback: true,
+    warmedWasmHistogramAvoidsPrivateFallback: true,
   },
   failures,
   snapshots,
