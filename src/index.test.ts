@@ -809,12 +809,8 @@ describe("@moritzbrantner/charts", () => {
       usesWasm: true,
     });
 
-    expect(() =>
-      kernel.aggregateHistogram(new Float64Array([1]), [2, 1], 4),
-    ).toThrow();
-    expect(() =>
-      kernel.aggregateHistogram(new Float64Array([1]), [0, 1], 0),
-    ).toThrow();
+    expect(() => kernel.aggregateHistogram(new Float64Array([1]), [2, 1], 4)).toThrow();
+    expect(() => kernel.aggregateHistogram(new Float64Array([1]), [0, 1], 0)).toThrow();
 
     for (const query of heatmapQueries) {
       expect(wasm.getHeatmap(query)).toEqual(hybrid.getHeatmap(query));
