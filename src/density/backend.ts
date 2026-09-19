@@ -38,6 +38,7 @@ import type {
   ChartDensityCacheOptions,
   ChartDensityIndex,
   ChartDensityIndexOptions,
+  ChartDensityPreparationMode,
   ChartDensityQuery,
   ChartDensitySeries,
   ChartDensityWorkerIndex,
@@ -47,8 +48,8 @@ import type {
 } from "./types";
 
 type StaticChartDensityInternalOptions<TProperties> = {
-  prepareWasmState?: boolean;
   wasmFallbackIndex?: ChartDensityIndex<TProperties>;
+  wasmPreparation?: ChartDensityPreparationMode;
 };
 
 export function resolveChartDensityBackendPolicy({
@@ -136,8 +137,8 @@ export function createProgressiveChartDensityIndex<TProperties = Record<string, 
             backend: "wasm-index",
           },
           {
-            prepareWasmState: true,
             wasmFallbackIndex: hybridIndex,
+            wasmPreparation: "eager",
           },
         );
 
@@ -327,20 +328,20 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
   options: StaticChartDensityIndexOptions<TProperties>,
   internal: StaticChartDensityInternalOptions<TProperties> = {},
 ): ChartDensityIndex<TProperties> {
-  const { cache, ...indexOptions } = options;
+  const { cache, preparation = "lazy", ...indexOptions } = options;
   const cacheOptions = normalizeChartDensityCacheOptions(cache);
   const index =
     indexOptions.backend === "wasm-index"
       ? createWasmChartDensityIndex(
           points,
           indexOptions as BinnedSeriesIndexOptions<TProperties>,
-          () => createHybridChartDensityIndex(points, indexOptions),
+          () => createHybridChartDensityIndex(points, indexOptions, "lazy"),
           {
             fallbackIndex: internal.wasmFallbackIndex,
-            prepareImmediately: internal.prepareWasmState,
+            mode: internal.wasmPreparation ?? preparation,
           },
         )
-      : createHybridChartDensityIndex(points, indexOptions);
+      : createHybridChartDensityIndex(points, indexOptions, preparation);
 
   return cacheOptions.enabled
     ? createCachedChartDensityIndex(index, cacheOptions.maxEntries)
@@ -350,6 +351,7 @@ function createStaticChartDensityIndex<TProperties = Record<string, unknown>>(
 function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
   points: readonly ChartSeriesPoint<TProperties>[],
   options: StaticChartDensityIndexOptions<TProperties>,
+  preparation: ChartDensityPreparationMode = "lazy",
 ): ChartDensityIndex<TProperties> {
   const facts = createMutableChartDensityWorkFacts(points.length);
   let binnedIndex: BinnedSeriesIndex<TProperties> | null = null;
@@ -415,6 +417,16 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
 
     return pointStoreBounds;
   };
+
+  if (preparation === "eager") {
+    readPointStore();
+
+    if (options.rangeAggregate) {
+      readRangeAggregateStore();
+    } else {
+      readBinnedIndex();
+    }
+  }
 
   const index: ChartDensityIndex<TProperties> = {
     getBackendCapabilities() {

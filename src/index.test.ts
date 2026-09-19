@@ -25,10 +25,13 @@ import {
   getChartGapAnnotations,
   getChartValueModeDefinition,
   getChartValueModeDefinitions,
+  loadChartWasmKernel,
   resolveChartDensityBackendPolicy,
   type ChartHeatmapQuery,
   type ChartValueMode,
 } from "@moritzbrantner/charts";
+
+import { getChartDensityWorkFacts } from "./density/work-facts";
 
 describe("@moritzbrantner/charts", () => {
   test("adapts data-density bins into chart samples", () => {
@@ -662,6 +665,56 @@ describe("@moritzbrantner/charts", () => {
     );
   });
 
+  test("supports explicit lazy and eager reusable-state preparation", () => {
+    const points = Array.from({ length: 32 }, (_, pointIndex) => ({
+      id: `point-${pointIndex}`,
+      metrics: { count: 1 },
+      x: pointIndex,
+      y: pointIndex % 5,
+    }));
+    const lazy = createChartDensityIndex(points, {
+      backend: "hybrid-js",
+      cache: { enabled: false },
+      preparation: "lazy",
+    });
+    const eager = createChartDensityIndex(points, {
+      backend: "hybrid-js",
+      cache: { enabled: false },
+      preparation: "eager",
+    });
+    const eagerAuto = createChartDensityIndex(points, {
+      backend: "auto",
+      cache: { enabled: false },
+      preparation: "eager",
+    });
+
+    expect(getChartDensityWorkFacts(lazy)?.preparation).toMatchObject({
+      binnedIndexBuilds: 0,
+      pointStoreBuilds: 0,
+      rangeAggregateStoreBuilds: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.preparation).toMatchObject({
+      binnedIndexBuilds: 1,
+      pointStoreBuilds: 1,
+      rangeAggregateStoreBuilds: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.queries).toMatchObject({
+      binnedSeries: 0,
+      chartSeries: 0,
+      histograms: 0,
+    });
+    expect(getChartDensityWorkFacts(eager)?.materialized).toMatchObject({
+      bins: 0,
+      buckets: 0,
+      samples: 0,
+    });
+    expect(getChartDensityWorkFacts(eagerAuto)?.preparation).toMatchObject({
+      binnedIndexBuilds: 0,
+      pointStoreBuilds: 1,
+      rangeAggregateStoreBuilds: 1,
+    });
+  });
+
   test("exposes chart value mode definitions", () => {
     expect(getChartValueModeDefinition("count")).toMatchObject({
       axisLabel: "Point count",
@@ -713,7 +766,7 @@ describe("@moritzbrantner/charts", () => {
     );
   });
 
-  test("keeps histogram and heatmap queries in parity across backends", () => {
+  test("keeps histogram and heatmap queries in parity across backends", async () => {
     const points = Array.from({ length: 60 }, (_, pointIndex) => ({
       id: `point-${pointIndex}`,
       metrics: {
@@ -724,6 +777,7 @@ describe("@moritzbrantner/charts", () => {
       x: pointIndex % 2 === 0 ? pointIndex : 60 - pointIndex,
       y: Math.cos(pointIndex / 5) * 20,
     }));
+    const kernel = await loadChartWasmKernel();
     const hybrid = createChartDensityIndex(points, { backend: "hybrid-js" });
     const wasm = createChartDensityIndex(points, { backend: "wasm-index" });
     const heatmapQueries: Array<ChartHeatmapQuery<Record<string, unknown>>> = [
@@ -754,23 +808,61 @@ describe("@moritzbrantner/charts", () => {
     ];
 
     expect(wasm.getHistogram({ bucketCount: 7 })).toEqual(hybrid.getHistogram({ bucketCount: 7 }));
+    const metricHistogramQuery = {
+      bucketCount: 5,
+      includeEmptyBuckets: false,
+      valueAccessor: { metric: "latency" } as const,
+      valueDomain: [0, 10] as [number, number],
+      xDomain: [10, 40] as [number, number],
+    };
+    expect(wasm.getHistogram(metricHistogramQuery)).toEqual(
+      hybrid.getHistogram(metricHistogramQuery),
+    );
     expect(
       wasm.getHistogram({
-        bucketCount: 5,
-        includeEmptyBuckets: false,
-        valueAccessor: { metric: "latency" },
-        valueDomain: [0, 10],
-        xDomain: [10, 40],
+        bucketCount: 6,
+        valueAccessor: "x",
+        valueDomain: [0, 60],
       }),
     ).toEqual(
       hybrid.getHistogram({
-        bucketCount: 5,
-        includeEmptyBuckets: false,
-        valueAccessor: { metric: "latency" },
-        valueDomain: [0, 10],
-        xDomain: [10, 40],
+        bucketCount: 6,
+        valueAccessor: "x",
+        valueDomain: [0, 60],
       }),
     );
+    expect(
+      wasm.getHistogram({
+        bucketCount: 3,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [5, 5],
+      }),
+    ).toEqual(
+      hybrid.getHistogram({
+        bucketCount: 3,
+        valueAccessor: { metric: "latency" },
+        valueDomain: [5, 5],
+      }),
+    );
+    expect(
+      wasm.getHistogram({
+        bucketCount: 4,
+        valueAccessor: (point) => point.y + (point.metrics.latency ?? 0),
+      }),
+    ).toEqual(
+      hybrid.getHistogram({
+        bucketCount: 4,
+        valueAccessor: (point) => point.y + (point.metrics.latency ?? 0),
+      }),
+    );
+    expect(wasm.getBackendCapabilities?.()).toMatchObject({
+      backend: "wasm-index",
+      supportsHistogram: true,
+      usesWasm: true,
+    });
+
+    expect(() => kernel.aggregateHistogram(new Float64Array([1]), [2, 1], 4)).toThrow();
+    expect(() => kernel.aggregateHistogram(new Float64Array([1]), [0, 1], 0)).toThrow();
 
     for (const query of heatmapQueries) {
       expect(wasm.getHeatmap(query)).toEqual(hybrid.getHeatmap(query));

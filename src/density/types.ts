@@ -104,6 +104,8 @@ export type ChartDensityCacheOptions = {
   maxEntries?: number;
 };
 
+export type ChartDensityPreparationMode = "lazy" | "eager";
+
 export type ChartDensityBackendPolicy = ChartDensityBackend | "auto";
 
 export type ChartDensitySample<TProperties = Record<string, unknown>> = {
@@ -593,6 +595,7 @@ export type ChartDensityIndexOptions<TProperties = Record<string, unknown>> = Om
 > & {
   backend?: ChartDensityBackendPolicy;
   cache?: ChartDensityCacheOptions;
+  preparation?: ChartDensityPreparationMode;
   progressive?: ChartDensityProgressiveOptions<TProperties>;
 };
 

@@ -5,6 +5,13 @@ import {
   type BinnedSeries,
   type BinnedSeriesIndexOptions,
 } from "./data-density";
+import {
+  getBucketIndex,
+  getChartBinWidth,
+  getPointAccessorValue,
+  getPointsInXDomain,
+  getValueDomain,
+} from "./density/point-store";
 import { createChartDensitySample } from "./density/render-data";
 import { clampInteger, normalizeChartDomain } from "./density/shared";
 import {
@@ -17,9 +24,12 @@ import type {
   ChartBackendCapabilities,
   ChartDensityBin,
   ChartDensityIndex,
+  ChartDensityPreparationMode,
   ChartDensityQuery,
   ChartDensitySample,
   ChartDensitySeries,
+  ChartHistogram,
+  ChartHistogramQuery,
   ChartMetricRecord,
   ChartPercentileMode,
   ChartSeriesPoint,
@@ -30,7 +40,7 @@ const WASM_CAPABILITIES: ChartBackendCapabilities = {
   backend: "wasm-index",
   supportsGroupedSeries: false,
   supportsHeatmap: false,
-  supportsHistogram: false,
+  supportsHistogram: true,
   supportsPercentiles: true,
   usesWasm: true,
 };
@@ -63,7 +73,7 @@ type WasmPreparedChartState<TProperties> = {
 
 type WasmChartDensityPreparationOptions<TProperties> = {
   fallbackIndex?: ChartDensityIndex<TProperties>;
-  prepareImmediately?: boolean;
+  mode?: ChartDensityPreparationMode;
 };
 
 export function createWasmChartDensityIndex<TProperties = Record<string, unknown>>(
@@ -113,7 +123,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
     return wasmState;
   };
 
-  if (preparation.prepareImmediately) {
+  if (preparation.mode === "eager") {
     if (!getLoadedChartWasmKernel()) {
       throw new Error("charts WASM kernel must be loaded before eager preparation");
     }
@@ -150,7 +160,7 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
       const valueMode = query.valueMode ?? "average";
       const series = createWasmBinnedSeries(state, query);
       const samples = series.bins.map((bin) => createChartDensitySample(bin, valueMode));
-      populateWasmPercentiles(samples, state.points, query);
+      populateWasmPercentiles(series.bins, samples, state.points, query);
       const result = {
         bins: series.bins,
         samples,
@@ -196,7 +206,10 @@ export function createWasmChartDensityIndex<TProperties = Record<string, unknown
 
     getHistogram(query) {
       facts.queries.histograms += 1;
-      const histogram = readFallbackIndex().getHistogram(query);
+      const histogram =
+        getLoadedChartWasmKernel() && typeof query.valueAccessor !== "function"
+          ? createWasmHistogram(readWasmState(), query)
+          : readFallbackIndex().getHistogram(query);
 
       facts.materialized.buckets += histogram.buckets.length;
       return histogram;
@@ -293,7 +306,96 @@ function createWasmBinnedSeries<TProperties>(
   };
 }
 
+function createWasmHistogram<TProperties>(
+  state: WasmPreparedChartState<TProperties>,
+  query: ChartHistogramQuery<TProperties>,
+): ChartHistogram<TProperties> {
+  const kernel = getLoadedChartWasmKernel();
+  if (!kernel) {
+    throw new Error("charts WASM kernel is not loaded");
+  }
+
+  const bucketCount = clampInteger(query.bucketCount, 1, 100_000);
+  const xDomain = query.xDomain ? normalizeChartDomain(query.xDomain) : null;
+  const selectedPoints = xDomain ? getPointsInXDomain(state.points, xDomain) : state.points;
+  const accessor = query.valueAccessor ?? "y";
+  const valuedPoints: Array<{ point: IndexedChartSeriesPoint<TProperties>; value: number }> = [];
+  for (const point of selectedPoints) {
+    const value = getPointAccessorValue(point, accessor);
+    if (value !== null) {
+      valuedPoints.push({ point, value });
+    }
+  }
+  const valueDomain = query.valueDomain ??
+    getValueDomain(valuedPoints.map((item) => item.value)) ?? [0, 0];
+  const normalizedValueDomain = normalizeChartDomain(valueDomain);
+  const numericBuckets = kernel.aggregateHistogram(
+    Float64Array.from(valuedPoints, (item) => item.value),
+    normalizedValueDomain,
+    bucketCount,
+  );
+  const metadata = numericBuckets.map<{
+    firstPoint: IndexedChartSeriesPoint<TProperties> | null;
+    lastPoint: IndexedChartSeriesPoint<TProperties> | null;
+    metrics: ChartMetricRecord;
+  }>(() => ({
+    firstPoint: null,
+    lastPoint: null,
+    metrics: Object.fromEntries(state.metricKeys.map((key) => [key, 0])),
+  }));
+
+  for (const item of valuedPoints) {
+    if (item.value < normalizedValueDomain[0] || item.value > normalizedValueDomain[1]) {
+      continue;
+    }
+
+    const bucketIndex = getBucketIndex(item.value, normalizedValueDomain, bucketCount);
+    const bucketMetadata = metadata[bucketIndex];
+    bucketMetadata.firstPoint ??= item.point;
+    bucketMetadata.lastPoint = item.point;
+    for (const key of state.metricKeys) {
+      bucketMetadata.metrics[key] =
+        (bucketMetadata.metrics[key] ?? 0) + (item.point.metrics[key] ?? 0);
+    }
+  }
+
+  const bucketWidth = getChartBinWidth(normalizedValueDomain, bucketCount);
+  const buckets = numericBuckets.map((bucket, index) => ({
+    averageValue: bucket.averageValue,
+    firstPoint: metadata[index].firstPoint,
+    index: bucket.index,
+    lastPoint: metadata[index].lastPoint,
+    maxValue: bucket.maxValue,
+    metrics: metadata[index].metrics,
+    minValue: bucket.minValue,
+    pointCount: bucket.pointCount,
+    sumValue: bucket.sumValue,
+    value: normalizedValueDomain[0] + (index + 0.5) * bucketWidth,
+    value0: bucket.value0,
+    value1: bucket.value1,
+  }));
+  const visibleBuckets =
+    query.includeEmptyBuckets === false
+      ? buckets.filter((bucket) => bucket.pointCount > 0)
+      : buckets;
+
+  return {
+    buckets: visibleBuckets,
+    summary: {
+      bucketCount: visibleBuckets.length,
+      metrics: sumDensityMetrics(
+        visibleBuckets.map((bucket) => bucket.metrics),
+        state.metricKeys,
+      ),
+      pointCount: visibleBuckets.reduce((total, bucket) => total + bucket.pointCount, 0),
+      valueDomain: normalizedValueDomain,
+      xDomain,
+    },
+  };
+}
+
 function populateWasmPercentiles<TProperties>(
+  bins: Array<ChartDensityBin<TProperties>>,
   samples: Array<ChartDensitySample<TProperties>>,
   points: Array<IndexedChartSeriesPoint<TProperties>>,
   query: ChartDensityQuery,
@@ -327,7 +429,10 @@ function populateWasmPercentiles<TProperties>(
     valuesByBin[binIndex].push(point.y);
   }
 
-  for (const sample of samples) {
+  for (let sampleIndex = 0; sampleIndex < samples.length; sampleIndex += 1) {
+    const sample = samples[sampleIndex];
+    const bin = bins[sampleIndex] as ChartDensityBin<TProperties> &
+      Partial<Record<ChartPercentileMode, number | null>>;
     const values = valuesByBin[sample.index] ?? [];
     if (values.length === 0) {
       continue;
@@ -335,9 +440,11 @@ function populateWasmPercentiles<TProperties>(
     const typedValues = Float64Array.from(values);
     for (const mode of requested) {
       const value = kernel.percentile(typedValues, PERCENTILE_QUANTILES[mode]);
-      sample[mode] = Number.isFinite(value) ? value : null;
+      const percentile = Number.isFinite(value) ? value : null;
+      bin[mode] = percentile;
+      sample[mode] = percentile;
       if (query.valueMode === mode) {
-        sample.y = sample[mode];
+        sample.y = percentile;
       }
     }
   }

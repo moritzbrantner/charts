@@ -2,6 +2,7 @@ import type { BinnedSeriesIndexOptions } from "../data-density";
 import type {
   BinnedSeriesBackend,
   ChartDensityCacheOptions,
+  ChartDensityPreparationMode,
   ChartDensityWarmupScheduler,
   ChartMetricRecord,
   ChartPercentileMode,
@@ -11,6 +12,7 @@ export type StaticChartDensityIndexOptions<TProperties = Record<string, unknown>
   BinnedSeriesIndexOptions<TProperties> & {
     backend?: BinnedSeriesBackend;
     cache?: ChartDensityCacheOptions;
+    preparation?: ChartDensityPreparationMode;
     rangeAggregate?: boolean;
   };
 
