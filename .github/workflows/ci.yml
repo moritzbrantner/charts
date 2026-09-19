@@ -201,10 +201,11 @@ jobs:
       artifact_key: charts-package-v1
       node_version: "24"
       bun_version: "1.3.14"
+      rust_toolchain: stable
       cache_bun: true
       bun_cache_dependency_path: bun.lock
-      setup_command: bun install --frozen-lockfile
-      build_command: bun run build
+      setup_command: bun install --frozen-lockfile && if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
+      build_command: bun run build:wasm && bun run build
       artifact_paths: dist
       reuse_across_runs: true
       artifact_retention_days: 7

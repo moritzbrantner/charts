@@ -39,6 +39,8 @@ try {
   assertFile(path.join(packageDir, "dist", "index.d.ts"));
   assertFile(path.join(packageDir, "dist", "worker.js"));
   assertFile(path.join(packageDir, "dist", "styles.css"));
+  assertFile(path.join(packageDir, "dist", "wasm", "charts_density_wasm.js"));
+  assertFile(path.join(packageDir, "dist", "wasm", "charts_density_wasm_bg.wasm"));
 
   const packageJson = JSON.parse(readFileSync(path.join(packageDir, "package.json"), "utf8"));
 
@@ -91,10 +93,11 @@ try {
   writeFileSync(
     path.join(consumerDir, "import-check.mjs"),
     [
-      'import { CHART_VALUE_MODE_DEFINITIONS, createChartDensityIndex } from "@moritzbrantner/charts";',
+      'import { CHART_VALUE_MODE_DEFINITIONS, createChartDensityIndex, loadChartWasmKernel } from "@moritzbrantner/charts";',
       "",
       "const index = createChartDensityIndex([{ id: 'a', x: 0, y: 2 }], { backend: 'hybrid-js' });",
       "const series = index.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
+      "await loadChartWasmKernel();",
       "const wasmIndex = createChartDensityIndex([{ id: 'b', metrics: { count: 1 }, x: 0, y: 4 }], { backend: 'wasm-index' });",
       "const wasmSeries = wasmIndex.getChartSeries({ targetBinCount: 1, xDomain: [0, 1] });",
       "",
