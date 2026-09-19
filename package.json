@@ -94,6 +94,7 @@
     "api:check": "bun run build && node ./scripts/check-api-report.mjs",
     "audit:production": "node ./scripts/audit-production.mjs",
     "bench:large-data": "bun run bench:prepare-wasm && node ./scripts/benchmark-large-data.mjs",
+    "bench:large-data:built": "node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:full-json": "bun run bench:prepare-wasm && CHARTS_BENCH_FULL=1 CHARTS_BENCH_JSON=test-results/bench-large-data-full.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:json": "bun run bench:prepare-wasm && CHARTS_BENCH_JSON=test-results/bench-large-data.json node ./scripts/benchmark-large-data.mjs",
     "bench:large-data:profile": "bun run bench:prepare-wasm && CHARTS_BENCH_PROFILE=1 CHARTS_BENCH_JSON=test-results/bench-large-data-profile.json node ./scripts/benchmark-large-data.mjs",
