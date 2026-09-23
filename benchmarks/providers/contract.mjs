@@ -246,8 +246,8 @@ export function assertComplete(report) {
     }
     if (isInteractionPhase(row.phase)) {
       quantile([row.interactionMs], 0.5);
-      if (row.interactionMs > row.apiMs) {
-        throw new Error(`Interaction callback escaped synchronous dispatch: ${id}`);
+      if (row.interactionMs > row.settledMs) {
+        throw new Error(`Interaction callback escaped measured settlement: ${id}`);
       }
       if (row.interactionCount !== 1 || row.interactionIndex !== contract.interactionIndex) {
         throw new Error(`Wrong interaction callback: ${id}`);
