@@ -1,9 +1,12 @@
 # Browser comparisons with other chart providers
 
 This suite compares the **built public React/SVG components** with pinned
-**Chart.js 4.5.1** and **Apache ECharts 6.0.0** Canvas renderers. It complements
-`bench:large-data`; it does not replace the JS/WASM kernel, cache, histogram,
-preparation-policy, or progressive-promotion benchmarks.
+**Chart.js 4.5.1** and **Apache ECharts 6.0.0** Canvas renderers. It treats
+module-warm **first render** and native scatter-point **selection latency** as
+first-class workloads alongside updates, viewport replacement, resize, and
+cleanup. It complements `bench:large-data`; it does not replace the JS/WASM
+kernel, cache, histogram, preparation-policy, or progressive-promotion
+benchmarks.
 
 ## Run
 
@@ -53,24 +56,36 @@ DPR 1, fixed fixture domains, no legends or tooltips, and no animations or expli
 decimation. Scenarios retain every input point; none gets a hidden density-index
 or preaggregation advantage. Native renderer path optimizations remain enabled.
 
-A trial mounts the chart, replaces its values, replaces the visible dataset with
-the middle-quarter window, resizes to 480 by 480, and destroys the instance.
-**Window is a shared data replacement, not native gesture/zoom latency.** There
-is no claim of hover throughput, scrolling FPS, streaming throughput, memory
-leak freedom, or mobile performance.
+A trial measures the chart's **module-warm first render**. Scatter trials then
+dispatch one exact point-selection click through each provider's public/native
+event path and require exactly one callback for the intended point. The trial
+then replaces values, replaces the visible dataset with the middle-quarter
+window, resizes to 480 by 480, and destroys the instance.
+
+The selection measurement isolates provider hit testing and callback dispatch;
+it deliberately does not include a consumer state update or re-render after the
+callback. **Window is a shared data replacement, not native gesture/zoom
+latency.** There is still no claim of hover throughput, drag/wheel zoom latency,
+scrolling FPS, streaming throughput, memory leak freedom, cold bundle startup,
+or mobile performance.
 
 Fixture generation and checksums occur outside measurements. Provider-specific
 conversion is measured separately. `apiMs` measures synchronous API work.
-`settledMs` includes that call and two subsequent animation-frame boundaries;
-it is a reproducible settling proxy, **not GPU completion or FPS**. ECharts is
-non-progressive, non-lazy, and explicitly flushed. React uses its production
-build and synchronous commits. Two-frame timings have a refresh-rate floor;
-small differences and sub-frame synchronous work need careful interpretation.
-Do not rank asynchronous implementations solely by API submission duration.
+`firstFrameMs` includes that call and the next animation-frame boundary; for
+the mount phase this is the primary **first-render** timing. `settledMs`
+includes two animation-frame boundaries and remains a reproducible settling
+proxy, **not GPU completion or FPS**. Scatter `interactionMs` measures from DOM
+click dispatch to the provider selection callback; selection-target lookup is
+performed before the timer starts. ECharts is non-progressive, non-lazy, and
+explicitly flushed. React uses its production build and synchronous commits.
+Frame-based timings have a refresh-rate floor; small differences and sub-frame
+synchronous work need careful interpretation. Do not rank asynchronous
+implementations solely by API submission duration.
 
 Provider loading, compilation, browser startup, assertions, pixel reads, DOM
-counts, and screenshots are excluded from these intervals. This measures
-**module-warm chart mounting**, not cold page startup or bundle download cost.
+counts, screenshots, and interaction-target lookup are excluded from these
+intervals. The first-render result is therefore **module-warm component
+startup**, not cold page startup, JavaScript download/parse, or bundle-size cost.
 Each provider/trial has a fresh browser context. Runs are sequential and provider
 order rotates deterministically. Warmup samples are discarded; warmup failures
 still fail the run. Browser contexts isolate state but do not promise identical
@@ -89,8 +104,10 @@ After each timed operation, the suite checks all SVG point coordinates or all
 Chart.js model/element coordinates, as well as input counts and values. ECharts
 uses its public option data plus painted-output checks; it does **not** claim an
 independent per-point ECharts rasterization proof. Canvas checks require visible
-blue data marks, not merely an allocated canvas. Replacement/window operations
-must change rendered output. Resize dimensions and DOM cleanup are checked.
+blue data marks, not merely an allocated canvas. Scatter selection must invoke
+exactly one callback for the deterministic target index, and must not trigger an
+extra owned React render. Replacement/window operations must change rendered
+output. Resize dimensions and DOM cleanup are checked.
 
 The dependency-free Node tests prove that dropped providers, duplicate/missing
 trials, failed warmups, unchecked output, wrong fixture hashes, invalid timings,
@@ -103,11 +120,12 @@ pixel-equality assertions.
 ## Reports and optional timing regression checks
 
 `test-results/provider-bench/report.json` retains raw samples, point counts,
-checksums, DOM counts, source commit/dirty status, built-package digest, provider
-versions and byte hashes, harness and lockfile digests, and runner/browser
-metadata. `report.md` shows preparation, API, and settled medians/p95. Screenshots
-cover the first measured mount, window and resize. A partial or failed run is
-explicitly marked and exits nonzero; it cannot become a successful baseline.
+checksums, DOM counts, interaction callback evidence, source commit/dirty status,
+built-package digest, provider versions and byte hashes, harness and lockfile
+digests, and runner/browser metadata. `report.md` shows preparation, API,
+first-frame, settled, and interaction medians/p95. Screenshots cover the first
+measured mount, window and resize. A partial or failed run is explicitly marked
+and exits nonzero; it cannot become a successful baseline.
 
 Retain an accepted report, make a production-code change, rebuild `dist`, then
 run the same command on the same controlled machine:
@@ -118,7 +136,9 @@ bun run bench:providers:compare baseline.json test-results/provider-bench/report
 
 Comparison requires complete matrices, at least five measured trials, identical
 scenario configuration, provider bytes, harness/lockfile identity and environment
-metadata. It compares the owned renderer's median settled time and exits 2 for a
+metadata. It uses the metric that matches the phase: first-frame latency for
+mount/first-render, event-to-callback latency for scatter selection, and settled
+latency for update/window/resize/cleanup. It exits 2 for an owned-renderer
 regression beyond the explicitly selected percentage. It never rewrites or
 relaxes a baseline. Baseline source and `dist` digests may differ intentionally.
 Matching metadata cannot guarantee identical machine load; rerun and inspect raw
