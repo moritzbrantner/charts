@@ -64,7 +64,12 @@ window, resizes to 480 by 480, and destroys the instance.
 
 The selection measurement isolates provider hit testing and callback dispatch;
 it deliberately does not include a consumer state update or re-render after the
-callback. **Window is a shared data replacement, not native gesture/zoom
+callback. Selection runs only through 10,000 points. The harness projects the
+fixture through the smallest shared plot area and chooses a point with at least
+5.5 CSS pixels of separation from every neighbor. Denser fixtures remain useful
+rendering workloads, but their overlapping 5-pixel marks do not have a
+provider-independent hit-test answer, so reporting a selection time there would
+be misleading. **Window is a shared data replacement, not native gesture/zoom
 latency.** There is still no claim of hover throughput, drag/wheel zoom latency,
 scrolling FPS, streaming throughput, memory leak freedom, cold bundle startup,
 or mobile performance.
