@@ -46,6 +46,11 @@ function reactView(data, prepared) {
       });
 }
 
+function renderSvg(data, prepared) {
+  state.renderCalls += 1;
+  flushSync(() => state.chart.render(reactView(data, prepared)));
+}
+
 function chartJsOptions(data) {
   return {
     animation: false,
@@ -100,7 +105,9 @@ function echartsOptions(data, prepared) {
         silent: true,
         lineStyle: { color: "#2563eb", width: 2 },
         itemStyle: { color: "#2563eb", opacity: 0.6 },
-        ...(state.kind === "sparkline" ? { areaStyle: { color: "#2563eb", opacity: 0.16 } } : {}),
+        ...(state.kind === "sparkline"
+          ? { areaStyle: { color: "#2563eb", opacity: 0.16, origin: data.yDomain[0] } }
+          : {}),
       },
     ],
   };
@@ -109,7 +116,7 @@ function echartsOptions(data, prepared) {
 function render(data, prepared, mount) {
   if (state.provider === "charts-svg") {
     if (mount) state.chart = createRoot(host);
-    flushSync(() => state.chart.render(reactView(data, prepared)));
+    renderSvg(data, prepared);
   } else if (state.provider === "chartjs") {
     if (mount) {
       const canvas = document.createElement("canvas");
@@ -219,10 +226,14 @@ function checkCanvas(data) {
       }
     }
   } else {
+    const series = state.chart.getOption().series[0];
     assertPoints(
-      state.chart.getOption().series[0].data.map(([x, y]) => ({ x, y })),
+      series.data.map(([x, y]) => ({ x, y })),
       data.points,
     );
+    if (state.kind === "sparkline" && series.areaStyle.origin !== data.yDomain[0]) {
+      throw new Error("ECharts fill must use the same lower-domain origin");
+    }
   }
   let colored = 0;
   let hash = 2166136261;
@@ -276,6 +287,7 @@ globalThis.providerBench = {
   },
   async step(phase) {
     if (phase !== PHASES[state.phase++]) throw new Error("Unexpected phase order");
+    state.renderCalls = 0;
     const data =
       phase === "mount" ? state.initial : phase === "replace" ? state.replacement : state.windowed;
     const beforePrepare = performance.now();
@@ -289,9 +301,11 @@ globalThis.providerBench = {
       state.height = VIEW.resized;
       host.style.width = `${state.width}px`;
       host.style.height = `${state.height}px`;
-      if (state.provider === "charts-svg")
-        flushSync(() => state.chart.render(reactView(data, prepared)));
-      else if (state.provider === "chartjs") state.chart.resize(state.width, state.height);
+      if (state.provider === "charts-svg") {
+        // The sparkline's fixed viewBox scales through CSS, without new props.
+        // Only the scatter needs new pixel-space geometry for width/height.
+        if (state.kind === "scatter") renderSvg(data, prepared);
+      } else if (state.provider === "chartjs") state.chart.resize(state.width, state.height);
       else {
         state.chart.resize({ width: state.width, height: state.height });
         state.chart.getZr().flush();
@@ -308,6 +322,11 @@ globalThis.providerBench = {
     await frame();
     const settledMs = performance.now() - started;
     // All assertions, pixel reads, and DOM counts are OUTSIDE measured intervals.
+    if (state.provider === "charts-svg") {
+      const expectedCalls =
+        phase === "destroy" || (phase === "resize" && state.kind === "sparkline") ? 0 : 1;
+      if (state.renderCalls !== expectedCalls) throw new Error("Unexpected SVG render work");
+    }
     let fingerprint = "destroyed";
     if (phase === "destroy") {
       if (host.childElementCount) throw new Error("Provider did not clean up its DOM");
@@ -323,6 +342,7 @@ globalThis.providerBench = {
       settledMs,
       prepareMs,
       checked: true,
+      renderCalls: state.renderCalls,
       pointCount: phase === "destroy" ? 0 : data.points.length,
       checksum: data.checksum,
       domNodes: host.querySelectorAll("*").length,
