@@ -167,20 +167,19 @@ test("complete matrix passes and preserves every timing sample", () => {
   const report = complete();
   assertComplete(report);
   const rows = aggregate(report);
-  const phasesPerProvider = KINDS.reduce((total, kind) => total + phasesForKind(kind, 16).length, 0);
+  const phasesPerProvider = KINDS.reduce(
+    (total, kind) => total + phasesForKind(kind, 16).length,
+    0,
+  );
   assert.equal(rows.length, PROVIDERS.length * phasesPerProvider);
   assert.ok(
     rows.every(
       (row) =>
-        row.apiMs.count === 5 &&
-        row.firstFrameMs.median === 12 &&
-        row.settledMs.median === 20,
+        row.apiMs.count === 5 && row.firstFrameMs.median === 12 && row.settledMs.median === 20,
     ),
   );
   assert.ok(
-    rows
-      .filter((row) => row.phase === "select")
-      .every((row) => row.interactionMs?.median === 3),
+    rows.filter((row) => row.phase === "select").every((row) => row.interactionMs?.median === 3),
   );
 });
 

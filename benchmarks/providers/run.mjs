@@ -69,8 +69,7 @@ function markdown(report) {
     "Times are milliseconds. API = synchronous work only; first frame = API plus the next animation-frame boundary; settled = API plus two frame boundaries. Mount is the module-warm first-render workload. Interaction = DOM click dispatch start to the provider selection callback. Preparation and checks are separate. Comparisons are advisory, not an automatic CI timing gate.\n\n";
   result +=
     "| Scenario | Points | Provider | Operation | Prepare median | API median / p95 | First frame median / p95 | Settled median / p95 | Interaction median / p95 | n |\n";
-  result +=
-    "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n";
+  result += "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n";
   for (const row of aggregate(report)) {
     const format = (value) => value.toFixed(3);
     const formatSummary = (summary) =>

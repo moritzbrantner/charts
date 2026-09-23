@@ -457,7 +457,8 @@ globalThis.providerBench = {
     }
     state.renderCalls = 0;
     state.interaction = null;
-    const data = phase === "mount" ? state.initial : phase === "replace" ? state.replacement : state.windowed;
+    const data =
+      phase === "mount" ? state.initial : phase === "replace" ? state.replacement : state.windowed;
     const beforePrepare = performance.now();
     const prepared = ["mount", "replace", "window"].includes(phase)
       ? prepare(data)
@@ -521,4 +522,5 @@ globalThis.providerBench = {
       checksum: data.checksum,
       domNodes: host.querySelectorAll("*").length,
     };
-  }};
+  },
+};

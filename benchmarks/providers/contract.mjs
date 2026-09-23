@@ -299,7 +299,11 @@ export function compare(baseline, current, percent = 15) {
           : "settledMs";
     const currentMetric = row[metric]?.median;
     const previousMetric = before.get(row.id)?.[metric]?.median;
-    if (!Number.isFinite(currentMetric) || !Number.isFinite(previousMetric) || previousMetric <= 0) {
+    if (
+      !Number.isFinite(currentMetric) ||
+      !Number.isFinite(previousMetric) ||
+      previousMetric <= 0
+    ) {
       throw new Error(`Missing or zero ${metric} baseline: ${row.id}`);
     }
     const changePercent = ((currentMetric - previousMetric) / previousMetric) * 100;
