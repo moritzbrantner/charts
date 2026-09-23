@@ -126,7 +126,12 @@
     "test:visual": "playwright test -c playwright.visual.config.ts",
     "quality:pages": "bun run test:unlighthouse",
     "version-packages": "changeset version",
-    "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run performance:contract && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
-    "verify:release": "bun run verify && bun run test:wasm && bun run bench:large-data"
+    "verify": "bun run check-types && bun run lint && bun run format:check && bun run docs:check && bun run test:coverage && bun run performance:contract && bun run bench:providers:test && bun run api:check && bun run build:examples && bun run pack:check && bun run test:e2e && bun run build:storybook && bun run test:storybook && bun run test:visual && bun run test:unlighthouse",
+    "verify:release": "bun run verify && bun run test:wasm && bun run bench:large-data",
+    "bench:providers": "node benchmarks/providers/run.mjs",
+    "bench:providers:compare": "node benchmarks/providers/run.mjs --compare",
+    "bench:providers:full": "node benchmarks/providers/run.mjs --full",
+    "bench:providers:smoke": "node benchmarks/providers/run.mjs --smoke",
+    "bench:providers:test": "node --test benchmarks/providers/contract.test.mjs"
   }
 }

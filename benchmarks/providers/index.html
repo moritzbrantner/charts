@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chart provider benchmark fixture</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --background: #ffffff;
+        --border: #aaaaaa;
+      }
+      body {
+        margin: 0;
+        background: white;
+      }
+      #chart {
+        overflow: hidden;
+      }
+      #chart.charts-provider > div {
+        width: 100%;
+        height: 100%;
+        padding: 0;
+        border: 0;
+      }
+      #chart.charts-provider svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+      #chart.charts-provider polyline[stroke] {
+        vector-effect: non-scaling-stroke;
+        stroke-width: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <main id="chart" aria-label="Benchmark chart"></main>
+    <script type="module" src="./browser.mjs"></script>
+  </body>
+</html>
