@@ -224,10 +224,10 @@ for (const [name, mutate] of [
     },
   ],
   [
-    "interaction callback after synchronous dispatch",
+    "interaction callback after measured settlement",
     (report) => {
       const row = report.samples.find((sample) => sample.phase === "select");
-      row.interactionMs = row.apiMs + 1;
+      row.interactionMs = row.settledMs + 1;
     },
   ],
   [
