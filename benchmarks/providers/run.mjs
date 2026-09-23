@@ -13,7 +13,7 @@ import {
   integer,
   KINDS,
   order,
-  PHASES,
+  phasesForKind,
   SCHEMA,
   VIEW,
 } from "./contract.mjs";
@@ -66,13 +66,17 @@ function markdown(report) {
   result += `Status: **${report.failures.length ? "FAILED / INCOMPLETE" : report.status}**. `;
   result += `${report.config.repeats} measured trials, ${report.config.warmups} discarded warmups.\n\n`;
   result +=
-    "Times are milliseconds. API = synchronous work only; settled = API plus two animation-frame boundaries, not GPU completion or FPS. Preparation and checks are separate. Comparisons are advisory, not an automatic CI timing gate.\n\n";
+    "Times are milliseconds. API = synchronous work only; first frame = API plus the next animation-frame boundary; settled = API plus two frame boundaries. Mount is the module-warm first-render workload. Interaction = DOM click dispatch start to the provider selection callback. Preparation and checks are separate. Comparisons are advisory, not an automatic CI timing gate.\n\n";
   result +=
-    "| Scenario | Points | Provider | Operation | Prepare median | API median / p95 | Settled median / p95 | n |\n";
-  result += "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: |\n";
+    "| Scenario | Points | Provider | Operation | Prepare median | API median / p95 | First frame median / p95 | Settled median / p95 | Interaction median / p95 | n |\n";
+  result +=
+    "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |\n";
   for (const row of aggregate(report)) {
     const format = (value) => value.toFixed(3);
-    result += `| ${row.kind} | ${row.size} | ${row.provider} | ${row.phase} | ${format(row.prepareMs.median)} | ${format(row.apiMs.median)} / ${format(row.apiMs.p95)} | ${format(row.settledMs.median)} / ${format(row.settledMs.p95)} | ${row.settledMs.count} |\n`;
+    const formatSummary = (summary) =>
+      summary ? `${format(summary.median)} / ${format(summary.p95)}` : "—";
+    const operation = row.phase === "mount" ? "first-render" : row.phase;
+    result += `| ${row.kind} | ${row.size} | ${row.provider} | ${operation} | ${format(row.prepareMs.median)} | ${formatSummary(row.apiMs)} | ${formatSummary(row.firstFrameMs)} | ${formatSummary(row.settledMs)} | ${formatSummary(row.interactionMs)} | ${row.settledMs.count} |\n`;
   }
   if (report.failures.length)
     result += `\n## Failures\n\n\`\`\`json\n${JSON.stringify(report.failures, null, 2)}\n\`\`\`\n`;
@@ -203,8 +207,8 @@ async function run() {
     report.protocol = {
       version: SCHEMA,
       fixture: "lcg-sorted-xy-v1",
-      policy: "raw-points-no-animation-no-explicit-decimation-v1",
-      timings: "adapter-prepare+sync-api+two-raf;checks-outside-v1",
+      policy: "raw-points-no-animation-no-explicit-decimation+scatter-select-v2",
+      timings: "adapter-prepare+sync-api+first-raf+two-raf+event-callback;checks-outside-v2",
       vendors: Object.fromEntries(
         Object.entries(vendors).map(([id, { script, ...record }]) => {
           void script;
@@ -250,7 +254,7 @@ async function run() {
                   globalThis.providerBench.setup(provider, kind, size, seed),
                 { provider, kind, size, seed: config.seed },
               );
-              for (const phase of PHASES) {
+              for (const phase of phasesForKind(kind)) {
                 const sample = await deadline(
                   page.evaluate((phase) => globalThis.providerBench.step(phase), phase),
                 );
