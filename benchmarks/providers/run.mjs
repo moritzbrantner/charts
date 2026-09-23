@@ -254,7 +254,7 @@ async function run() {
                   globalThis.providerBench.setup(provider, kind, size, seed),
                 { provider, kind, size, seed: config.seed },
               );
-              for (const phase of phasesForKind(kind)) {
+              for (const phase of phasesForKind(kind, size)) {
                 const sample =
                   phase === "select"
                     ? await deadline(
