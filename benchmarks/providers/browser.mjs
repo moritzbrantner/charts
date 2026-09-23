@@ -189,7 +189,7 @@ function render(data, prepared, mount) {
 }
 
 function selectionTarget(data) {
-  const index = interactionTarget(data.points.length);
+  const index = interactionTarget(data);
   const point = data.points[index];
   if (state.provider === "charts-svg") {
     const element = host.querySelectorAll("circle")[index];
@@ -400,7 +400,7 @@ globalThis.providerBench = {
     return [initial.checksum, replacement.checksum, windowed.checksum];
   },
   beginSelect() {
-    if ("select" !== phasesForKind(state.kind)[state.phase++]) {
+    if ("select" !== phasesForKind(state.kind, state.initial.points.length)[state.phase++]) {
       throw new Error("Unexpected phase order");
     }
     state.renderCalls = 0;
@@ -452,7 +452,7 @@ globalThis.providerBench = {
   },
   async step(phase) {
     if (phase === "select") throw new Error("Selection requires real browser input");
-    if (phase !== phasesForKind(state.kind)[state.phase++]) {
+    if (phase !== phasesForKind(state.kind, state.initial.points.length)[state.phase++]) {
       throw new Error("Unexpected phase order");
     }
     state.renderCalls = 0;
