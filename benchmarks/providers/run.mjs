@@ -44,9 +44,9 @@ function git(...command) {
 async function hashTree(directory, extensions) {
   const hash = createHash("sha256");
   async function visit(relative = "") {
-    for (const entry of (
-      await readdir(path.join(directory, relative), { withFileTypes: true })
-    ).sort((a, b) => a.name.localeCompare(b.name))) {
+    const entries = await readdir(path.join(directory, relative), { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
       const name = path.join(relative, entry.name);
       if (entry.isDirectory()) await visit(name);
       else if (!extensions || extensions.some((extension) => name.endsWith(extension))) {
@@ -258,15 +258,12 @@ async function run() {
                 if (trial >= 0)
                   report.samples.push({ kind, size, provider, phase, trial, ...sample });
                 if (trial === 0 && ["mount", "window", "resize"].includes(phase)) {
-                  await page
-                    .locator("#chart")
-                    .screenshot({
-                      path: path.join(
-                        output,
-                        "screenshots",
-                        `${kind}-${size}-${provider}-${phase}.png`,
-                      ),
-                    });
+                  const screenshotPath = path.join(
+                    output,
+                    "screenshots",
+                    `${kind}-${size}-${provider}-${phase}.png`,
+                  );
+                  await page.locator("#chart").screenshot({ path: screenshotPath });
                 }
               }
               console.log(
