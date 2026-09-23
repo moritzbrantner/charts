@@ -255,9 +255,20 @@ async function run() {
                 { provider, kind, size, seed: config.seed },
               );
               for (const phase of phasesForKind(kind)) {
-                const sample = await deadline(
-                  page.evaluate((phase) => globalThis.providerBench.step(phase), phase),
-                );
+                const sample =
+                  phase === "select"
+                    ? await deadline(
+                        (async () => {
+                          const target = await page.evaluate(() =>
+                            globalThis.providerBench.beginSelect(),
+                          );
+                          await page.mouse.click(target.clientX, target.clientY);
+                          return page.evaluate(() => globalThis.providerBench.endSelect());
+                        })(),
+                      )
+                    : await deadline(
+                        page.evaluate((phase) => globalThis.providerBench.step(phase), phase),
+                      );
                 if (errors.length) throw new Error(errors.join("; "));
                 if (trial >= 0)
                   report.samples.push({ kind, size, provider, phase, trial, ...sample });
