@@ -81,8 +81,10 @@ the mount phase this is the primary **first-render** timing. `settledMs`
 includes two animation-frame boundaries and remains a reproducible settling
 proxy, **not GPU completion or FPS**. Scatter `interactionMs` measures from DOM
 click dispatch to the provider selection callback; selection-target lookup is
-performed before the timer starts. ECharts is non-progressive, non-lazy, and
-explicitly flushed. React uses its production build and synchronous commits.
+performed before the timer starts. Providers may legitimately defer hit testing
+or callbacks to a frame, so the contract requires the callback within the
+two-frame measured settlement window rather than during DOM event propagation.
+ECharts is non-progressive, non-lazy, and explicitly flushed. React uses its production build and synchronous commits.
 Frame-based timings have a refresh-rate floor; small differences and sub-frame
 synchronous work need careful interpretation. Do not rank asynchronous
 implementations solely by API submission duration.
