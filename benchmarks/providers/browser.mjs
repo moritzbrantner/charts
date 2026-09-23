@@ -4,12 +4,28 @@ import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { ChartSampleSparkline, ChartScatterSvg } from "../../dist/react.js";
 import "../../dist/styles.css";
-import { assertPoints, describe, fixture, KINDS, PHASES, PROVIDERS, VIEW } from "./contract.mjs";
+import {
+  assertPoints,
+  describe,
+  fixture,
+  interactionTarget,
+  KINDS,
+  phasesForKind,
+  PROVIDERS,
+  VIEW,
+} from "./contract.mjs";
 
 const host = document.getElementById("chart");
 let state;
 const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
 const close = (actual, expected) => Math.abs(actual - expected) < 0.02;
+
+function recordInteraction(index) {
+  if (!state.interaction) return;
+  state.interaction.count += 1;
+  state.interaction.index = index;
+  state.interaction.callbackAt ??= performance.now();
+}
 
 function prepare(data) {
   if (state.provider === "charts-svg") {
@@ -41,6 +57,7 @@ function reactView(data, prepared) {
         xAxis: false,
         yAxis: false,
         legend: [],
+        onPointSelect: (point) => recordInteraction(Number(point.id)),
         width: state.width,
         height: state.height,
       });
@@ -58,7 +75,15 @@ function chartJsOptions(data) {
     devicePixelRatio: VIEW.deviceScaleFactor,
     parsing: false,
     normalized: true,
-    events: [],
+    events: state.kind === "scatter" ? ["click"] : [],
+    interaction: {
+      mode: "nearest",
+      intersect: false,
+      axis: "xy",
+    },
+    onClick: (_event, elements) => {
+      if (state.kind === "scatter" && elements[0]) recordInteraction(elements[0].index);
+    },
     plugins: {
       legend: { display: false },
       tooltip: { enabled: false },
@@ -102,7 +127,7 @@ function echartsOptions(data, prepared) {
         sampling: "none",
         showSymbol: false,
         symbolSize: 5,
-        silent: true,
+        silent: state.kind !== "scatter",
         lineStyle: { color: "#2563eb", width: 2 },
         itemStyle: { color: "#2563eb", opacity: 0.6 },
         ...(state.kind === "sparkline"
@@ -147,16 +172,78 @@ function render(data, prepared, mount) {
       state.chart.update("none");
     }
   } else {
-    if (mount)
+    if (mount) {
       state.chart = globalThis.echarts.init(host, null, {
         renderer: "canvas",
         width: state.width,
         height: state.height,
         devicePixelRatio: VIEW.deviceScaleFactor,
       });
+      if (state.kind === "scatter") {
+        state.chart.on("click", (event) => recordInteraction(event.dataIndex));
+      }
+    }
     state.chart.setOption(echartsOptions(data, prepared), { lazyUpdate: false });
     state.chart.getZr().flush();
   }
+}
+
+function selectionTarget(data) {
+  const index = interactionTarget(data.points.length);
+  const point = data.points[index];
+  if (state.provider === "charts-svg") {
+    const element = host.querySelectorAll("circle")[index];
+    if (!element) throw new Error("Missing SVG interaction target");
+    const bounds = element.getBoundingClientRect();
+    return {
+      element,
+      index,
+      clientX: bounds.left + bounds.width / 2,
+      clientY: bounds.top + bounds.height / 2,
+    };
+  }
+  if (state.provider === "chartjs") {
+    const element = state.chart.getDatasetMeta(0).data[index];
+    const canvas = state.chart.canvas;
+    const bounds = canvas.getBoundingClientRect();
+    if (!element || !Number.isFinite(element.x) || !Number.isFinite(element.y)) {
+      throw new Error("Missing Chart.js interaction target");
+    }
+    return {
+      element: canvas,
+      index,
+      clientX: bounds.left + element.x,
+      clientY: bounds.top + element.y,
+    };
+  }
+  const pixel = state.chart.convertToPixel({ seriesIndex: 0 }, [point.x, point.y]);
+  const element = host.querySelector("canvas");
+  if (
+    !element ||
+    !Array.isArray(pixel) ||
+    !Number.isFinite(pixel[0]) ||
+    !Number.isFinite(pixel[1])
+  ) {
+    throw new Error("Missing ECharts interaction target");
+  }
+  const bounds = element.getBoundingClientRect();
+  return {
+    element,
+    index,
+    clientX: bounds.left + pixel[0],
+    clientY: bounds.top + pixel[1],
+  };
+}
+
+function dispatchSelection(target) {
+  target.element.dispatchEvent(
+    new globalThis.MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      clientX: target.clientX,
+      clientY: target.clientY,
+    }),
+  );
 }
 
 function checkSvg(data) {
@@ -286,17 +373,26 @@ globalThis.providerBench = {
     return [initial.checksum, replacement.checksum, windowed.checksum];
   },
   async step(phase) {
-    if (phase !== PHASES[state.phase++]) throw new Error("Unexpected phase order");
+    if (phase !== phasesForKind(state.kind)[state.phase++]) throw new Error("Unexpected phase order");
     state.renderCalls = 0;
+    state.interaction = null;
     const data =
-      phase === "mount" ? state.initial : phase === "replace" ? state.replacement : state.windowed;
+      phase === "mount" || phase === "select"
+        ? state.initial
+        : phase === "replace"
+          ? state.replacement
+          : state.windowed;
     const beforePrepare = performance.now();
     const prepared = ["mount", "replace", "window"].includes(phase)
       ? prepare(data)
       : state.prepared;
     const prepareMs = performance.now() - beforePrepare;
+    const target = phase === "select" ? selectionTarget(data) : null;
+    if (target) state.interaction = { callbackAt: null, count: 0, index: null };
     const started = performance.now();
-    if (phase === "resize") {
+    if (phase === "select") {
+      dispatchSelection(target);
+    } else if (phase === "resize") {
       state.width = VIEW.resized;
       state.height = VIEW.resized;
       host.style.width = `${state.width}px`;
@@ -319,13 +415,32 @@ globalThis.providerBench = {
     } else render(data, prepared, phase === "mount");
     const apiMs = performance.now() - started;
     await frame();
+    const firstFrameMs = performance.now() - started;
     await frame();
     const settledMs = performance.now() - started;
+    const interactionMs =
+      state.interaction?.callbackAt === null || state.interaction?.callbackAt === undefined
+        ? null
+        : state.interaction.callbackAt - started;
     // All assertions, pixel reads, and DOM counts are OUTSIDE measured intervals.
     if (state.provider === "charts-svg") {
       const expectedCalls =
-        phase === "destroy" || (phase === "resize" && state.kind === "sparkline") ? 0 : 1;
+        phase === "destroy" ||
+        phase === "select" ||
+        (phase === "resize" && state.kind === "sparkline")
+          ? 0
+          : 1;
       if (state.renderCalls !== expectedCalls) throw new Error("Unexpected SVG render work");
+    }
+    if (phase === "select") {
+      if (
+        !state.interaction ||
+        state.interaction.count !== 1 ||
+        state.interaction.index !== target.index ||
+        interactionMs === null
+      ) {
+        throw new Error("Provider did not report the selected scatter point exactly once");
+      }
     }
     let fingerprint = "destroyed";
     if (phase === "destroy") {
@@ -337,10 +452,17 @@ globalThis.providerBench = {
     }
     state.prepared = prepared;
     state.fingerprint = fingerprint;
+    const interactionCount = state.interaction?.count ?? 0;
+    const interactionIndex = state.interaction?.index ?? null;
+    state.interaction = null;
     return {
       apiMs,
+      firstFrameMs,
       settledMs,
       prepareMs,
+      interactionMs,
+      interactionCount,
+      interactionIndex,
       checked: true,
       renderCalls: state.renderCalls,
       pointCount: phase === "destroy" ? 0 : data.points.length,
