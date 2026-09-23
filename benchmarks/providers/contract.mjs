@@ -1,7 +1,24 @@
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 export const PROVIDERS = ["charts-svg", "chartjs", "echarts"];
 export const KINDS = ["sparkline", "scatter"];
-export const PHASES = ["mount", "replace", "window", "resize", "destroy"];
+export const PHASES = ["mount", "select", "replace", "window", "resize", "destroy"];
+export const INTERACTION_PHASES = ["select"];
+
+export function phasesForKind(kind) {
+  if (!KINDS.includes(kind)) throw new Error(`Unknown benchmark kind: ${kind}`);
+  return kind === "scatter"
+    ? PHASES
+    : PHASES.filter((phase) => !INTERACTION_PHASES.includes(phase));
+}
+
+export function isInteractionPhase(phase) {
+  return INTERACTION_PHASES.includes(phase);
+}
+
+export function interactionTarget(size) {
+  integer(size, "size", 8);
+  return Math.floor((size - 1) * 0.61);
+}
 export const VIEW = { width: 600, height: 600, resized: 480, deviceScaleFactor: 1 };
 export const VENDORS = {
   chartjs: { name: "chart.js", version: "4.5.1", entry: "package/dist/chart.umd.js" },
@@ -122,8 +139,12 @@ export function aggregate(report) {
       provider,
       phase,
       apiMs: summarize(rows.map((row) => row.apiMs)),
+      firstFrameMs: summarize(rows.map((row) => row.firstFrameMs)),
       settledMs: summarize(rows.map((row) => row.settledMs)),
       prepareMs: summarize(rows.map((row) => row.prepareMs)),
+      interactionMs: rows.every((row) => row.interactionMs === null)
+        ? null
+        : summarize(rows.map((row) => row.interactionMs)),
     };
   });
 }
@@ -144,12 +165,18 @@ export function assertComplete(report) {
         replacement.points.slice(Math.floor(size / 4), Math.floor(size / 2)),
       );
       for (const provider of PROVIDERS)
-        for (const phase of PHASES) {
-          const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
+        for (const phase of phasesForKind(kind)) {
+          const data =
+            phase === "mount" || phase === "select"
+              ? initial
+              : phase === "replace"
+                ? replacement
+                : windowed;
           for (let trial = 0; trial < report.config.repeats; trial += 1) {
             expected.set(`${key({ kind, size, provider, phase })}/${trial}`, {
               pointCount: phase === "destroy" ? 0 : data.points.length,
               checksum: data.checksum,
+              interactionIndex: phase === "select" ? interactionTarget(size) : null,
             });
           }
         }
@@ -159,7 +186,20 @@ export function assertComplete(report) {
     const id = `${key(row)}/${row.trial}`;
     const contract = expected.get(id);
     if (!expected.delete(id)) throw new Error(`Unexpected or duplicate sample: ${id}`);
-    for (const field of ["apiMs", "settledMs", "prepareMs"]) quantile([row[field]], 0.5);
+    for (const field of ["apiMs", "firstFrameMs", "settledMs", "prepareMs"])
+      quantile([row[field]], 0.5);
+    if (isInteractionPhase(row.phase)) {
+      quantile([row.interactionMs], 0.5);
+      if (row.interactionCount !== 1 || row.interactionIndex !== contract.interactionIndex) {
+        throw new Error(`Wrong interaction callback: ${id}`);
+      }
+    } else if (
+      row.interactionMs !== null ||
+      row.interactionCount !== 0 ||
+      row.interactionIndex !== null
+    ) {
+      throw new Error(`Unexpected interaction evidence: ${id}`);
+    }
     if (!row.checked) throw new Error(`Unchecked sample: ${id}`);
     if (row.pointCount !== contract.pointCount || row.checksum !== contract.checksum) {
       throw new Error(`Wrong fixture or point count: ${id}`);
@@ -192,9 +232,18 @@ export function compare(baseline, current, percent = 15) {
   const before = new Map(aggregate(baseline).map((row) => [row.id, row]));
   return aggregate(current).flatMap((row) => {
     if (row.provider !== "charts-svg") return [];
-    const previous = before.get(row.id).settledMs.median;
-    if (previous <= 0) throw new Error(`Zero baseline is inconclusive: ${row.id}`);
-    const changePercent = ((row.settledMs.median - previous) / previous) * 100;
-    return [{ id: row.id, changePercent, regression: changePercent > percent }];
+    const metric =
+      row.phase === "select"
+        ? "interactionMs"
+        : row.phase === "mount"
+          ? "firstFrameMs"
+          : "settledMs";
+    const currentMetric = row[metric]?.median;
+    const previousMetric = before.get(row.id)?.[metric]?.median;
+    if (!Number.isFinite(currentMetric) || !Number.isFinite(previousMetric) || previousMetric <= 0) {
+      throw new Error(`Missing or zero ${metric} baseline: ${row.id}`);
+    }
+    const changePercent = ((currentMetric - previousMetric) / previousMetric) * 100;
+    return [{ id: row.id, metric, changePercent, regression: changePercent > percent }];
   });
 }
