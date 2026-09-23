@@ -66,7 +66,7 @@ The selection measurement isolates provider hit testing and callback dispatch;
 it deliberately does not include a consumer state update or re-render after the
 callback. Selection runs only through 10,000 points. The harness projects the
 fixture through the smallest shared plot area and chooses a point with at least
-5.5 CSS pixels of separation from every neighbor. Denser fixtures remain useful
+6.25 CSS pixels of separation from every neighbor. Denser fixtures remain useful
 rendering workloads, but their overlapping 5-pixel marks do not have a
 provider-independent hit-test answer, so reporting a selection time there would
 be misleading. **Window is a shared data replacement, not native gesture/zoom
