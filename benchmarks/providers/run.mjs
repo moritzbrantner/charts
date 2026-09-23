@@ -6,7 +6,17 @@ import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { aggregate, assertComplete, compare, integer, KINDS, order, PHASES, SCHEMA, VIEW } from "./contract.mjs";
+import {
+  aggregate,
+  assertComplete,
+  compare,
+  integer,
+  KINDS,
+  order,
+  PHASES,
+  SCHEMA,
+  VIEW,
+} from "./contract.mjs";
 import { digest, prepareVendors } from "./vendor.mjs";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -20,14 +30,23 @@ function option(name, fallback) {
 }
 
 function git(...command) {
-  try { return execFileSync("git", command, { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim(); }
-  catch { return null; }
+  try {
+    return execFileSync("git", command, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
 }
 
 async function hashTree(directory, extensions) {
   const hash = createHash("sha256");
   async function visit(relative = "") {
-    for (const entry of (await readdir(path.join(directory, relative), { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    for (const entry of (
+      await readdir(path.join(directory, relative), { withFileTypes: true })
+    ).sort((a, b) => a.name.localeCompare(b.name))) {
       const name = path.join(relative, entry.name);
       if (entry.isDirectory()) await visit(name);
       else if (!extensions || extensions.some((extension) => name.endsWith(extension))) {
@@ -46,38 +65,67 @@ function markdown(report) {
   let result = "# Chart provider benchmark\n\n";
   result += `Status: **${report.failures.length ? "FAILED / INCOMPLETE" : report.status}**. `;
   result += `${report.config.repeats} measured trials, ${report.config.warmups} discarded warmups.\n\n`;
-  result += "Times are milliseconds. API = synchronous work only; settled = API plus two animation-frame boundaries, not GPU completion or FPS. Preparation and checks are separate. Comparisons are advisory, not an automatic CI timing gate.\n\n";
-  result += "| Scenario | Points | Provider | Operation | Prepare median | API median / p95 | Settled median / p95 | n |\n";
+  result +=
+    "Times are milliseconds. API = synchronous work only; settled = API plus two animation-frame boundaries, not GPU completion or FPS. Preparation and checks are separate. Comparisons are advisory, not an automatic CI timing gate.\n\n";
+  result +=
+    "| Scenario | Points | Provider | Operation | Prepare median | API median / p95 | Settled median / p95 | n |\n";
   result += "| --- | ---: | --- | --- | ---: | ---: | ---: | ---: |\n";
   for (const row of aggregate(report)) {
     const format = (value) => value.toFixed(3);
     result += `| ${row.kind} | ${row.size} | ${row.provider} | ${row.phase} | ${format(row.prepareMs.median)} | ${format(row.apiMs.median)} / ${format(row.apiMs.p95)} | ${format(row.settledMs.median)} / ${format(row.settledMs.p95)} | ${row.settledMs.count} |\n`;
   }
-  if (report.failures.length) result += `\n## Failures\n\n\`\`\`json\n${JSON.stringify(report.failures, null, 2)}\n\`\`\`\n`;
-  result += "\nRead benchmarks/providers/README.md for feature differences, correctness coverage, and interpretation limits.\n";
+  if (report.failures.length)
+    result += `\n## Failures\n\n\`\`\`json\n${JSON.stringify(report.failures, null, 2)}\n\`\`\`\n`;
+  result +=
+    "\nRead benchmarks/providers/README.md for feature differences, correctness coverage, and interpretation limits.\n";
   return result;
 }
 
 async function deadline(operation, milliseconds = 45_000) {
   let timer;
   try {
-    return await Promise.race([operation, new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Browser operation exceeded ${milliseconds} ms`)), milliseconds);
-    })]);
-  } finally { clearTimeout(timer); }
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Browser operation exceeded ${milliseconds} ms`)),
+          milliseconds,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function serve(directory) {
-  const mime = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".wasm": "application/wasm" };
+  const mime = {
+    ".html": "text/html",
+    ".js": "text/javascript",
+    ".css": "text/css",
+    ".wasm": "application/wasm",
+  };
   const server = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url, "http://localhost").pathname);
       const filename = path.resolve(directory, `.${pathname === "/" ? "/index.html" : pathname}`);
       const relative = path.relative(directory, filename);
-      if (relative.startsWith("..") || path.isAbsolute(relative) || !(await stat(filename)).isFile()) throw new Error("Not found");
-      response.writeHead(200, { "Content-Type": mime[path.extname(filename)] ?? "application/octet-stream", "Cache-Control": "no-store" });
-      createReadStream(filename).on("error", () => response.destroy()).pipe(response);
-    } catch { response.writeHead(404).end(); }
+      if (
+        relative.startsWith("..") ||
+        path.isAbsolute(relative) ||
+        !(await stat(filename)).isFile()
+      )
+        throw new Error("Not found");
+      response.writeHead(200, {
+        "Content-Type": mime[path.extname(filename)] ?? "application/octet-stream",
+        "Cache-Control": "no-store",
+      });
+      createReadStream(filename)
+        .on("error", () => response.destroy())
+        .pipe(response);
+    } catch {
+      response.writeHead(404).end();
+    }
   });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
@@ -88,12 +136,22 @@ async function serve(directory) {
 
 async function run() {
   const allowed = /^(--smoke|--full|--(?:out|samples|warmups|seed|sizes)=.+)$/;
-  if (args.some((arg) => !allowed.test(arg)) || (args.includes("--smoke") && args.includes("--full"))) {
-    throw new Error("Usage: node benchmarks/providers/run.mjs [--smoke|--full] [--out=PATH] [--samples=N] [--warmups=N] [--sizes=1000,10000] [--seed=N]");
+  if (
+    args.some((arg) => !allowed.test(arg)) ||
+    (args.includes("--smoke") && args.includes("--full"))
+  ) {
+    throw new Error(
+      "Usage: node benchmarks/providers/run.mjs [--smoke|--full] [--out=PATH] [--samples=N] [--warmups=N] [--sizes=1000,10000] [--seed=N]",
+    );
   }
   const smoke = args.includes("--smoke");
   const config = {
-    sizes: option("sizes", smoke ? "256" : args.includes("--full") ? "1000,10000,100000" : "1000,10000").split(",").map((size) => integer(size, "size", 8)),
+    sizes: option(
+      "sizes",
+      smoke ? "256" : args.includes("--full") ? "1000,10000,100000" : "1000,10000",
+    )
+      .split(",")
+      .map((size) => integer(size, "size", 8)),
     repeats: integer(option("samples", smoke ? 1 : 7), "samples", 1, 100),
     warmups: integer(option("warmups", smoke ? 1 : 2), "warmups", 1, 20),
     seed: integer(option("seed", 20260923), "seed", 0, 4294967295),
@@ -101,7 +159,14 @@ async function run() {
   if (new Set(config.sizes).size !== config.sizes.length) throw new Error("Duplicate sizes");
   const output = path.resolve(option("out", path.join(root, "test-results/provider-bench")));
   await mkdir(output, { recursive: true });
-  const report = { schema: SCHEMA, status: "running", generatedAt: new Date().toISOString(), config, samples: [], failures: [] };
+  const report = {
+    schema: SCHEMA,
+    status: "running",
+    generatedAt: new Date().toISOString(),
+    config,
+    samples: [],
+    failures: [],
+  };
   const checkpoint = async () => {
     await writeFile(path.join(output, "report.json"), `${JSON.stringify(report, null, 2)}\n`);
     await writeFile(path.join(output, "report.md"), markdown(report));
@@ -114,7 +179,10 @@ async function run() {
     const { build } = await import("vite");
     const { chromium } = await import("@playwright/test");
     const built = path.join(root, "test-results/provider-site");
-    await build({ configFile: false, root: directory, logLevel: "warn",
+    await build({
+      configFile: false,
+      root: directory,
+      logLevel: "warn",
       resolve: { dedupe: ["react", "react-dom"] },
       define: { "process.env.NODE_ENV": JSON.stringify("production") },
       build: { outDir: built, emptyOutDir: true, minify: true },
@@ -123,52 +191,103 @@ async function run() {
     server = site.server;
     browser = await chromium.launch({ headless: true });
     report.environment = {
-      platform: process.platform, architecture: process.arch, osRelease: os.release(),
-      cpus: os.cpus().map((cpu) => cpu.model), node: process.version,
-      chromium: browser.version(), headless: true, view: VIEW,
+      platform: process.platform,
+      architecture: process.arch,
+      osRelease: os.release(),
+      cpus: os.cpus().map((cpu) => cpu.model),
+      node: process.version,
+      chromium: browser.version(),
+      headless: true,
+      view: VIEW,
     };
     report.protocol = {
-      version: SCHEMA, fixture: "lcg-sorted-xy-v1", policy: "raw-points-no-animation-no-explicit-decimation-v1",
+      version: SCHEMA,
+      fixture: "lcg-sorted-xy-v1",
+      policy: "raw-points-no-animation-no-explicit-decimation-v1",
       timings: "adapter-prepare+sync-api+two-raf;checks-outside-v1",
-      vendors: Object.fromEntries(Object.entries(vendors).map(([id, { script, ...record }]) => { void script; return [id, record]; })),
+      vendors: Object.fromEntries(
+        Object.entries(vendors).map(([id, { script, ...record }]) => {
+          void script;
+          return [id, record];
+        }),
+      ),
       lockSha256: digest(await readFile(path.join(root, "bun.lock"))),
       harnessSha256: await hashTree(directory, [".mjs", ".html"]),
     };
-    report.source = { commit: git("rev-parse", "HEAD"), dirty: Boolean(git("status", "--porcelain")), distSha256: await hashTree(path.join(root, "dist")) };
+    report.source = {
+      commit: git("rev-parse", "HEAD"),
+      dirty: Boolean(git("status", "--porcelain")),
+      distSha256: await hashTree(path.join(root, "dist")),
+    };
     await mkdir(path.join(output, "screenshots"), { recursive: true });
-    for (const kind of KINDS) for (const size of config.sizes) {
-      for (let round = 0; round < config.warmups + config.repeats; round += 1) {
-        for (const provider of order(round)) {
-          const trial = round - config.warmups;
-          const context = await browser.newContext({ viewport: { width: 800, height: 800 },
-            deviceScaleFactor: VIEW.deviceScaleFactor, reducedMotion: "reduce", locale: "en-US", timezoneId: "UTC" });
-          try {
-            await context.route("**/*", (route) => new URL(route.request().url()).origin === site.origin ? route.continue() : route.abort());
-            const page = await context.newPage();
-            page.setDefaultTimeout(45_000);
-            const errors = [];
-            page.on("pageerror", (error) => errors.push(error.message));
-            await page.goto(site.origin, { waitUntil: "networkidle" });
-            if (vendors[provider]) await page.addScriptTag({ path: vendors[provider].script });
-            await page.waitForFunction(() => Boolean(globalThis.providerBench));
-            await page.evaluate(({ provider, kind, size, seed }) => globalThis.providerBench.setup(provider, kind, size, seed), { provider, kind, size, seed: config.seed });
-            for (const phase of PHASES) {
-              const sample = await deadline(page.evaluate((phase) => globalThis.providerBench.step(phase), phase));
-              if (errors.length) throw new Error(errors.join("; "));
-              if (trial >= 0) report.samples.push({ kind, size, provider, phase, trial, ...sample });
-              if (trial === 0 && ["mount", "window", "resize"].includes(phase)) {
-                await page.locator("#chart").screenshot({ path: path.join(output, "screenshots", `${kind}-${size}-${provider}-${phase}.png`) });
+    for (const kind of KINDS)
+      for (const size of config.sizes) {
+        for (let round = 0; round < config.warmups + config.repeats; round += 1) {
+          for (const provider of order(round)) {
+            const trial = round - config.warmups;
+            const context = await browser.newContext({
+              viewport: { width: 800, height: 800 },
+              deviceScaleFactor: VIEW.deviceScaleFactor,
+              reducedMotion: "reduce",
+              locale: "en-US",
+              timezoneId: "UTC",
+            });
+            try {
+              await context.route("**/*", (route) =>
+                new URL(route.request().url()).origin === site.origin
+                  ? route.continue()
+                  : route.abort(),
+              );
+              const page = await context.newPage();
+              page.setDefaultTimeout(45_000);
+              const errors = [];
+              page.on("pageerror", (error) => errors.push(error.message));
+              await page.goto(site.origin, { waitUntil: "networkidle" });
+              if (vendors[provider]) await page.addScriptTag({ path: vendors[provider].script });
+              await page.waitForFunction(() => Boolean(globalThis.providerBench));
+              await page.evaluate(
+                ({ provider, kind, size, seed }) =>
+                  globalThis.providerBench.setup(provider, kind, size, seed),
+                { provider, kind, size, seed: config.seed },
+              );
+              for (const phase of PHASES) {
+                const sample = await deadline(
+                  page.evaluate((phase) => globalThis.providerBench.step(phase), phase),
+                );
+                if (errors.length) throw new Error(errors.join("; "));
+                if (trial >= 0)
+                  report.samples.push({ kind, size, provider, phase, trial, ...sample });
+                if (trial === 0 && ["mount", "window", "resize"].includes(phase)) {
+                  await page
+                    .locator("#chart")
+                    .screenshot({
+                      path: path.join(
+                        output,
+                        "screenshots",
+                        `${kind}-${size}-${provider}-${phase}.png`,
+                      ),
+                    });
+                }
               }
+              console.log(
+                `${trial < 0 ? "warmup" : `trial ${trial + 1}`} ${kind}/${size}/${provider}: checked`,
+              );
+            } catch (error) {
+              report.failures.push({
+                kind,
+                size,
+                provider,
+                trial,
+                message: error.stack ?? String(error),
+              });
+              console.error(`${kind}/${size}/${provider}: ${error.message}`);
+            } finally {
+              await context.close();
             }
-            console.log(`${trial < 0 ? "warmup" : `trial ${trial + 1}`} ${kind}/${size}/${provider}: checked`);
-          } catch (error) {
-            report.failures.push({ kind, size, provider, trial, message: error.stack ?? String(error) });
-            console.error(`${kind}/${size}/${provider}: ${error.message}`);
-          } finally { await context.close(); }
-          await checkpoint();
+            await checkpoint();
+          }
         }
       }
-    }
     report.status = "complete";
     assertComplete(report);
   } catch (error) {
@@ -177,7 +296,11 @@ async function run() {
     process.exitCode = 1;
   } finally {
     await browser?.close();
-    if (server) await new Promise((resolve) => { server.close(resolve); server.closeAllConnections(); });
+    if (server)
+      await new Promise((resolve) => {
+        server.close(resolve);
+        server.closeAllConnections();
+      });
     await checkpoint();
   }
   console.log(`Evidence: ${path.join(output, "report.md")}`);
@@ -186,9 +309,15 @@ async function run() {
 if (args[0] === "--compare") {
   const [baseline, current] = args.slice(1, 3);
   if (!baseline || !current || args.slice(3).some((arg) => !/^--max-regression=.+$/.test(arg))) {
-    throw new Error("Usage: node benchmarks/providers/run.mjs --compare BASELINE.json CURRENT.json [--max-regression=15]");
+    throw new Error(
+      "Usage: node benchmarks/providers/run.mjs --compare BASELINE.json CURRENT.json [--max-regression=15]",
+    );
   }
-  const rows = compare(JSON.parse(await readFile(baseline, "utf8")), JSON.parse(await readFile(current, "utf8")), Number(option("max-regression", 15)));
+  const rows = compare(
+    JSON.parse(await readFile(baseline, "utf8")),
+    JSON.parse(await readFile(current, "utf8")),
+    Number(option("max-regression", 15)),
+  );
   console.table(rows);
   if (rows.some((row) => row.regression)) process.exitCode = 2;
 } else await run();

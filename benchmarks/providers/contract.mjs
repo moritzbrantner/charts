@@ -116,7 +116,11 @@ export function aggregate(report) {
   return [...groups.entries()].map(([id, rows]) => {
     const { kind, size, provider, phase } = rows[0];
     return {
-      id, kind, size, provider, phase,
+      id,
+      kind,
+      size,
+      provider,
+      phase,
       apiMs: summarize(rows.map((row) => row.apiMs)),
       settledMs: summarize(rows.map((row) => row.settledMs)),
       prepareMs: summarize(rows.map((row) => row.prepareMs)),
@@ -127,21 +131,29 @@ export function aggregate(report) {
 // Fail closed: a faster partial matrix, skipped provider, duplicate trial, or
 // missing update must never become a successful comparison.
 export function assertComplete(report) {
-  if (report.schema !== SCHEMA || report.status !== "complete" || report.failures.length) throw new Error("Invalid or failed run");
+  if (report.schema !== SCHEMA || report.status !== "complete" || report.failures.length)
+    throw new Error("Invalid or failed run");
   integer(report.config.repeats, "repeats", 1, 100);
   const expected = new Map();
-  for (const kind of KINDS) for (const size of report.config.sizes) {
-    integer(size, "size", 8);
-    const initial = fixture(size, report.config.seed);
-    const replacement = fixture(size, report.config.seed, 1);
-    const windowed = describe(replacement.points.slice(Math.floor(size / 4), Math.floor(size / 2)));
-    for (const provider of PROVIDERS) for (const phase of PHASES) {
-      const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
-      for (let trial = 0; trial < report.config.repeats; trial += 1) {
-        expected.set(`${key({ kind, size, provider, phase })}/${trial}`, { pointCount: phase === "destroy" ? 0 : data.points.length, checksum: data.checksum });
-      }
+  for (const kind of KINDS)
+    for (const size of report.config.sizes) {
+      integer(size, "size", 8);
+      const initial = fixture(size, report.config.seed);
+      const replacement = fixture(size, report.config.seed, 1);
+      const windowed = describe(
+        replacement.points.slice(Math.floor(size / 4), Math.floor(size / 2)),
+      );
+      for (const provider of PROVIDERS)
+        for (const phase of PHASES) {
+          const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
+          for (let trial = 0; trial < report.config.repeats; trial += 1) {
+            expected.set(`${key({ kind, size, provider, phase })}/${trial}`, {
+              pointCount: phase === "destroy" ? 0 : data.points.length,
+              checksum: data.checksum,
+            });
+          }
+        }
     }
-  }
   if (!expected.size) throw new Error("Empty matrix");
   for (const row of report.samples) {
     const id = `${key(row)}/${row.trial}`;
@@ -155,7 +167,8 @@ export function assertComplete(report) {
     if (row.phase === "destroy" && row.domNodes !== 0) throw new Error(`Leaked DOM: ${id}`);
     if (row.provider === "charts-svg" && row.phase !== "destroy") {
       const budget = row.kind === "sparkline" ? 32 : 2 * row.pointCount + 12;
-      if (!Number.isInteger(row.domNodes) || row.domNodes > budget || row.domNodes < 1) throw new Error(`SVG DOM work budget exceeded: ${id}`);
+      if (!Number.isInteger(row.domNodes) || row.domNodes > budget || row.domNodes < 1)
+        throw new Error(`SVG DOM work budget exceeded: ${id}`);
     }
   }
   if (expected.size) throw new Error(`Missing ${expected.size} samples`);

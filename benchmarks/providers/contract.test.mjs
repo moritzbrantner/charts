@@ -5,25 +5,58 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
-import { aggregate, assertComplete, assertPoints, compare, describe, fixture, integer, KINDS, order, PHASES, PROVIDERS, quantile, SCHEMA, summarize, VENDORS } from "./contract.mjs";
+import {
+  aggregate,
+  assertComplete,
+  assertPoints,
+  compare,
+  describe,
+  fixture,
+  integer,
+  KINDS,
+  order,
+  PHASES,
+  PROVIDERS,
+  quantile,
+  SCHEMA,
+  summarize,
+  VENDORS,
+} from "./contract.mjs";
 import { digest, member, prepareVendors, verifyArchive } from "./vendor.mjs";
 
 function complete() {
   const report = {
-    schema: SCHEMA, status: "complete", config: { sizes: [16], repeats: 5, warmups: 2, seed: 17 },
-    environment: { chromium: "test-browser", cpus: ["test-cpu"] }, protocol: { fixture: "v1" }, samples: [], failures: [],
+    schema: SCHEMA,
+    status: "complete",
+    config: { sizes: [16], repeats: 5, warmups: 2, seed: 17 },
+    environment: { chromium: "test-browser", cpus: ["test-cpu"] },
+    protocol: { fixture: "v1" },
+    samples: [],
+    failures: [],
   };
   const initial = fixture(16, 17);
   const replacement = fixture(16, 17, 1);
   const windowed = describe(replacement.points.slice(4, 8));
-  for (const kind of KINDS) for (const provider of PROVIDERS) for (const phase of PHASES) {
-    const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
-    for (let trial = 0; trial < 5; trial += 1) report.samples.push({
-      kind, size: 16, provider, phase, trial, apiMs: 4, settledMs: 20, prepareMs: 2, checked: true,
-      checksum: data.checksum, pointCount: phase === "destroy" ? 0 : data.points.length,
-      domNodes: phase === "destroy" ? 0 : 10,
-    });
-  }
+  for (const kind of KINDS)
+    for (const provider of PROVIDERS)
+      for (const phase of PHASES) {
+        const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
+        for (let trial = 0; trial < 5; trial += 1)
+          report.samples.push({
+            kind,
+            size: 16,
+            provider,
+            phase,
+            trial,
+            apiMs: 4,
+            settledMs: 20,
+            prepareMs: 2,
+            checked: true,
+            checksum: data.checksum,
+            pointCount: phase === "destroy" ? 0 : data.points.length,
+            domNodes: phase === "destroy" ? 0 : 10,
+          });
+      }
   return report;
 }
 
@@ -32,7 +65,14 @@ function tar(name, text, type = "0") {
   header.write(name, 0);
   header.write(Buffer.byteLength(text).toString(8).padStart(11, "0"), 124);
   header.write(type, 156);
-  return gzipSync(Buffer.concat([header, Buffer.from(text), Buffer.alloc((512 - Buffer.byteLength(text) % 512) % 512), Buffer.alloc(1024)]));
+  return gzipSync(
+    Buffer.concat([
+      header,
+      Buffer.from(text),
+      Buffer.alloc((512 - (Buffer.byteLength(text) % 512)) % 512),
+      Buffer.alloc(1024),
+    ]),
+  );
 }
 
 test("fixtures are deterministic, sorted, finite and change with seed/revision", () => {
@@ -51,11 +91,17 @@ test("large fixtures do not use spread-argument min/max", () => {
 });
 
 test("invalid workloads fail rather than become empty fast charts", () => {
-  for (const value of [0, -1, NaN, Infinity, 1.5, "", "hello"]) assert.throws(() => integer(value, "value"));
+  for (const value of [0, -1, NaN, Infinity, 1.5, "", "hello"])
+    assert.throws(() => integer(value, "value"));
   assert.throws(() => fixture(3));
   assert.throws(() => describe([]));
   assert.throws(() => describe([{ x: 1, y: NaN }]));
-  assert.throws(() => describe([{ x: 1, y: 1 }, { x: 1, y: 2 }]));
+  assert.throws(() =>
+    describe([
+      { x: 1, y: 1 },
+      { x: 1, y: 2 },
+    ]),
+  );
 });
 
 test("point oracle rejects truncated and stale provider data", () => {
@@ -91,22 +137,63 @@ test("complete matrix passes and preserves every timing sample", () => {
 });
 
 for (const [name, mutate] of [
-  ["missing provider", (report) => { report.samples = report.samples.filter((row) => row.provider !== "echarts"); }],
+  [
+    "missing provider",
+    (report) => {
+      report.samples = report.samples.filter((row) => row.provider !== "echarts");
+    },
+  ],
   ["duplicate sample", (report) => report.samples.push(report.samples[0])],
   ["missing phase", (report) => report.samples.pop()],
   ["failed warmup", (report) => report.failures.push({ trial: -1 })],
-  ["unchecked output", (report) => { report.samples[0].checked = false; }],
-  ["wrong input count", (report) => { report.samples[0].pointCount -= 1; }],
-  ["stale fixture", (report) => { report.samples[0].checksum = "wrong"; }],
-  ["invalid timing", (report) => { report.samples[0].apiMs = NaN; }],
-  ["running report", (report) => { report.status = "running"; }],
-  ["SVG work regression", (report) => { report.samples[0].domNodes = 33; }],
-  ["cleanup leak", (report) => { report.samples.find((row) => row.phase === "destroy").domNodes = 1; }],
-]) test(`rejects ${name}`, () => {
-  const report = complete();
-  mutate(report);
-  assert.throws(() => assertComplete(report));
-});
+  [
+    "unchecked output",
+    (report) => {
+      report.samples[0].checked = false;
+    },
+  ],
+  [
+    "wrong input count",
+    (report) => {
+      report.samples[0].pointCount -= 1;
+    },
+  ],
+  [
+    "stale fixture",
+    (report) => {
+      report.samples[0].checksum = "wrong";
+    },
+  ],
+  [
+    "invalid timing",
+    (report) => {
+      report.samples[0].apiMs = NaN;
+    },
+  ],
+  [
+    "running report",
+    (report) => {
+      report.status = "running";
+    },
+  ],
+  [
+    "SVG work regression",
+    (report) => {
+      report.samples[0].domNodes = 33;
+    },
+  ],
+  [
+    "cleanup leak",
+    (report) => {
+      report.samples.find((row) => row.phase === "destroy").domNodes = 1;
+    },
+  ],
+])
+  test(`rejects ${name}`, () => {
+    const report = complete();
+    mutate(report);
+    assert.throws(() => assertComplete(report));
+  });
 
 test("same-runner comparison flags regressions but never silently changes the baseline", () => {
   const baseline = complete();
@@ -121,10 +208,20 @@ test("same-runner comparison flags regressions but never silently changes the ba
 test("comparisons refuse environment/protocol/config drift and zero denominators", () => {
   const baseline = complete();
   for (const mutate of [
-    (report) => { report.environment.chromium = "different-browser"; },
-    (report) => { report.protocol.fixture = "v2"; },
-    (report) => { report.config.warmups = 3; },
-    (report) => { report.samples.forEach((row) => { row.settledMs = 0; }); },
+    (report) => {
+      report.environment.chromium = "different-browser";
+    },
+    (report) => {
+      report.protocol.fixture = "v2";
+    },
+    (report) => {
+      report.config.warmups = 3;
+    },
+    (report) => {
+      report.samples.forEach((row) => {
+        row.settledMs = 0;
+      });
+    },
   ]) {
     const incompatible = structuredClone(baseline);
     mutate(incompatible);
@@ -173,5 +270,7 @@ test("verified vendor cache works offline and corrupt bytes fail closed", async 
     assert.equal(Object.keys(await prepareVendors(directory)).length, 2);
     await writeFile(path.join(directory, `chartjs-${VENDORS.chartjs.version}.js`), "corrupted");
     await assert.rejects(prepareVendors(directory), /Corrupt/);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

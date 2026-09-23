@@ -9,7 +9,7 @@ export const digest = (bytes) => createHash("sha256").update(bytes).digest("hex"
 // Read only a named regular member, never unpack arbitrary archive paths.
 export function member(archive, wanted) {
   const tar = gunzipSync(archive, { maxOutputLength: 128 * 1024 * 1024 });
-  for (let offset = 0; offset + 512 <= tar.length;) {
+  for (let offset = 0; offset + 512 <= tar.length; ) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
     const name = header.subarray(0, 100).toString().replace(/\0.*$/s, "");
@@ -30,7 +30,8 @@ export function member(archive, wanted) {
 }
 
 export function verifyArchive(bytes, integrity) {
-  if (!/^sha512-[A-Za-z0-9+/]+=*$/.test(integrity)) throw new Error("Expected SHA-512 npm integrity");
+  if (!/^sha512-[A-Za-z0-9+/]+=*$/.test(integrity))
+    throw new Error("Expected SHA-512 npm integrity");
   const actual = `sha512-${createHash("sha512").update(bytes).digest("base64")}`;
   if (actual !== integrity) throw new Error("Vendor archive integrity mismatch");
 }
@@ -65,19 +66,28 @@ export async function prepareVendors(directory) {
       if (error.code !== "ENOENT") throw error;
     }
     if (cached) {
-      if (cached.name !== pin.name || cached.version !== pin.version || cached.entry !== pin.entry) {
+      if (
+        cached.name !== pin.name ||
+        cached.version !== pin.version ||
+        cached.entry !== pin.entry
+      ) {
         throw new Error(`Vendor cache identity mismatch: ${id}`);
       }
-      if (digest(await readFile(script)) !== cached.sha256) throw new Error(`Corrupt vendor cache: ${id}`);
+      if (digest(await readFile(script)) !== cached.sha256)
+        throw new Error(`Corrupt vendor cache: ${id}`);
       result[id] = { ...cached, script };
       continue;
     }
-    const metadata = JSON.parse(await download(`https://registry.npmjs.org/${pin.name}/${pin.version}`));
-    if (metadata.name !== pin.name || metadata.version !== pin.version) throw new Error("Wrong vendor version");
+    const metadata = JSON.parse(
+      await download(`https://registry.npmjs.org/${pin.name}/${pin.version}`),
+    );
+    if (metadata.name !== pin.name || metadata.version !== pin.version)
+      throw new Error("Wrong vendor version");
     const archive = await download(metadata.dist.tarball);
     verifyArchive(archive, metadata.dist.integrity);
     const manifest = JSON.parse(member(archive, "package/package.json"));
-    if (manifest.name !== pin.name || manifest.version !== pin.version) throw new Error("Wrong archive identity");
+    if (manifest.name !== pin.name || manifest.version !== pin.version)
+      throw new Error("Wrong archive identity");
     const source = member(archive, pin.entry);
     const record = { ...pin, integrity: metadata.dist.integrity, sha256: digest(source) };
     await writeFile(script, source);
