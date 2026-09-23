@@ -235,15 +235,42 @@ function selectionTarget(data) {
   };
 }
 
-function dispatchSelection(target) {
-  target.element.dispatchEvent(
-    new globalThis.MouseEvent("click", {
-      bubbles: true,
-      cancelable: true,
-      clientX: target.clientX,
-      clientY: target.clientY,
-    }),
+function armSelection(target) {
+  let resolveSettled;
+  const interaction = {
+    apiAt: null,
+    callbackAt: null,
+    count: 0,
+    firstFrameAt: null,
+    index: null,
+    settledAt: null,
+    targetIndex: target.index,
+  };
+  interaction.settled = new Promise((resolve) => {
+    resolveSettled = resolve;
+  });
+  document.addEventListener(
+    "click",
+    () => {
+      interaction.startedAt = performance.now();
+      requestAnimationFrame(() => {
+        interaction.firstFrameAt = performance.now();
+        requestAnimationFrame(() => {
+          interaction.settledAt = performance.now();
+          resolveSettled();
+        });
+      });
+    },
+    { capture: true, once: true },
   );
+  document.addEventListener(
+    "click",
+    () => {
+      interaction.apiAt = performance.now();
+    },
+    { once: true },
+  );
+  state.interaction = interaction;
 }
 
 function checkSvg(data) {
@@ -372,27 +399,72 @@ globalThis.providerBench = {
     host.style.height = `${state.height}px`;
     return [initial.checksum, replacement.checksum, windowed.checksum];
   },
+  beginSelect() {
+    if ("select" !== phasesForKind(state.kind)[state.phase++]) {
+      throw new Error("Unexpected phase order");
+    }
+    state.renderCalls = 0;
+    const target = selectionTarget(state.initial);
+    armSelection(target);
+    return {
+      clientX: target.clientX,
+      clientY: target.clientY,
+      index: target.index,
+    };
+  },
+  async endSelect() {
+    const data = state.initial;
+    const interaction = state.interaction;
+    if (!interaction) throw new Error("Selection was not armed");
+    await interaction.settled;
+    if (
+      interaction.startedAt === null ||
+      interaction.apiAt === null ||
+      interaction.firstFrameAt === null ||
+      interaction.settledAt === null ||
+      interaction.callbackAt === null
+    ) {
+      throw new Error("Selection timing evidence is incomplete");
+    }
+    if (interaction.count !== 1 || interaction.index !== interaction.targetIndex) {
+      throw new Error("Provider did not report the selected scatter point exactly once");
+    }
+    if (state.provider === "charts-svg" && state.renderCalls !== 0) {
+      throw new Error("Selection triggered unexpected SVG render work");
+    }
+    const fingerprint = state.provider === "charts-svg" ? checkSvg(data) : checkCanvas(data);
+    state.fingerprint = fingerprint;
+    state.interaction = null;
+    return {
+      apiMs: interaction.apiAt - interaction.startedAt,
+      firstFrameMs: interaction.firstFrameAt - interaction.startedAt,
+      settledMs: interaction.settledAt - interaction.startedAt,
+      prepareMs: 0,
+      interactionMs: interaction.callbackAt - interaction.startedAt,
+      interactionCount: interaction.count,
+      interactionIndex: interaction.index,
+      checked: true,
+      renderCalls: state.renderCalls,
+      pointCount: data.points.length,
+      checksum: data.checksum,
+      domNodes: host.querySelectorAll("*").length,
+    };
+  },
   async step(phase) {
-    if (phase !== phasesForKind(state.kind)[state.phase++]) throw new Error("Unexpected phase order");
+    if (phase === "select") throw new Error("Selection requires real browser input");
+    if (phase !== phasesForKind(state.kind)[state.phase++]) {
+      throw new Error("Unexpected phase order");
+    }
     state.renderCalls = 0;
     state.interaction = null;
-    const data =
-      phase === "mount" || phase === "select"
-        ? state.initial
-        : phase === "replace"
-          ? state.replacement
-          : state.windowed;
+    const data = phase === "mount" ? state.initial : phase === "replace" ? state.replacement : state.windowed;
     const beforePrepare = performance.now();
     const prepared = ["mount", "replace", "window"].includes(phase)
       ? prepare(data)
       : state.prepared;
     const prepareMs = performance.now() - beforePrepare;
-    const target = phase === "select" ? selectionTarget(data) : null;
-    if (target) state.interaction = { callbackAt: null, count: 0, index: null };
     const started = performance.now();
-    if (phase === "select") {
-      dispatchSelection(target);
-    } else if (phase === "resize") {
+    if (phase === "resize") {
       state.width = VIEW.resized;
       state.height = VIEW.resized;
       host.style.width = `${state.width}px`;
@@ -418,56 +490,35 @@ globalThis.providerBench = {
     const firstFrameMs = performance.now() - started;
     await frame();
     const settledMs = performance.now() - started;
-    const interactionMs =
-      state.interaction?.callbackAt === null || state.interaction?.callbackAt === undefined
-        ? null
-        : state.interaction.callbackAt - started;
     // All assertions, pixel reads, and DOM counts are OUTSIDE measured intervals.
     if (state.provider === "charts-svg") {
       const expectedCalls =
-        phase === "destroy" ||
-        phase === "select" ||
-        (phase === "resize" && state.kind === "sparkline")
-          ? 0
-          : 1;
+        phase === "destroy" || (phase === "resize" && state.kind === "sparkline") ? 0 : 1;
       if (state.renderCalls !== expectedCalls) throw new Error("Unexpected SVG render work");
-    }
-    if (phase === "select") {
-      if (
-        !state.interaction ||
-        state.interaction.count !== 1 ||
-        state.interaction.index !== target.index ||
-        interactionMs === null
-      ) {
-        throw new Error("Provider did not report the selected scatter point exactly once");
-      }
     }
     let fingerprint = "destroyed";
     if (phase === "destroy") {
       if (host.childElementCount) throw new Error("Provider did not clean up its DOM");
     } else {
       fingerprint = state.provider === "charts-svg" ? checkSvg(data) : checkCanvas(data);
-      if (["replace", "window"].includes(phase) && fingerprint === state.fingerprint)
+      if (["replace", "window"].includes(phase) && fingerprint === state.fingerprint) {
         throw new Error("Rendered output did not change");
+      }
     }
     state.prepared = prepared;
     state.fingerprint = fingerprint;
-    const interactionCount = state.interaction?.count ?? 0;
-    const interactionIndex = state.interaction?.index ?? null;
-    state.interaction = null;
     return {
       apiMs,
       firstFrameMs,
       settledMs,
       prepareMs,
-      interactionMs,
-      interactionCount,
-      interactionIndex,
+      interactionMs: null,
+      interactionCount: 0,
+      interactionIndex: null,
       checked: true,
       renderCalls: state.renderCalls,
       pointCount: phase === "destroy" ? 0 : data.points.length,
       checksum: data.checksum,
       domNodes: host.querySelectorAll("*").length,
     };
-  },
-};
+  }};
