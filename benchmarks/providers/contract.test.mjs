@@ -42,7 +42,7 @@ function complete() {
   const windowed = describe(replacement.points.slice(4, 8));
   for (const kind of KINDS)
     for (const provider of PROVIDERS)
-      for (const phase of phasesForKind(kind)) {
+      for (const phase of phasesForKind(kind, 16)) {
         const data =
           phase === "mount" || phase === "select"
             ? initial
@@ -63,7 +63,7 @@ function complete() {
             prepareMs: 2,
             interactionMs: interaction ? 3 : null,
             interactionCount: interaction ? 1 : 0,
-            interactionIndex: interaction ? interactionTarget(16) : null,
+            interactionIndex: interaction ? interactionTarget(initial) : null,
             checked: true,
             checksum: data.checksum,
             pointCount: phase === "destroy" ? 0 : data.points.length,
@@ -141,18 +141,33 @@ test("provider order rotates deterministically without omissions", () => {
   assert.equal(new Set([order(0)[0], order(1)[0], order(2)[0]]).size, 3);
 });
 
-test("interaction phases only run where the public chart API exposes comparable selection", () => {
-  assert.deepEqual(phasesForKind("sparkline"), ["mount", "replace", "window", "resize", "destroy"]);
-  assert.deepEqual(phasesForKind("scatter"), PHASES);
-  assert.equal(interactionTarget(16), 9);
-  assert.throws(() => phasesForKind("unknown"));
+test("interaction phases only run where a comparable isolated target is available", () => {
+  assert.deepEqual(phasesForKind("sparkline", 256), [
+    "mount",
+    "replace",
+    "window",
+    "resize",
+    "destroy",
+  ]);
+  assert.deepEqual(phasesForKind("scatter", 10_000), PHASES);
+  assert.deepEqual(phasesForKind("scatter", 100_000), [
+    "mount",
+    "replace",
+    "window",
+    "resize",
+    "destroy",
+  ]);
+  assert.equal(interactionTarget(fixture(16, 17)), 9);
+  assert.ok(interactionTarget(fixture(10_000, 17)) >= 0);
+  assert.throws(() => interactionTarget(fixture(100_000, 17)));
+  assert.throws(() => phasesForKind("unknown", 256));
 });
 
 test("complete matrix passes and preserves every timing sample", () => {
   const report = complete();
   assertComplete(report);
   const rows = aggregate(report);
-  const phasesPerProvider = KINDS.reduce((total, kind) => total + phasesForKind(kind).length, 0);
+  const phasesPerProvider = KINDS.reduce((total, kind) => total + phasesForKind(kind, 16).length, 0);
   assert.equal(rows.length, PROVIDERS.length * phasesPerProvider);
   assert.ok(
     rows.every(
@@ -272,7 +287,7 @@ test("same-runner comparison uses first-frame, interaction, and settled metrics 
     else row.settledMs *= 1.2;
   }
   const comparison = compare(baseline, current, 15);
-  const expected = KINDS.reduce((total, kind) => total + phasesForKind(kind).length, 0);
+  const expected = KINDS.reduce((total, kind) => total + phasesForKind(kind, 16).length, 0);
   assert.equal(comparison.length, expected);
   assert.ok(comparison.every((row) => row.regression));
   assert.equal(comparison.find((row) => row.id.includes("/mount")).metric, "firstFrameMs");
