@@ -204,6 +204,19 @@ for (const [name, mutate] of [
     },
   ],
   [
+    "reversed frame timing",
+    (report) => {
+      report.samples[0].firstFrameMs = 1;
+    },
+  ],
+  [
+    "interaction callback after synchronous dispatch",
+    (report) => {
+      const row = report.samples.find((sample) => sample.phase === "select");
+      row.interactionMs = row.apiMs + 1;
+    },
+  ],
+  [
     "wrong interaction target",
     (report) => {
       report.samples.find((row) => row.phase === "select").interactionIndex = 0;
