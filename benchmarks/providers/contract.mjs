@@ -25,7 +25,7 @@ export function interactionTarget(data) {
   const ySpan = Math.max(Number.EPSILON, data.yDomain[1] - data.yDomain[0]);
   const plotWidth = VIEW.width - 52;
   const plotHeight = VIEW.height - 48;
-  const minimumSeparation = 5.5;
+  const minimumSeparation = 6.25;
   const margin = 6;
   const positions = data.points.map((point) => ({
     x: ((point.x - data.xDomain[0]) / xSpan) * plotWidth,
