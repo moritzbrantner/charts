@@ -13,8 +13,11 @@ import {
   describe,
   fixture,
   integer,
+  interactionTarget,
+  isInteractionPhase,
   KINDS,
   order,
+  phasesForKind,
   PHASES,
   PROVIDERS,
   quantile,
@@ -39,8 +42,14 @@ function complete() {
   const windowed = describe(replacement.points.slice(4, 8));
   for (const kind of KINDS)
     for (const provider of PROVIDERS)
-      for (const phase of PHASES) {
-        const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
+      for (const phase of phasesForKind(kind, 16)) {
+        const data =
+          phase === "mount" || phase === "select"
+            ? initial
+            : phase === "replace"
+              ? replacement
+              : windowed;
+        const interaction = isInteractionPhase(phase);
         for (let trial = 0; trial < 5; trial += 1)
           report.samples.push({
             kind,
@@ -49,8 +58,12 @@ function complete() {
             phase,
             trial,
             apiMs: 4,
+            firstFrameMs: 12,
             settledMs: 20,
             prepareMs: 2,
+            interactionMs: interaction ? 3 : null,
+            interactionCount: interaction ? 1 : 0,
+            interactionIndex: interaction ? interactionTarget(initial) : null,
             checked: true,
             checksum: data.checksum,
             pointCount: phase === "destroy" ? 0 : data.points.length,
@@ -128,12 +141,46 @@ test("provider order rotates deterministically without omissions", () => {
   assert.equal(new Set([order(0)[0], order(1)[0], order(2)[0]]).size, 3);
 });
 
+test("interaction phases only run where a comparable isolated target is available", () => {
+  assert.deepEqual(phasesForKind("sparkline", 256), [
+    "mount",
+    "replace",
+    "window",
+    "resize",
+    "destroy",
+  ]);
+  assert.deepEqual(phasesForKind("scatter", 10_000), PHASES);
+  assert.deepEqual(phasesForKind("scatter", 100_000), [
+    "mount",
+    "replace",
+    "window",
+    "resize",
+    "destroy",
+  ]);
+  assert.equal(interactionTarget(fixture(16, 17)), 9);
+  assert.ok(interactionTarget(fixture(10_000, 17)) >= 0);
+  assert.throws(() => interactionTarget(fixture(100_000, 17)));
+  assert.throws(() => phasesForKind("unknown", 256));
+});
+
 test("complete matrix passes and preserves every timing sample", () => {
   const report = complete();
   assertComplete(report);
   const rows = aggregate(report);
-  assert.equal(rows.length, KINDS.length * PROVIDERS.length * PHASES.length);
-  assert.ok(rows.every((row) => row.apiMs.count === 5 && row.settledMs.median === 20));
+  const phasesPerProvider = KINDS.reduce(
+    (total, kind) => total + phasesForKind(kind, 16).length,
+    0,
+  );
+  assert.equal(rows.length, PROVIDERS.length * phasesPerProvider);
+  assert.ok(
+    rows.every(
+      (row) =>
+        row.apiMs.count === 5 && row.firstFrameMs.median === 12 && row.settledMs.median === 20,
+    ),
+  );
+  assert.ok(
+    rows.filter((row) => row.phase === "select").every((row) => row.interactionMs?.median === 3),
+  );
 });
 
 for (const [name, mutate] of [
@@ -167,7 +214,41 @@ for (const [name, mutate] of [
   [
     "invalid timing",
     (report) => {
-      report.samples[0].apiMs = NaN;
+      report.samples[0].firstFrameMs = NaN;
+    },
+  ],
+  [
+    "reversed frame timing",
+    (report) => {
+      report.samples[0].firstFrameMs = 1;
+    },
+  ],
+  [
+    "interaction callback after measured settlement",
+    (report) => {
+      const row = report.samples.find((sample) => sample.phase === "select");
+      row.interactionMs = row.settledMs + 1;
+    },
+  ],
+  [
+    "wrong interaction target",
+    (report) => {
+      report.samples.find((row) => row.phase === "select").interactionIndex = 0;
+    },
+  ],
+  [
+    "duplicate interaction callback",
+    (report) => {
+      report.samples.find((row) => row.phase === "select").interactionCount = 2;
+    },
+  ],
+  [
+    "interaction evidence on render phase",
+    (report) => {
+      const row = report.samples.find((sample) => sample.phase === "replace");
+      row.interactionMs = 1;
+      row.interactionCount = 1;
+      row.interactionIndex = 1;
     },
   ],
   [
@@ -195,14 +276,23 @@ for (const [name, mutate] of [
     assert.throws(() => assertComplete(report));
   });
 
-test("same-runner comparison flags regressions but never silently changes the baseline", () => {
+test("same-runner comparison uses first-frame, interaction, and settled metrics by phase", () => {
   const baseline = complete();
   const current = structuredClone(baseline);
-  for (const row of current.samples) if (row.provider === "charts-svg") row.settledMs *= 1.2;
+  for (const row of current.samples) {
+    if (row.provider !== "charts-svg") continue;
+    if (row.phase === "select") row.interactionMs *= 1.2;
+    else if (row.phase === "mount") row.firstFrameMs *= 1.2;
+    else row.settledMs *= 1.2;
+  }
   const comparison = compare(baseline, current, 15);
-  assert.equal(comparison.length, KINDS.length * PHASES.length);
+  const expected = KINDS.reduce((total, kind) => total + phasesForKind(kind, 16).length, 0);
+  assert.equal(comparison.length, expected);
   assert.ok(comparison.every((row) => row.regression));
-  assert.equal(baseline.samples[0].settledMs, 20);
+  assert.equal(comparison.find((row) => row.id.includes("/mount")).metric, "firstFrameMs");
+  assert.equal(comparison.find((row) => row.id.includes("/select")).metric, "interactionMs");
+  assert.equal(comparison.find((row) => row.id.includes("/replace")).metric, "settledMs");
+  assert.equal(baseline.samples[0].firstFrameMs, 12);
 });
 
 test("comparisons refuse environment/protocol/config drift and zero denominators", () => {
@@ -219,7 +309,9 @@ test("comparisons refuse environment/protocol/config drift and zero denominators
     },
     (report) => {
       report.samples.forEach((row) => {
+        row.firstFrameMs = 0;
         row.settledMs = 0;
+        if (row.phase === "select") row.interactionMs = 0;
       });
     },
   ]) {

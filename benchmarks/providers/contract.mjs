@@ -1,8 +1,78 @@
-export const SCHEMA = 1;
+export const SCHEMA = 2;
 export const PROVIDERS = ["charts-svg", "chartjs", "echarts"];
 export const KINDS = ["sparkline", "scatter"];
-export const PHASES = ["mount", "replace", "window", "resize", "destroy"];
+export const PHASES = ["mount", "select", "replace", "window", "resize", "destroy"];
+export const INTERACTION_PHASES = ["select"];
+export const INTERACTION_MAX_POINTS = 10_000;
 export const VIEW = { width: 600, height: 600, resized: 480, deviceScaleFactor: 1 };
+
+export function phasesForKind(kind, size = INTERACTION_MAX_POINTS) {
+  if (!KINDS.includes(kind)) throw new Error(`Unknown benchmark kind: ${kind}`);
+  integer(size, "size", 8);
+  return kind === "scatter" && size <= INTERACTION_MAX_POINTS
+    ? PHASES
+    : PHASES.filter((phase) => !INTERACTION_PHASES.includes(phase));
+}
+
+export function isInteractionPhase(phase) {
+  return INTERACTION_PHASES.includes(phase);
+}
+
+export function interactionTarget(data) {
+  const size = data.points.length;
+  integer(size, "interaction point count", 8, INTERACTION_MAX_POINTS);
+  const xSpan = Math.max(Number.EPSILON, data.xDomain[1] - data.xDomain[0]);
+  const ySpan = Math.max(Number.EPSILON, data.yDomain[1] - data.yDomain[0]);
+  const plotWidth = VIEW.width - 52;
+  const plotHeight = VIEW.height - 48;
+  const minimumSeparation = 6.25;
+  const margin = 6;
+  const positions = data.points.map((point) => ({
+    x: ((point.x - data.xDomain[0]) / xSpan) * plotWidth,
+    y: (1 - (point.y - data.yDomain[0]) / ySpan) * plotHeight,
+  }));
+  const buckets = new Map();
+  for (let index = 0; index < positions.length; index += 1) {
+    const point = positions[index];
+    const key = `${Math.floor(point.x / minimumSeparation)},${Math.floor(point.y / minimumSeparation)}`;
+    const bucket = buckets.get(key) ?? [];
+    bucket.push(index);
+    buckets.set(key, bucket);
+  }
+  const start = Math.floor((size - 1) * 0.61);
+  for (let offset = 0; offset < size; offset += 1) {
+    const index = (start + offset) % size;
+    const point = positions[index];
+    if (
+      point.x < margin ||
+      point.x > plotWidth - margin ||
+      point.y < margin ||
+      point.y > plotHeight - margin
+    ) {
+      continue;
+    }
+    const cellX = Math.floor(point.x / minimumSeparation);
+    const cellY = Math.floor(point.y / minimumSeparation);
+    let isolated = true;
+    for (let xOffset = -1; xOffset <= 1 && isolated; xOffset += 1) {
+      for (let yOffset = -1; yOffset <= 1 && isolated; yOffset += 1) {
+        const bucket = buckets.get(`${cellX + xOffset},${cellY + yOffset}`) ?? [];
+        for (const neighborIndex of bucket) {
+          if (neighborIndex === index) continue;
+          const neighbor = positions[neighborIndex];
+          const dx = point.x - neighbor.x;
+          const dy = point.y - neighbor.y;
+          if (dx * dx + dy * dy <= minimumSeparation * minimumSeparation) {
+            isolated = false;
+            break;
+          }
+        }
+      }
+    }
+    if (isolated) return index;
+  }
+  throw new Error("No provider-independent isolated interaction target");
+}
 export const VENDORS = {
   chartjs: { name: "chart.js", version: "4.5.1", entry: "package/dist/chart.umd.js" },
   echarts: { name: "echarts", version: "6.0.0", entry: "package/dist/echarts.min.js" },
@@ -122,8 +192,12 @@ export function aggregate(report) {
       provider,
       phase,
       apiMs: summarize(rows.map((row) => row.apiMs)),
+      firstFrameMs: summarize(rows.map((row) => row.firstFrameMs)),
       settledMs: summarize(rows.map((row) => row.settledMs)),
       prepareMs: summarize(rows.map((row) => row.prepareMs)),
+      interactionMs: rows.every((row) => row.interactionMs === null)
+        ? null
+        : summarize(rows.map((row) => row.interactionMs)),
     };
   });
 }
@@ -144,12 +218,18 @@ export function assertComplete(report) {
         replacement.points.slice(Math.floor(size / 4), Math.floor(size / 2)),
       );
       for (const provider of PROVIDERS)
-        for (const phase of PHASES) {
-          const data = phase === "mount" ? initial : phase === "replace" ? replacement : windowed;
+        for (const phase of phasesForKind(kind, size)) {
+          const data =
+            phase === "mount" || phase === "select"
+              ? initial
+              : phase === "replace"
+                ? replacement
+                : windowed;
           for (let trial = 0; trial < report.config.repeats; trial += 1) {
             expected.set(`${key({ kind, size, provider, phase })}/${trial}`, {
               pointCount: phase === "destroy" ? 0 : data.points.length,
               checksum: data.checksum,
+              interactionIndex: phase === "select" ? interactionTarget(initial) : null,
             });
           }
         }
@@ -159,7 +239,26 @@ export function assertComplete(report) {
     const id = `${key(row)}/${row.trial}`;
     const contract = expected.get(id);
     if (!expected.delete(id)) throw new Error(`Unexpected or duplicate sample: ${id}`);
-    for (const field of ["apiMs", "settledMs", "prepareMs"]) quantile([row[field]], 0.5);
+    for (const field of ["apiMs", "firstFrameMs", "settledMs", "prepareMs"])
+      quantile([row[field]], 0.5);
+    if (row.apiMs > row.firstFrameMs || row.firstFrameMs > row.settledMs) {
+      throw new Error(`Invalid timing boundaries: ${id}`);
+    }
+    if (isInteractionPhase(row.phase)) {
+      quantile([row.interactionMs], 0.5);
+      if (row.interactionMs > row.settledMs) {
+        throw new Error(`Interaction callback escaped measured settlement: ${id}`);
+      }
+      if (row.interactionCount !== 1 || row.interactionIndex !== contract.interactionIndex) {
+        throw new Error(`Wrong interaction callback: ${id}`);
+      }
+    } else if (
+      row.interactionMs !== null ||
+      row.interactionCount !== 0 ||
+      row.interactionIndex !== null
+    ) {
+      throw new Error(`Unexpected interaction evidence: ${id}`);
+    }
     if (!row.checked) throw new Error(`Unchecked sample: ${id}`);
     if (row.pointCount !== contract.pointCount || row.checksum !== contract.checksum) {
       throw new Error(`Wrong fixture or point count: ${id}`);
@@ -192,9 +291,22 @@ export function compare(baseline, current, percent = 15) {
   const before = new Map(aggregate(baseline).map((row) => [row.id, row]));
   return aggregate(current).flatMap((row) => {
     if (row.provider !== "charts-svg") return [];
-    const previous = before.get(row.id).settledMs.median;
-    if (previous <= 0) throw new Error(`Zero baseline is inconclusive: ${row.id}`);
-    const changePercent = ((row.settledMs.median - previous) / previous) * 100;
-    return [{ id: row.id, changePercent, regression: changePercent > percent }];
+    const metric =
+      row.phase === "select"
+        ? "interactionMs"
+        : row.phase === "mount"
+          ? "firstFrameMs"
+          : "settledMs";
+    const currentMetric = row[metric]?.median;
+    const previousMetric = before.get(row.id)?.[metric]?.median;
+    if (
+      !Number.isFinite(currentMetric) ||
+      !Number.isFinite(previousMetric) ||
+      previousMetric <= 0
+    ) {
+      throw new Error(`Missing or zero ${metric} baseline: ${row.id}`);
+    }
+    const changePercent = ((currentMetric - previousMetric) / previousMetric) * 100;
+    return [{ id: row.id, metric, changePercent, regression: changePercent > percent }];
   });
 }
