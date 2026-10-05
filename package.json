@@ -86,10 +86,6 @@
     "vite": "^8.0.14",
     "vitest": "^4.1.2"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org",
-    "access": "public"
-  },
   "scripts": {
     "api:check": "bun run build && node ./scripts/check-api-report.mjs",
     "audit:production": "node ./scripts/audit-production.mjs",
@@ -114,7 +110,7 @@
     "pack:check": "bun run build && publint --pack bun --strict && node ./scripts/check-packed-artifact.mjs",
     "performance:contract": "bun ./scripts/check-density-work-contract.ts",
     "prepack": "bun run build:wasm && bun run build",
-    "release": "changeset publish",
+    "prepare": "bun ./scripts/prepare-git-install.ts",
     "storybook": "storybook dev -p 6006",
     "test": "vitest run",
     "test:browser": "bun run test:e2e && bun run test:visual && bun run test:storybook",
