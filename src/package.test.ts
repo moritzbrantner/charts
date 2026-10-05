@@ -50,7 +50,9 @@ describe("package metadata", () => {
     expect(packageJson.peerDependencies?.react).toBe("^19.0.0");
     expect(packageJson.peerDependencies?.["react-dom"]).toBe("^19.0.0");
     expect(packageJson.peerDependencies?.recharts).toBe("^3.0.0");
-    expect(readme).toContain("bun add @moritzbrantner/charts react react-dom recharts");
+    expect(readme).toContain(
+      "bun add --trust @moritzbrantner/charts@git+https://github.com/moritzbrantner/charts.git#<commit-sha> react react-dom recharts",
+    );
   });
 
   test("keeps UI tooling out of the published runtime contract", () => {

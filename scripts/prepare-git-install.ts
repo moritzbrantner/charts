@@ -1,0 +1,66 @@
+#!/usr/bin/env bun
+
+// The `prepare` script. It only acts when the package sits below node_modules, which is where
+// bun places a consumer's commit-pinned git dependency (listed in `trustedDependencies`).
+// bun does not install a git dependency's devDependencies, and below node_modules esbuild
+// ignores tsconfig.json and TypeScript emits no declarations. So the build runs in a copy
+// outside node_modules with its own frozen install, and only the build output is copied back.
+// The dependency's own node_modules, which bun resolved for the consumer, is left untouched.
+// The WASM density kernel is built only when wasm-pack is on PATH and the build succeeds;
+// otherwise the package uses the JavaScript backends, which ordinary development relies on.
+// In a normal checkout it does nothing: `bun install` and `npm pack` must stay side-effect free.
+
+import { execFileSync, spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const buildOutputs = ["dist"];
+const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function run(args: string[], cwd: string) {
+  execFileSync("bun", args, { cwd, stdio: "inherit" });
+}
+
+function hasWasmPack() {
+  return spawnSync("wasm-pack", ["--version"], { stdio: "ignore" }).status === 0;
+}
+
+if (packageRoot.split(path.sep).includes("node_modules")) {
+  const buildRoot = mkdtempSync(path.join(tmpdir(), "git-install-build-"));
+  const skipped = new Set(
+    ["node_modules", ".git", ...buildOutputs].map((entry) => path.join(packageRoot, entry)),
+  );
+
+  try {
+    cpSync(packageRoot, buildRoot, {
+      recursive: true,
+      filter: (source) => !skipped.has(source),
+    });
+    run(["install", "--frozen-lockfile", "--ignore-scripts", "--linker", "hoisted"], buildRoot);
+    if (!hasWasmPack()) {
+      console.warn(
+        "@moritzbrantner/charts: wasm-pack not found; building without the WASM density kernel (JavaScript backends only).",
+      );
+    } else {
+      try {
+        run(["run", "build:wasm"], buildRoot);
+      } catch {
+        // An incompatible toolchain must not block the JavaScript package; drop partial output.
+        rmSync(path.join(buildRoot, "src", "wasm", "generated"), { recursive: true, force: true });
+        console.warn(
+          "@moritzbrantner/charts: the WASM build failed; building without the WASM density kernel (JavaScript backends only).",
+        );
+      }
+    }
+    run(["run", "build"], buildRoot);
+
+    for (const output of buildOutputs) {
+      rmSync(path.join(packageRoot, output), { recursive: true, force: true });
+      cpSync(path.join(buildRoot, output), path.join(packageRoot, output), { recursive: true });
+    }
+  } finally {
+    rmSync(buildRoot, { recursive: true, force: true });
+  }
+}
