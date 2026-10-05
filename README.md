@@ -20,15 +20,12 @@ views, and React controls for Recharts-backed interfaces.
 
 ## Installation
 
-The package is not published to npm. Install a commit-pinned git dependency and
-trust it so bun runs its `prepare` build:
+The package is not published to npm. Install a commit-pinned git dependency;
+`--trust` adds it to `trustedDependencies`, which bun requires before it runs the
+package's `prepare` build:
 
 ```sh
-bun add "@moritzbrantner/charts@git+https://github.com/moritzbrantner/charts.git#<commit-sha>" react react-dom recharts
-```
-
-```json
-{ "trustedDependencies": ["@moritzbrantner/charts"] }
+bun add --trust @moritzbrantner/charts@git+https://github.com/moritzbrantner/charts.git#<commit-sha> react react-dom recharts
 ```
 
 The `prepare` build compiles the WASM density kernel only when `wasm-pack` is on
