@@ -6,8 +6,8 @@
 // ignores tsconfig.json and TypeScript emits no declarations. So the build runs in a copy
 // outside node_modules with its own frozen install, and only the build output is copied back.
 // The dependency's own node_modules, which bun resolved for the consumer, is left untouched.
-// The WASM density kernel is built only when wasm-pack is on PATH; without it the package uses
-// the JavaScript backends, which ordinary development already relies on.
+// The WASM density kernel is built only when wasm-pack is on PATH and the build succeeds;
+// otherwise the package uses the JavaScript backends, which ordinary development relies on.
 // In a normal checkout it does nothing: `bun install` and `npm pack` must stay side-effect free.
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -39,12 +39,20 @@ if (packageRoot.split(path.sep).includes("node_modules")) {
       filter: (source) => !skipped.has(source),
     });
     run(["install", "--frozen-lockfile", "--ignore-scripts", "--linker", "hoisted"], buildRoot);
-    if (hasWasmPack()) {
-      run(["run", "build:wasm"], buildRoot);
-    } else {
+    if (!hasWasmPack()) {
       console.warn(
         "@moritzbrantner/charts: wasm-pack not found; building without the WASM density kernel (JavaScript backends only).",
       );
+    } else {
+      try {
+        run(["run", "build:wasm"], buildRoot);
+      } catch {
+        // An incompatible toolchain must not block the JavaScript package; drop partial output.
+        rmSync(path.join(buildRoot, "src", "wasm", "generated"), { recursive: true, force: true });
+        console.warn(
+          "@moritzbrantner/charts: the WASM build failed; building without the WASM density kernel (JavaScript backends only).",
+        );
+      }
     }
     run(["run", "build"], buildRoot);
 
