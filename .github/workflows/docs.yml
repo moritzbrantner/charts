@@ -48,7 +48,10 @@ jobs:
           key: ${{ runner.os }}-cargo-${{ hashFiles('crates/charts-density-wasm/Cargo.lock') }}
 
       - name: Install wasm-pack
-        run: if ! command -v wasm-pack; then cargo install wasm-pack --version 0.14.0 --locked; fi
+        uses: moritzbrantner/reusable-workflows/.github/actions/install-verified-wasm-cli@e60855ad67f3dad72c283c355d544d6d296241d7
+        with:
+          tool: wasm-pack
+          version: "0.14.0"
 
       - name: Setup Pages
         uses: actions/configure-pages@v6.0.0
