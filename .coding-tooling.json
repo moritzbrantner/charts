@@ -64,5 +64,6 @@
       "web:audit": ["bun", "run", "test:unlighthouse"],
       "benchmark:smoke": ["bun", "run", "bench:large-data"]
     }
-  }
+  },
+  "merge": {"authority": "hosted", "requiredChecks": ["merge-ready"]}
 }
