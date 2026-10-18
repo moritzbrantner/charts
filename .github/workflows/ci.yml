@@ -16,6 +16,10 @@ on:
 env:
   BUN_VERSION: 1.3.14
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
