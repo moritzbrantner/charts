@@ -24,6 +24,44 @@ permissions:
   contents: read
 
 jobs:
+  validation-scope:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      provider: ${{ steps.scope.outputs.provider }}
+      allow-skipped: ${{ steps.scope.outputs.allow-skipped }}
+    steps:
+      - id: scope
+        shell: python
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          import json
+          import os
+          import subprocess
+          with open(os.environ["GITHUB_EVENT_PATH"]) as source:
+              event = json.load(source)
+          provider = True
+          skipped = []
+          if os.environ["GITHUB_EVENT_NAME"] == "pull_request":
+              current = json.loads(subprocess.check_output([
+                  "gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/pulls/{event['number']}"
+              ]))
+              if current["head"]["sha"] != event["pull_request"]["head"]["sha"]:
+                  raise RuntimeError("PR head changed; this validation scope is stale")
+              provider = any(label["name"].casefold() == "benchmark-providers" for label in current["labels"])
+              if not provider:
+                  skipped.append("provider-benchmark")
+              if event["repository"]["visibility"] != "public":
+                  skipped.append("dependency-review")
+          else:
+              skipped.append("dependency-review")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              print(f"provider={str(provider).lower()}", file=output)
+              print(f"allow-skipped={json.dumps(skipped)}", file=output)
+
   dependency-review:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
@@ -74,7 +112,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- package.json bun.lock crates)"
+          changed="$(git diff --no-renames --name-only "$BASE_SHA" "$HEAD_SHA" -- package.json bun.lock crates)"
           printf '%s\n' "$changed"
 
           if printf '%s\n' "$changed" | grep -Eq '^(package\.json|bun\.lock)$'; then
@@ -446,8 +484,8 @@ jobs:
 
   provider-benchmark:
     name: Chart provider comparisons
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'benchmark-providers')
-    needs: build-package
+    if: github.event_name != 'pull_request' || needs.validation-scope.outputs.provider == 'true'
+    needs: [validation-scope, build-package]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -530,6 +568,7 @@ jobs:
     if: ${{ always() }}
     needs:
       [
+        "validation-scope",
         "dependency-review",
         "quality",
         "build-package",
@@ -546,5 +585,5 @@ jobs:
       - uses: moritzbrantner/reusable-workflows/.github/actions/merge-ready@b0f25f241d76af2584dfc9e375084ff5c5cb97da
         with:
           needs: ${{ toJSON(needs) }}
-          required: '["dependency-review", "quality", "build-package", "package", "browser", "page-quality", "benchmark", "provider-benchmark"]'
-          allow-skipped: ${{ github.event_name == 'pull_request' && github.event.repository.visibility == 'public' && (contains(github.event.pull_request.labels.*.name, 'benchmark-providers') && '[]' || '["provider-benchmark"]') || '["dependency-review"]' }}
+          required: '["validation-scope", "dependency-review", "quality", "build-package", "package", "browser", "page-quality", "benchmark", "provider-benchmark"]'
+          allow-skipped: ${{ needs.validation-scope.outputs.allow-skipped || '[]' }}
