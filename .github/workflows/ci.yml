@@ -524,7 +524,17 @@ jobs:
   merge-ready:
     name: merge-ready
     if: ${{ always() }}
-    needs: ["dependency-review", "quality", "build-package", "package", "browser", "page-quality", "benchmark", "provider-benchmark"]
+    needs:
+      [
+        "dependency-review",
+        "quality",
+        "build-package",
+        "package",
+        "browser",
+        "page-quality",
+        "benchmark",
+        "provider-benchmark",
+      ]
     runs-on: ubuntu-latest
     permissions:
       contents: read

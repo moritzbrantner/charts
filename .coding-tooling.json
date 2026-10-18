@@ -65,5 +65,5 @@
       "benchmark:smoke": ["bun", "run", "bench:large-data"]
     }
   },
-  "merge": {"authority": "hosted", "requiredChecks": ["merge-ready"]}
+  "merge": { "authority": "hosted", "requiredChecks": ["merge-ready"] }
 }
