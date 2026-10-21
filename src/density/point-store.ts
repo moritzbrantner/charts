@@ -74,16 +74,14 @@ export function createChartPointStore<TProperties>(
   options: BinnedSeriesIndexOptions<TProperties>,
 ): ChartPointStore<TProperties> {
   const normalizedPoints = points
-    .map(
-      (point, index): IndexedChartSeriesPoint<TProperties> => ({
-        id: String(point.id ?? index),
-        label: point.label ?? "",
-        metrics: normalizeChartMetrics(point.metrics),
-        properties: point.properties ?? ({} as TProperties),
-        x: point.x,
-        y: point.y,
-      }),
-    )
+    .map((point, index): IndexedChartSeriesPoint<TProperties> => ({
+      id: String(point.id ?? index),
+      label: point.label ?? "",
+      metrics: normalizeChartMetrics(point.metrics),
+      properties: point.properties ?? ({} as TProperties),
+      x: point.x,
+      y: point.y,
+    }))
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
     .filter((point) => options.filterPoint?.(point) ?? true)
     .sort((left, right) => left.x - right.x);

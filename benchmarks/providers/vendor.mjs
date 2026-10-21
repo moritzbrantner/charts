@@ -9,7 +9,7 @@ export const digest = (bytes) => createHash("sha256").update(bytes).digest("hex"
 // Read only a named regular member, never unpack arbitrary archive paths.
 export function member(archive, wanted) {
   const tar = gunzipSync(archive, { maxOutputLength: 128 * 1024 * 1024 });
-  for (let offset = 0; offset + 512 <= tar.length; ) {
+  for (let offset = 0; offset + 512 <= tar.length;) {
     const header = tar.subarray(offset, offset + 512);
     if (header.every((byte) => byte === 0)) break;
     const name = header.subarray(0, 100).toString().replace(/\0.*$/s, "");

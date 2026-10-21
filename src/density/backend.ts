@@ -357,9 +357,7 @@ function createHybridChartDensityIndex<TProperties = Record<string, unknown>>(
   let binnedIndex: BinnedSeriesIndex<TProperties> | null = null;
   let pointStore: ChartPointStore<TProperties> | null = null;
   let pointStoreBounds:
-    | { maxX: number; maxY: number; minX: number; minY: number }
-    | null
-    | undefined;
+    { maxX: number; maxY: number; minX: number; minY: number } | null | undefined;
   let rangeAggregateStore: ChartRangeAggregateStore<TProperties> | null = null;
   const readBinnedIndex = () => {
     if (!binnedIndex) {

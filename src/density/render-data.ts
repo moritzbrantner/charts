@@ -763,16 +763,14 @@ function normalizeChartSeriesPoints<TProperties>(
   points: Array<IndexedChartSeriesPoint<TProperties> | ChartSeriesPoint<TProperties>>,
 ): Array<IndexedChartSeriesPoint<TProperties>> {
   return points
-    .map(
-      (point, index): IndexedChartSeriesPoint<TProperties> => ({
-        id: String(point.id ?? index),
-        label: point.label ?? "",
-        metrics: normalizeChartMetrics(point.metrics),
-        properties: point.properties ?? ({} as TProperties),
-        x: point.x,
-        y: point.y,
-      }),
-    )
+    .map((point, index): IndexedChartSeriesPoint<TProperties> => ({
+      id: String(point.id ?? index),
+      label: point.label ?? "",
+      metrics: normalizeChartMetrics(point.metrics),
+      properties: point.properties ?? ({} as TProperties),
+      x: point.x,
+      y: point.y,
+    }))
     .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y))
     .sort((left, right) => left.x - right.x);
 }
