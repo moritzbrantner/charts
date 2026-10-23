@@ -1,14 +1,7 @@
 import { layoutWithLines, prepareWithSegments } from "@chenglou/pretext";
 
 export type ChartLabelPlacement =
-  | "top"
-  | "top-right"
-  | "right"
-  | "bottom-right"
-  | "bottom"
-  | "bottom-left"
-  | "left"
-  | "top-left";
+  "top" | "top-right" | "right" | "bottom-right" | "bottom" | "bottom-left" | "left" | "top-left";
 
 export type ChartLabelRect = {
   height: number;

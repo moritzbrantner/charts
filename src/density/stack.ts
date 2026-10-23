@@ -103,9 +103,11 @@ export function createChartStackTransform<TDatum, TKey extends string = string>(
     throw new RangeError('offset must be "diverging" or "zero"');
   }
 
-  const series = keys.map(
-    (key, index): ChartStackSeries<TDatum, TKey> => ({ index, key, points: [] }),
-  );
+  const series = keys.map((key, index): ChartStackSeries<TDatum, TKey> => ({
+    index,
+    key,
+    points: [],
+  }));
   let domainMin = 0;
   let domainMax = 0;
 
