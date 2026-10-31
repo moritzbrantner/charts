@@ -1,4 +1,5 @@
 import { collectDensityMetricKeys, createDensityViewportSummary } from "../data-density";
+import { createCompactNumberFormatter } from "../internal/compact-number-format";
 
 import { normalizeGroupKey } from "./layouts";
 import {
@@ -129,6 +130,7 @@ export function createChartRenderData<TProperties>(
   const includeEmptySamples = gapBehavior === "preserve" || gapBehavior === "zero-fill";
   const zeroFill = gapBehavior === "zero-fill";
   const annotations = gapBehavior === "connect" ? getChartGapAnnotations(samples) : [];
+  const derivedResolvers = createDerivedRenderResolvers(derived);
   const rows = samples
     .filter((sample) => includeEmptySamples || sample.y !== null)
     .map((sample) => {
@@ -168,7 +170,7 @@ export function createChartRenderData<TProperties>(
         row.sample = sample;
       }
 
-      applyDerivedRenderValues(row, sample, derived);
+      applyDerivedRenderValues(row, sample, derivedResolvers);
 
       return row;
     });
@@ -179,15 +181,14 @@ export function createChartRenderData<TProperties>(
   };
 }
 
+const renderXLabelFormatter = createCompactNumberFormatter(2);
+
 function formatChartRenderXLabel(value: number) {
   if (!Number.isFinite(value)) {
     return String(value);
   }
 
-  return new Intl.NumberFormat("en", {
-    maximumFractionDigits: 2,
-    notation: Math.abs(value) >= 10_000 ? "compact" : "standard",
-  }).format(value);
+  return renderXLabelFormatter(value);
 }
 
 export function createGroupedChartRenderData<TProperties>(
@@ -213,16 +214,16 @@ export function createGroupedChartRenderData<TProperties>(
     xLabel: options.xLabel,
   });
   const keyPrefix = options.keyPrefix ?? "";
+  const groupLookups = grouped.groups.map((group) => ({
+    key: `${keyPrefix}${group.key}`,
+    samplesByIndex: indexFirstByIndex(group.series.samples),
+  }));
 
   for (const row of baseData.rows) {
-    const rawValues = grouped.groups.map((group) => {
-      const sample = group.series.samples.find((candidate) => candidate.index === row.index);
-
-      return {
-        key: `${keyPrefix}${group.key}`,
-        value: sample?.y ?? null,
-      };
-    });
+    const rawValues = groupLookups.map(({ key, samplesByIndex }) => ({
+      key,
+      value: samplesByIndex.get(row.index)?.y ?? null,
+    }));
     const total = rawValues.reduce((sum, item) => sum + (item.value ?? 0), 0);
 
     row.total = total;
@@ -584,9 +585,12 @@ export function createChartRidgelineData<TProperties>(
   };
 }
 
-function applyDerivedRenderValues<TProperties>(
-  row: ChartRenderDatum<TProperties>,
-  sample: ChartDensitySample<TProperties>,
+type DerivedRenderResolver<TProperties> = [
+  key: string,
+  resolve: (sample: ChartDensitySample<TProperties>) => number | null,
+];
+
+function createDerivedRenderResolvers<TProperties>(
   derived:
     | Record<
         string,
@@ -594,19 +598,43 @@ function applyDerivedRenderValues<TProperties>(
         | ((sample: ChartDensitySample<TProperties>) => number | null)
       >
     | undefined,
-) {
+): Array<DerivedRenderResolver<TProperties>> {
   if (!derived) {
-    return;
+    return [];
   }
 
-  for (const [key, source] of Object.entries(derived)) {
+  return Object.entries(derived).map(([key, source]) => {
     if (typeof source === "function") {
-      row[key] = normalizeRenderValue(source(sample), false);
-      continue;
+      return [key, (sample) => normalizeRenderValue(source(sample), false)];
     }
 
-    row[key] = source.find((point) => point.index === sample.index)?.value ?? null;
+    const pointsByIndex = indexFirstByIndex(source);
+
+    return [key, (sample) => pointsByIndex.get(sample.index)?.value ?? null];
+  });
+}
+
+function applyDerivedRenderValues<TProperties>(
+  row: ChartRenderDatum<TProperties>,
+  sample: ChartDensitySample<TProperties>,
+  resolvers: Array<DerivedRenderResolver<TProperties>>,
+) {
+  for (const [key, resolve] of resolvers) {
+    row[key] = resolve(sample);
   }
+}
+
+/** Keeps the first item per index, matching what Array.find would return. */
+function indexFirstByIndex<TItem extends { index: number }>(items: readonly TItem[]) {
+  const itemsByIndex = new Map<number, TItem>();
+
+  for (const item of items) {
+    if (!itemsByIndex.has(item.index)) {
+      itemsByIndex.set(item.index, item);
+    }
+  }
+
+  return itemsByIndex;
 }
 
 export function getChartDensityValue<TProperties>(

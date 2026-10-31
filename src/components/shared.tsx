@@ -1,5 +1,7 @@
 import { type usePlotArea } from "recharts";
 
+import { createCompactNumberFormatter } from "../internal/compact-number-format";
+
 import type { ChartThresholdAnnotation } from "../analytics";
 import type { ChartDensitySample, ChartSunburstNode } from "../density";
 import type { ChartPlacedLabel } from "../labels";
@@ -223,11 +225,10 @@ export function getPrimaryMetric(metrics: Record<string, number>) {
   return entries.find(([metricKey]) => metricKey === "revenue") ?? entries[0];
 }
 
+const compactNumberFormatter = createCompactNumberFormatter(1);
+
 export function formatCompactNumber(value: number) {
-  return new Intl.NumberFormat("en", {
-    maximumFractionDigits: 1,
-    notation: Math.abs(value) >= 10_000 ? "compact" : "standard",
-  }).format(value);
+  return compactNumberFormatter(value);
 }
 
 export function formatNullableNumber(value: number | null) {

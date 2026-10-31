@@ -13,7 +13,7 @@ export function ChartCalendarHeatmapSvg<TProperties = Record<string, unknown>>({
   ariaLabel = "Chart calendar heatmap",
   className,
   data,
-  formatDate = formatCalendarDate,
+  formatDate = createCalendarDateFormatter(),
   formatValue = (datum) => formatNullableNumber(datum.value),
   legend,
   onDatumSelect,
@@ -136,26 +136,26 @@ export function ChartCalendarHeatmapSvg<TProperties = Record<string, unknown>>({
   );
 }
 
-function formatCalendarDate(date: Date) {
-  if (!Number.isFinite(date.getTime())) {
-    return "Invalid date";
-  }
-
-  return new Intl.DateTimeFormat("en", {
+function createCalendarDateFormatter() {
+  const formatter = new Intl.DateTimeFormat("en", {
     day: "2-digit",
     month: "short",
-  }).format(date);
+  });
+
+  return (date: Date) =>
+    Number.isFinite(date.getTime()) ? formatter.format(date) : "Invalid date";
 }
 
 function getCalendarMonthLabels(
   days: Array<{ date: Date; dayOfWeek: number; week: number }>,
   minWeek: number,
 ) {
+  const monthFormatter = new Intl.DateTimeFormat("en", { month: "short" });
   const labels: Array<{ month: string; week: number }> = [];
   let previousMonth = "";
 
   for (const day of days) {
-    const month = new Intl.DateTimeFormat("en", { month: "short" }).format(day.date);
+    const month = monthFormatter.format(day.date);
 
     if (month !== previousMonth && day.dayOfWeek <= 1) {
       labels.push({
