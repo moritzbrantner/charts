@@ -1,3 +1,5 @@
+import { createCompactNumberFormatter } from "../internal/compact-number-format";
+
 import type { BinnedSeriesIndexOptions } from "../data-density";
 import type {
   BinnedSeriesBackend,
@@ -63,15 +65,14 @@ export function clampInteger(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, Math.floor(value)));
 }
 
+const compactNumberFormatter = createCompactNumberFormatter(1);
+
 export function formatNullableCompactNumber(value: number | null) {
   if (value === null) {
     return "n/a";
   }
 
-  return new Intl.NumberFormat("en", {
-    maximumFractionDigits: 1,
-    notation: Math.abs(value) >= 10_000 ? "compact" : "standard",
-  }).format(value);
+  return compactNumberFormatter(value);
 }
 
 export function scheduleChartDensityWarmup(
