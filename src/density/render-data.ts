@@ -393,19 +393,29 @@ export function createChartCalendarHeatmapData<TProperties>(
     ? normalizedPoints.filter((point) => point.x >= xDomain[0] && point.x <= xDomain[1])
     : normalizedPoints;
   const startOfDay = options.startOfDay ?? ((x: number) => Math.floor(x / dayMs) * dayMs);
-  const pointDayStarts = selectedPoints.map((point) => startOfDay(point.x)).filter(isFiniteNumber);
+  let pointDayMin = Number.POSITIVE_INFINITY;
+  let pointDayMax = Number.NEGATIVE_INFINITY;
+
+  for (const point of selectedPoints) {
+    const pointDayStart = startOfDay(point.x);
+
+    if (!isFiniteNumber(pointDayStart)) {
+      continue;
+    }
+
+    pointDayMin = Math.min(pointDayMin, pointDayStart);
+    pointDayMax = Math.max(pointDayMax, pointDayStart);
+  }
+
+  const hasFinitePointDayStart = pointDayMin !== Number.POSITIVE_INFINITY;
   const includeEmptyDays = options.includeEmptyDays ?? Boolean(xDomain);
   const firstDayStart =
-    xDomain !== null
-      ? startOfDay(xDomain[0])
-      : pointDayStarts.length > 0
-        ? Math.min(...pointDayStarts)
-        : 0;
+    xDomain !== null ? startOfDay(xDomain[0]) : hasFinitePointDayStart ? pointDayMin : 0;
   const lastDayStart =
     xDomain !== null
       ? startOfDay(Math.max(xDomain[0], xDomain[1] - dayMs * 1e-9))
-      : pointDayStarts.length > 0
-        ? Math.max(...pointDayStarts)
+      : hasFinitePointDayStart
+        ? pointDayMax
         : firstDayStart;
   const metricKeys = collectDensityMetricKeys(selectedPoints.map((point) => point.metrics));
   const dayLookup = new Map<number, MutableCalendarHeatmapDatum<TProperties>>();
@@ -835,13 +845,19 @@ function getRidgelineGroupValue<TProperties>(
 }
 
 function getFiniteValueDomain(values: number[]): [number, number] | null {
-  const finiteValues = values.filter(isFiniteNumber);
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
 
-  if (finiteValues.length === 0) {
-    return null;
+  for (const value of values) {
+    if (!isFiniteNumber(value)) {
+      continue;
+    }
+
+    min = Math.min(min, value);
+    max = Math.max(max, value);
   }
 
-  return [Math.min(...finiteValues), Math.max(...finiteValues)];
+  return min === Number.POSITIVE_INFINITY ? null : [min, max];
 }
 
 function getChartBucketIndex(value: number, domain: [number, number], bucketCount: number) {

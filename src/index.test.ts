@@ -974,6 +974,14 @@ describe("@moritzbrantner/charts", () => {
     expect(data.days[0]?.value).toBe(4);
   });
 
+  test("calendar heatmap handles 300,000 points in one day", () => {
+    const points = Array.from({ length: 300_000 }, (_, index) => ({ x: index, y: index % 7 }));
+    const data = createChartCalendarHeatmapData(points, { dayMs: 300_000 });
+
+    expect(data.days).toHaveLength(1);
+    expect(data.days[0]).toMatchObject({ pointCount: 300_000, x0: 0 });
+  });
+
   test("creates ridgeline grouped histograms", () => {
     const data = createChartRidgelineData(
       [
@@ -1020,6 +1028,22 @@ describe("@moritzbrantner/charts", () => {
 
     expect(data.groups.map((group) => group.groupId)).toEqual(["a", "__other"]);
     expect(data.groups.map((group) => group.pointCount)).toEqual([2, 2]);
+  });
+
+  test("ridgeline handles 300,000 finite values", () => {
+    const points = Array.from({ length: 300_000 }, (_, index) => ({
+      properties: { group: "all" },
+      x: index,
+      y: index % 101,
+    }));
+    const data = createChartRidgelineData(points, {
+      bucketCount: 10,
+      groupBy: { property: "group" },
+    });
+
+    expect(data.groups).toHaveLength(1);
+    expect(data.groups[0]?.pointCount).toBe(300_000);
+    expect(data.summary.valueDomain).toEqual([0, 100]);
   });
 
   test("creates grouped chart series and grouped render rows", () => {
