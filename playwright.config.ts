@@ -5,6 +5,7 @@ export default defineConfig({
     timeout: 10_000,
   },
   testDir: ".",
+  testIgnore: "examples/src/model-based.e2e.spec.ts",
   testMatch: "examples/src/**/*.e2e.spec.ts",
   use: {
     baseURL: "http://127.0.0.1:41735",

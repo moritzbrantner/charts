@@ -749,7 +749,17 @@ generated site.
 - `bun run build:examples`
 - `bun run pack:check`
 - `bun run test:e2e`
+- `bun run test:model`
+- `bun run test:model:full` for opt-in full transition traversal
 - `bun run build && bun run bench:large-data`
+
+The separately invoked model-based browser paths reuse the existing Playwright
+setup against the `/line.html` example. The default suite reaches each modeled dataset, viewport,
+and series-visibility state, checks a blocked chart-type change and includes a
+mobile path. Its deterministic report lists uncovered transitions. Set
+`CHARTS_MODEL_FULL=1` through `bun run test:model:full` to run a generated path
+for every model edge. The current Pages example has sparse data but no empty
+or request-error state, so those outcomes are outside this model.
 
 ## Benchmark interpretation
 
