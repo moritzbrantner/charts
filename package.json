@@ -84,7 +84,8 @@
     "typescript-eslint": "8.72.1",
     "unlighthouse": "0.19.1",
     "vite": "8.3.6",
-    "vitest": "4.1.12"
+    "vitest": "4.1.12",
+    "xstate": "5.33.4"
   },
   "scripts": {
     "api:check": "bun run build && node ./scripts/check-api-report.mjs",
@@ -117,6 +118,8 @@
     "test:wasm": "cargo test --manifest-path crates/charts-density-wasm/Cargo.toml",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:model": "playwright test -c playwright.model.config.ts",
+    "test:model:full": "CHARTS_MODEL_FULL=1 playwright test -c playwright.model.config.ts --project=desktop-chromium",
     "test:storybook": "playwright test -c playwright.storybook.config.ts",
     "test:unlighthouse": "node ./scripts/run-unlighthouse.mjs",
     "test:visual": "playwright test -c playwright.visual.config.ts",
