@@ -71,7 +71,7 @@
     "jsdom": "26.1.0",
     "oxlint": "1.93.0",
     "oxlint-tsgolint": "7.0.2006",
-    "prettier": "3.9.10",
+    "prettier": "3.10.0",
     "publint": "0.3.25",
     "react": "19.3.1",
     "react-dom": "19.3.1",
