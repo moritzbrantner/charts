@@ -70,7 +70,7 @@
     "globals": "17.14.0",
     "jsdom": "26.1.0",
     "oxlint": "1.94.0",
-    "oxlint-tsgolint": "7.0.2007",
+    "oxlint-tsgolint": "7.0.2008",
     "prettier": "3.10.1",
     "publint": "0.3.25",
     "react": "19.3.1",
